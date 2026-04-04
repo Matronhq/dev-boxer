@@ -1,0 +1,130 @@
+# Dev Boxer
+
+This is a remote development server set up by dev-boxer.
+
+## Machine Details
+
+- **User:** {{USERNAME}}
+- **OS:** Ubuntu 24.04
+- **SSH:** Port {{SSH_PORT}} (key-only auth)
+- **RDP:** Port 3389 (via SSH tunnel)
+
+## How to Connect
+
+### SSH
+
+```bash
+ssh -p {{SSH_PORT}} {{USERNAME}}@<server-ip>
+```
+
+### RDP (Remote Desktop)
+
+RDP is bound to localhost only. Tunnel it over SSH first:
+
+```bash
+ssh -p {{SSH_PORT}} -L 3389:localhost:3389 {{USERNAME}}@<server-ip>
+```
+
+Then connect your RDP client to `localhost:3389`. The desktop session uses XFCE via XRDP.
+
+## Matrix Bridge
+
+The claude-matrix-bridge service connects Matrix chat to Claude Code CLI sessions, letting you interact with Claude Code from any Matrix client.
+
+### How It Works
+
+The bridge listens for messages in your Matrix room and routes them to an active Claude Code session. A file viewer service exposes session output at the viewer URL. Commands are sent as Matrix messages starting with `!`.
+
+### Bridge Commands
+
+| Command | Description |
+|---|---|
+| `!start [workdir]` | Start a new Claude Code session (optionally in a specific directory) |
+| `!stop` | Stop the current Claude Code session |
+| `!status` | Show status of all active sessions |
+| `!sessions` | List all sessions with IDs |
+| `!resume <id>` | Resume a specific session by ID |
+| `!restart` | Restart the bridge service |
+| `!working` | Show the current working directory |
+| `!help` | Show available commands |
+
+### Service Management
+
+```bash
+# Status
+sudo systemctl status claude-matrix-bridge.service
+sudo systemctl status claude-matrix-file-viewer.service
+
+# Restart
+sudo systemctl restart claude-matrix-bridge.service
+sudo systemctl restart claude-matrix-file-viewer.service
+
+# Logs
+sudo journalctl -u claude-matrix-bridge.service -f
+sudo journalctl -u claude-matrix-file-viewer.service -f
+```
+
+## Cloudflare Tunnel
+
+Traffic is routed through a Cloudflare Tunnel — no inbound ports exposed.
+
+| Service | URL |
+|---|---|
+| Main | https://{{CF_HOSTNAME_MAIN}} |
+| Matrix homeserver | https://{{CF_HOSTNAME_MATRIX}} |
+| File viewer | https://{{CF_HOSTNAME_VIEWER}} |
+
+### Tunnel Service Management
+
+```bash
+sudo systemctl status cloudflared-tunnel.service
+sudo systemctl restart cloudflared-tunnel.service
+sudo journalctl -u cloudflared-tunnel.service -f
+```
+
+## Installed Software
+
+- **Docker** + Docker Compose
+- **Node.js 20**
+- **Python 3** + pip + uv
+- **Git** + GitHub CLI (`gh`)
+- **Google Chrome** + Firefox
+- **VS Code** (`code`)
+- **GitHub Desktop**
+- **lazydocker** (TUI for Docker)
+
+## Claude Code Plugins
+
+The following Claude Code plugins are installed:
+
+- **superpowers** — Planning, TDD, debugging, code review workflows
+- **context7** — Fetch live library and framework documentation
+- **serena** — Semantic coding tools with symbol-level navigation
+- **feature-dev** — Guided feature development with architecture focus
+- **code-review** — Pull request review automation
+- **code-simplifier** — Review changed code for reuse, quality, and efficiency
+- **claude-md-management** — Audit and improve CLAUDE.md files
+- **github** — GitHub operations via MCP
+- **frontend-design** — Production-grade frontend interface generation
+- **security-guidance** — Security review and guidance
+
+## MCP Servers
+
+### Chrome DevTools MCP
+
+Provides browser automation inside headless Chrome, launched via `xvfb-run` so it works without a display server.
+
+Configured in `~/.claude/mcp-config.json`. Used for UI testing, screenshots, and web scraping from within Claude Code sessions.
+
+### ask-user MCP
+
+Lets Claude Code ask you questions interactively by sending a message through the Matrix bridge and waiting for your reply. This allows Claude to request secrets, clarifications, or confirmations during automated tasks.
+
+## Security
+
+- **SSH:** Key-only authentication on port {{SSH_PORT}}, root login disabled
+- **fail2ban:** Bans IPs after 6 failed SSH attempts within 10 minutes (5-minute ban)
+- **UFW:** Default deny-all inbound; only SSH port {{SSH_PORT}} allowed
+- **Auto-updates:** Unattended upgrades enabled; automatic reboots at 03:00 UTC
+- **Cloudflare Tunnel:** All web traffic goes outbound through the tunnel — no inbound ports 80/443 open
+- **Prometheus node_exporter:** Running on localhost:9100 (not exposed externally)

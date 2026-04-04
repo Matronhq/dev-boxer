@@ -1,0 +1,14 @@
+# Cloudflare Tunnel config — deployed by dev-boxer
+tunnel: {{CLOUDFLARE_TUNNEL_ID}}
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: {{CF_HOSTNAME_MATRIX}}
+    service: http://localhost:6167
+  - hostname: {{CF_HOSTNAME_VIEWER}}
+    service: http://localhost:9801
+  - hostname: {{CF_HOSTNAME_MAIN}}
+    service: https://localhost
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404

@@ -28,8 +28,16 @@ claude:
 
 matrix:
   mode: bundled            # bundled | external | disabled
-  homeserver: matrix.example.com
-  bot_username: claude-bot
+  server_domain: matrix.example.com   # the matrix server name (e.g. matrix.example.com)
+  user_username: dan        # local part of your matrix user (default: linux user.name)
+  bot_username: null        # default: claude-bot-<hostname>; override here if you want
+  user_password: null       # leave nil to auto-generate; printed/persisted on first run
+  # The next four are populated by the matrix-bridge module on first run and
+  # should not be hand-edited. They survive subsequent runs (idempotency):
+  # bot_access_token: ...
+  # recovery_key: ...
+  # bridge_room_id: ...
+  # hmac_secret: ...
 
 hello_world:
   enabled: false          # if true, deploys a localhost:port "hello world" smoke-test service

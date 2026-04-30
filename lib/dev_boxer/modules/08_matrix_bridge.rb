@@ -109,7 +109,11 @@ module DevBoxer
       end
 
       def onboard_users_if_needed
-        if config.matrix&.bot_access_token
+        token = config.matrix&.bot_access_token
+        # Reject empty string explicitly: it's truthy in Ruby, so a config
+        # with `bot_access_token: ""` (e.g. operator zero'd it manually) would
+        # otherwise short-circuit and skip the onboarding flow.
+        unless token.nil? || token.to_s.empty?
           skip "Matrix accounts already onboarded (bot_access_token in config)"
           return
         end
@@ -186,7 +190,17 @@ module DevBoxer
 
       def close_registration
         path = "#{matrix_server_dir}/docker-compose.override.yml"
-        File.delete(path) if File.exist?(path)
+        # Guard the delete: TOCTOU between exist? and delete is theoretically
+        # possible (concurrent run, manual cleanup), and a permission error
+        # raised here from inside an `ensure` block would mask the original
+        # exception. We've already done our best — log and continue.
+        begin
+          File.delete(path) if File.exist?(path)
+        rescue Errno::ENOENT
+          # already gone — fine
+        rescue => e
+          warn "Could not remove #{path}: #{e.class}: #{e.message}"
+        end
         shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose down && docker compose up -d") rescue nil
         shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30) rescue nil
       end

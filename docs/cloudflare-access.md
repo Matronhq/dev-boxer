@@ -25,7 +25,7 @@ After saving, click **Test** next to the provider to confirm it works before con
 
 ## 3. Create an Access Application
 
-The first-run wizard can perform this step automatically if you provide a one-time API token with permission to edit Access applications and policies. It derives the Cloudflare account from the DNS zone.
+The first-run wizard can perform this step automatically using the same one-time account setup token used for tunnel creation. That token needs permission to edit Access applications and policies. Dev Boxer derives the Cloudflare account from the DNS zone.
 
 Go to **Access → Applications** and click **Add an application**. Choose **Self-hosted**.
 

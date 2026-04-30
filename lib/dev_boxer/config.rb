@@ -153,7 +153,7 @@ module DevBoxer
       access = hash.dig("cloudflare", "access") || {}
       return unless access["enabled"] == true
 
-      errors << "cloudflare.access.api_token is required until cloudflare.access.app_id exists" if blank?(access["app_id"]) && blank?(access["api_token"])
+      errors << "cloudflare.api_token is required until cloudflare.access.app_id exists" if blank?(access["app_id"]) && blank?(hash.dig("cloudflare", "api_token"))
 
       allowed_emails = Array(access["allowed_emails"]).reject { |value| blank?(value) }
       allowed_domains = Array(access["allowed_email_domains"]).reject { |value| blank?(value) }

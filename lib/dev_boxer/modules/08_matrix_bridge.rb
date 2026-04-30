@@ -31,7 +31,7 @@ module DevBoxer
       module_order 8
 
       HOMESERVER_LOCAL = "http://localhost:6167".freeze
-      BRIDGE_REPO = "https://github.com/yearbook/claude-matrix-bridge.git".freeze
+      BRIDGE_REPO = "https://github.com/matronhq/claude-matrix-bridge.git".freeze
 
       def run
         section "Matrix bridge"

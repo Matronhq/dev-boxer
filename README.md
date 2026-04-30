@@ -32,10 +32,10 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 
 ## Quick start
 
-Run this on the VPS as root:
+Run this on the VPS as root, or from a sudo-capable account:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh | sudo bash
 ```
 
 The installer clones Dev Boxer to `/opt/dev-boxer`, prompts for the minimum required settings, writes `config.yml` and gitignored `secrets.yml`, then runs the full setup.

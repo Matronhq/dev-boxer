@@ -56,6 +56,7 @@ Setup runs 10 idempotent modules in order:
 | 08 | `matrix-bridge`| Matron Server + claude-matrix-bridge |
 | 09 | `cloudflare`   | Cloudflare Tunnel, DNS routes, zone-token deploy |
 | 10 | `desktop-apps` | VS Code, GitHub Desktop, lazydocker, MOTD |
+| 11 | `hello-world`  | Optional `localhost:9810` tunnel smoke-test service (opt-in) |
 
 Re-run a single module or resume from a failure:
 

@@ -48,4 +48,42 @@ class ConfigTest < Minitest::Test
     config = DevBoxer::Config.load(path)
     assert_equal({ "user" => { "name" => "dan" } }, config.to_h)
   end
+
+  def test_deep_merge_recurses_into_hashes
+    a = { "a" => { "x" => 1, "y" => 2 } }
+    b = { "a" => { "y" => 99, "z" => 3 } }
+    assert_equal({ "a" => { "x" => 1, "y" => 99, "z" => 3 } }, DevBoxer::Config.deep_merge(a, b))
+  end
+
+  def test_merge_into_file_creates_file_when_missing
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.yml")
+      DevBoxer::Config.merge_into_file(path, { "matrix" => { "token" => "abc" } })
+      assert File.exist?(path)
+      reloaded = YAML.safe_load_file(path)
+      assert_equal({ "matrix" => { "token" => "abc" } }, reloaded)
+    end
+  end
+
+  def test_merge_into_file_preserves_other_top_level_sections
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.yml")
+      File.write(path, "user:\n  name: dan\nmatrix:\n  mode: bundled\n")
+      DevBoxer::Config.merge_into_file(path, { "matrix" => { "token" => "abc" } })
+      reloaded = YAML.safe_load_file(path)
+      assert_equal "dan", reloaded.dig("user", "name")
+      assert_equal "bundled", reloaded.dig("matrix", "mode")
+      assert_equal "abc", reloaded.dig("matrix", "token")
+    end
+  end
+
+  def test_merge_into_file_does_not_create_duplicate_top_level_key
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.yml")
+      File.write(path, "matrix:\n  mode: bundled\n")
+      DevBoxer::Config.merge_into_file(path, { "matrix" => { "token" => "abc" } })
+      raw = File.read(path)
+      assert_equal 1, raw.scan(/^matrix:/m).length, "expected one matrix: key, found:\n#{raw}"
+    end
+  end
 end

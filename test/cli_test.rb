@@ -76,4 +76,18 @@ class CLITest < Minitest::Test
       assert_match(/nope/, err)
     end
   end
+
+  def test_explicitly_specified_missing_config_exits_nonzero
+    Dir.mktmpdir do |dir|
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+      missing_path = File.join(dir, "no-such-config.yml")
+
+      _out, err, status = run_setup(
+        "--dry-run", "--config", missing_path, "--modules-dir", mods_dir
+      )
+      refute status.success?, "expected nonzero exit when --config points at a missing file"
+      assert_match(/not found/i, err)
+    end
+  end
 end

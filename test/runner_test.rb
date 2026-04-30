@@ -65,4 +65,18 @@ class RunnerTest < Minitest::Test
       @runner.run(only: "delta")
     end
   end
+
+  def test_modules_with_nil_order_dont_crash_sort
+    nil_order_module = Class.new(DevBoxer::ModuleBase) do
+      name "delta"
+      define_method(:run) { }
+    end
+    runner = DevBoxer::Runner.new(
+      modules: [nil_order_module, @mod_b],
+      config: @config,
+      log: @log,
+    )
+    runner.run(dry_run: true)
+    assert_match(/delta/, @out.string)
+  end
 end

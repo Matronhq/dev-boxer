@@ -3,7 +3,7 @@ module DevBoxer
     UnknownModule = Class.new(StandardError)
 
     def initialize(modules:, config:, log:)
-      @modules = modules.sort_by(&:module_order)
+      @modules = modules.sort_by { |m| m.module_order || 0 }
       @config = config
       @log = log
     end

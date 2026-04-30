@@ -36,9 +36,12 @@ ssh root@your-vps-ip
 git clone https://github.com/matronhq/dev-boxer.git
 cd dev-boxer
 
-./wizard.sh        # interactive config
-sudo ./setup.sh    # run setup (~10-15 min)
+cp config.example.yml config.yml   # edit to taste (interactive wizard coming)
+sudo ./bootstrap.sh                # apt-installs ruby, then runs setup.rb (~10-15 min)
 ```
+
+> Dev Boxer is being rewritten from bash to Ruby. The bash modules under `scripts/`
+> are still functional via `setup.sh` while the Ruby port lands incrementally.
 
 ## Modules
 
@@ -60,8 +63,16 @@ Setup runs 10 idempotent modules in order:
 Re-run a single module or resume from a failure:
 
 ```bash
-sudo ./setup.sh --only security
-sudo ./setup.sh --from matrix-bridge
+sudo ./setup.rb --only security
+sudo ./setup.rb --from matrix-bridge
+sudo ./setup.rb --skip desktop --dry-run
+```
+
+## Development
+
+```bash
+rake test          # run the minitest suite
+ruby setup.rb --dry-run --config config.example.yml --modules-dir lib/dev_boxer/modules
 ```
 
 ## Connecting

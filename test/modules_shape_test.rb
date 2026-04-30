@@ -52,8 +52,8 @@ class ModulesShapeTest < Minitest::Test
     end
   end
 
-  def test_seven_modules_present
+  def test_eight_modules_present
     names = @modules.map(&:module_name).sort
-    assert_equal %w[browsers claude desktop dev-tools docker security users], names
+    assert_equal %w[browsers claude desktop dev-tools docker matrix-bridge security users], names
   end
 end

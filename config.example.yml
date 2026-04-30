@@ -22,9 +22,14 @@ claude:
     - serena
 
 matrix:
-  mode: bundled            # bundled | external | disabled
-  homeserver: matrix.example.com
+  mode: bundled                 # bundled | external | disabled
+  server_domain: matrix.example.com   # used in bundled mode for the matron server name
+  homeserver_url: ""            # only set for `external` mode (e.g. https://matrix.org)
   bot_username: claude-bot
+  user_username: dan            # local part of your matrix user
+  user_password: ""             # set if you want a specific password; otherwise auto-generated
+  # bot_access_token, bridge_room_id, hmac_secret are populated automatically
+  # on first bundled run and persisted back here for idempotency.
 
 cloudflare:
   enabled: false

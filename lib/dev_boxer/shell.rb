@@ -6,9 +6,16 @@ module DevBoxer
   class Shell
     Error = Class.new(StandardError)
 
+    # On success, callers usually want to parse stdout (e.g.
+    # `node --version`); merging stderr in corrupts that output when a
+    # subprocess prints a deprecation notice or similar to stderr.
+    # On failure, stderr usually has the relevant error message and is
+    # what the operator wants to see — so `sh!` formats both into the
+    # raised Error message. The runner returns [success, stdout, stderr]
+    # so each consumer can pick what it needs.
     DEFAULT_RUNNER = lambda do |cmd, opts = {}|
       stdout, stderr, status = Open3.capture3(cmd, stdin_data: opts[:stdin] || "")
-      [status.success?, stdout + stderr]
+      [status.success?, stdout, stderr]
     end
 
     def initialize(runner: DEFAULT_RUNNER)
@@ -16,14 +23,16 @@ module DevBoxer
     end
 
     def sh(cmd, **opts)
-      success, _ = @runner.call(cmd, opts)
+      success, _stdout, _stderr = @runner.call(cmd, opts)
       success
     end
 
     def sh!(cmd, **opts)
-      success, output = @runner.call(cmd, opts)
-      raise Error, "command failed: #{cmd}\n#{output}" unless success
-      output
+      success, stdout, stderr = @runner.call(cmd, opts)
+      unless success
+        raise Error, "command failed: #{cmd}\n--- stdout ---\n#{stdout}--- stderr ---\n#{stderr}"
+      end
+      stdout
     end
 
     def command_exists?(name)

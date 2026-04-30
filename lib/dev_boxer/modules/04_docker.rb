@@ -139,12 +139,30 @@ module DevBoxer
         File.write("/etc/docker/daemon.json", JSON.pretty_generate(existing) + "\n")
       end
 
+      # Update only the top-level `root = ` line in containerd's config.toml,
+      # preserving any other settings the distro or operator put there
+      # (sandbox_image, registries, plugin configs, etc.). The previous
+      # implementation wrote a 2-line file that wiped all of those.
       def write_containerd_config
+        path = "/etc/containerd/config.toml"
         FileUtils.mkdir_p("/etc/containerd")
-        File.write("/etc/containerd/config.toml", <<~TOML)
-          version = 2
-          root = "#{containerd_root}"
-        TOML
+        existing = File.exist?(path) ? File.read(path) : nil
+
+        if existing.nil? || existing.strip.empty?
+          File.write(path, "version = 2\nroot = #{containerd_root.inspect}\n")
+          return
+        end
+
+        updated =
+          if existing =~ /^root\s*=/
+            existing.sub(/^root\s*=.*$/, "root = #{containerd_root.inspect}")
+          elsif existing =~ /^version\s*=.*$/
+            existing.sub(/^(version\s*=.*$)/, "\\1\nroot = #{containerd_root.inspect}")
+          else
+            "root = #{containerd_root.inspect}\n" + existing
+          end
+
+        File.write(path, updated)
       end
 
       def write_wait_for_mount_dropin(svc, mount_point)

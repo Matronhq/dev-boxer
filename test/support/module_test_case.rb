@@ -11,7 +11,7 @@ module DevBoxer
       def setup
         @recorded = []
         @responses = {}
-        @default_response = [true, ""]
+        @default_response = [true, "", ""]
         @runner = lambda do |cmd, _opts = {}|
           @recorded << cmd
           @responses.fetch(cmd, @default_response)
@@ -21,12 +21,12 @@ module DevBoxer
         @log = DevBoxer::Log.new(io: @log_io, color: false)
       end
 
-      def respond(cmd, success:, output: "")
-        @responses[cmd] = [success, output]
+      def respond(cmd, success:, stdout: "", stderr: "")
+        @responses[cmd] = [success, stdout, stderr]
       end
 
-      def respond_default(success:, output: "")
-        @default_response = [success, output]
+      def respond_default(success:, stdout: "", stderr: "")
+        @default_response = [success, stdout, stderr]
       end
 
       def build_module(klass, config_hash = {}, templates_dir: TEMPLATES_DIR)

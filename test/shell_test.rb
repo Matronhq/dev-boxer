@@ -7,14 +7,13 @@ class ShellTest < Minitest::Test
     @responses = {}
     runner = lambda do |cmd, opts = {}|
       @recorded << [cmd, opts]
-      resp = @responses.fetch(cmd, [true, ""])
-      resp
+      @responses.fetch(cmd, [true, "", ""])
     end
     @sh = DevBoxer::Shell.new(runner: runner)
   end
 
-  def respond(cmd, success:, output: "")
-    @responses[cmd] = [success, output]
+  def respond(cmd, success:, stdout: "", stderr: "")
+    @responses[cmd] = [success, stdout, stderr]
   end
 
   def test_sh_bang_runs_command
@@ -23,7 +22,7 @@ class ShellTest < Minitest::Test
   end
 
   def test_sh_bang_raises_on_failure
-    respond("false", success: false, output: "")
+    respond("false", success: false)
     assert_raises(DevBoxer::Shell::Error) do
       @sh.sh!("false")
     end

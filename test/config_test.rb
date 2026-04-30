@@ -1,12 +1,22 @@
 require_relative "test_helper"
-require "tempfile"
+require "fileutils"
+require "tmpdir"
 
 class ConfigTest < Minitest::Test
+  # Use an isolated tmpdir per call so Config.load's sibling-secrets.yml
+  # lookup never picks up a stray /tmp/secrets.yml from another test or
+  # the host environment.
   def write_config(yaml)
-    f = Tempfile.new(["config", ".yml"])
-    f.write(yaml)
-    f.close
-    f.path
+    @scratch_dirs ||= []
+    dir = Dir.mktmpdir
+    @scratch_dirs << dir
+    path = File.join(dir, "config.yml")
+    File.write(path, yaml)
+    path
+  end
+
+  def teardown
+    @scratch_dirs&.each { |d| FileUtils.rm_rf(d) }
   end
 
   def test_loads_top_level_keys

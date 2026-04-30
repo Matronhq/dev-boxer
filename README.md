@@ -27,8 +27,7 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 - Fresh Ubuntu 24.04 VPS with root SSH access
 - Cloudflare account with a domain configured
 - Cloudflare zone DNS API token
-- Optional one-time Cloudflare Tunnel setup token, or willingness to create the tunnel manually
-- Optional one-time Cloudflare Access setup token for automated Zero Trust setup
+- Optional one-time Cloudflare account setup token for automated tunnel and Access setup
 - SSH key pair
 
 ## Quick start
@@ -48,6 +47,7 @@ It asks for:
 - Cloudflare zone DNS API token
 - Whether Dev Boxer should create the Cloudflare tunnel automatically
 - Whether Dev Boxer should create a Cloudflare Access app for `dev.<domain>` and `viewer.<domain>`
+- One temporary Cloudflare account setup token if either automatic tunnel or Access setup is enabled
 - Matrix username
 
 It derives `dev.<domain>`, `matrix.<domain>`, and `viewer.<domain>` automatically.
@@ -61,10 +61,12 @@ Create a zone-scoped DNS API token from [Cloudflare API Tokens](https://dash.clo
 - Zone permissions: `Zone:Read` and `DNS:Edit`
 - Zone resource: the domain you will use, e.g. `example.com`
 
-For tunnel creation, choose one of:
+For first-run Cloudflare setup, Dev Boxer uses two tokens:
 
-- Let Dev Boxer create the tunnel automatically: create a temporary API token with account permission `Cloudflare Tunnel:Edit`. The installer stores it only in `secrets.yml`, uses it once, then wipes it after the tunnel credentials are created.
-- Create the tunnel manually: skip the setup token. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID.
+- A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`. This stays on the machine in `secrets.yml` so Dev Boxer can manage subdomain DNS records.
+- A temporary account setup token for initial tunnel and Access setup. It needs account permission `Cloudflare Tunnel:Edit` and permission to edit Zero Trust Access applications/policies. Dev Boxer stores it only in `secrets.yml`, uses it once, then wipes it after setup succeeds.
+
+You can skip automatic tunnel creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID.
 
 Dev Boxer creates proxied Cloudflare DNS records for all configured tunnel hostnames, including `matrix.<domain>`, using the zone DNS token.
 

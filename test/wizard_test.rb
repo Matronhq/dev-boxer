@@ -13,10 +13,9 @@ class WizardTest < Minitest::Test
         "example.com",
         "zone-token",
         "yes",
-        "setup-token",
         "yes",
-        "access-token",
         "alice@example.com, example.com",
+        "setup-token",
         "alice-matrix",
       ].join("\n") + "\n")
 
@@ -48,7 +47,7 @@ class WizardTest < Minitest::Test
       assert_nil config.dig("cloudflare", "zone_api_token")
       assert_equal "setup-token", secrets.dig("cloudflare", "api_token")
       assert_equal "zone-token", secrets.dig("cloudflare", "zone_api_token")
-      assert_equal "access-token", secrets.dig("cloudflare", "access", "api_token")
+      assert_nil secrets.dig("cloudflare", "access", "api_token")
       assert secrets.dig("user", "rdp_password")
       assert_equal 0o600, File.stat(secrets_path).mode & 0o777
 

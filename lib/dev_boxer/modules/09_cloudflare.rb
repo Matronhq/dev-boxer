@@ -31,7 +31,6 @@ module DevBoxer
         install_systemd_unit
         write_user_credentials
         cleanup_setup_token
-        cleanup_access_token
         ok "Cloudflare Tunnel setup complete"
         print_hostnames
       end
@@ -50,7 +49,6 @@ module DevBoxer
       def config_managed_locally? = config.cloudflare&.tunnel&.config_managed_locally
       def access_config = config.cloudflare&.access
       def access_enabled? = access_config&.enabled == true
-      def access_token = access_config&.api_token
       def access_account_id = access_config&.account_id || cloudflare_zone_account_id
       def access_app_id = access_config&.app_id
       def access_app_name = access_config&.app_name || "Dev Boxer"
@@ -198,7 +196,7 @@ module DevBoxer
       def configure_cloudflare_access
         return unless access_enabled?
 
-        if access_app_id && access_token.to_s.empty?
+        if access_app_id && setup_token.to_s.empty?
           skip "Cloudflare Access app already configured"
           return
         end
@@ -210,15 +208,15 @@ module DevBoxer
         end
 
         raise "cloudflare.access.account_id is required when Access setup is enabled" if access_account_id.to_s.empty?
-        raise "cloudflare.access.api_token is required until cloudflare.access.app_id exists" if access_token.to_s.empty?
+        raise "cloudflare.api_token is required until cloudflare.access.app_id exists" if setup_token.to_s.empty?
 
         info "Configuring Cloudflare Access for #{protected.join(", ")}"
         body = cloudflare_access_app_payload(protected)
         result =
           if access_app_id
-            cloudflare_api(token: access_token, method: :put, path: "/accounts/#{access_account_id}/access/apps/#{access_app_id}", body: body)
+            cloudflare_api(token: setup_token, method: :put, path: "/accounts/#{access_account_id}/access/apps/#{access_app_id}", body: body)
           else
-            cloudflare_api(token: access_token, method: :post, path: "/accounts/#{access_account_id}/access/apps", body: body)
+            cloudflare_api(token: setup_token, method: :post, path: "/accounts/#{access_account_id}/access/apps", body: body)
           end
 
         persist_access_app_id(result["id"]) if result["id"]
@@ -389,8 +387,9 @@ module DevBoxer
         File.chmod(0o600, path)
       end
 
-      # The setup API token is needed once to create the tunnel; after that,
-      # cloudflared authenticates with the tunnel-specific credentials.json.
+      # The setup API token is needed once to create the tunnel and optional
+      # Cloudflare Access app; after that, cloudflared authenticates with the
+      # tunnel-specific credentials.json and Access is tracked by app_id.
       # Strip it from config.yml so a stolen config can't recreate tunnels.
       # Done as a structured YAML write (not regex over the raw text) so
       # we don't accidentally clobber an `api_token:` key in some other
@@ -409,27 +408,6 @@ module DevBoxer
         cf = data["cloudflare"]
         return false unless cf && cf["api_token"] && !cf["api_token"].to_s.empty?
         cf.delete("api_token")
-        write_yaml_preserving_mode(path, data)
-        true
-      end
-
-      # The Access setup token has account-level permissions and is only
-      # needed to create/update the Access application. Keep the resulting
-      # app_id, then remove the token from disk.
-      def cleanup_access_token
-        return unless access_token
-        removed = [config_path, secrets_path].compact.uniq.map do |path|
-          clear_access_token(path)
-        end.any?
-        ok "Cloudflare Access API token removed from config" if removed
-      end
-
-      def clear_access_token(path)
-        return false unless File.exist?(path)
-        data = YAML.safe_load_file(path) || {}
-        access = data.dig("cloudflare", "access")
-        return false unless access && access["api_token"] && !access["api_token"].to_s.empty?
-        access.delete("api_token")
         write_yaml_preserving_mode(path, data)
         true
       end

@@ -52,7 +52,9 @@ module DevBoxer
       username = ask("Linux username", default: existing.dig("user", "name") || default_username)
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
+      explain_base_domain
       base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
+      explain_cloudflare_zone_token(base_domain)
       zone_token = ask(
         "Cloudflare zone DNS API token",
         default: existing.dig("cloudflare", "zone_api_token"),
@@ -204,13 +206,36 @@ module DevBoxer
       end
     end
 
+    def explain_base_domain
+      output.puts
+      output.puts "Base domain:"
+      output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
+      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, and viewer.<domain>."
+      output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
+      output.puts "  Link: https://www.cloudflare.com/products/registrar/"
+      output.puts
+    end
+
+    def explain_cloudflare_zone_token(base_domain)
+      output.puts
+      output.puts "Cloudflare zone DNS API token:"
+      output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
+      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, and viewer."
+      output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
+      output.puts "  Scope: Limit the token to the #{base_domain} zone only."
+      output.puts
+    end
+
     def explain_cloudflare_setup_token
       output.puts
-      output.puts "Cloudflare setup:"
-      output.puts "  - The zone DNS token is kept in secrets.yml for DNS records."
-      output.puts "  - One temporary account token can create the tunnel and optional Access app."
-      output.puts "  - It needs Account > Cloudflare Tunnel:Edit plus Access application/policy edit permissions."
-      output.puts "  - Dev Boxer deletes this account token from secrets.yml after setup succeeds."
+      output.puts "One-time Cloudflare account setup token:"
+      output.puts "  What: A temporary account-level Cloudflare API token."
+      output.puts "  Why: Dev Boxer uses it once to create the Cloudflare Tunnel and optional Zero Trust Access app."
+      output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with these account permissions:"
+      output.puts "       - Cloudflare One Connector: cloudflared: Edit"
+      output.puts "       - Access: Apps: Edit"
+      output.puts "       - Access: Policies: Edit"
+      output.puts "  Cleanup: Dev Boxer deletes this token from secrets.yml after setup succeeds."
       output.puts
     end
 

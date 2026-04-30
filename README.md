@@ -64,7 +64,7 @@ Create a zone-scoped DNS API token from [Cloudflare API Tokens](https://dash.clo
 For first-run Cloudflare setup, Dev Boxer uses two tokens:
 
 - A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`. This stays on the machine in `secrets.yml` so Dev Boxer can manage subdomain DNS records.
-- A temporary account setup token for initial tunnel and Access setup. It needs account permission `Cloudflare Tunnel:Edit` and permission to edit Zero Trust Access applications/policies. Dev Boxer stores it only in `secrets.yml`, uses it once, then wipes it after setup succeeds.
+- A temporary account setup token for initial tunnel and Access setup. It needs account permissions `Cloudflare One Connector: cloudflared: Edit`, `Access: Apps: Edit`, and `Access: Policies: Edit`. Dev Boxer stores it only in `secrets.yml`, uses it once, then wipes it after setup succeeds.
 
 You can skip automatic tunnel creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID.
 
@@ -77,7 +77,7 @@ The wizard can optionally create a Cloudflare Zero Trust Access self-hosted appl
 - Protected: `dev.<domain>` and `viewer.<domain>`
 - Excluded: `matrix.<domain>`, so Matrix clients can reach the homeserver API directly
 
-Automated Access setup derives the Cloudflare account from the zone and requires a one-time API token that can edit Zero Trust Access applications and policies. Dev Boxer persists the resulting Access app ID and removes the setup token after a successful run.
+Automated Access setup derives the Cloudflare account from the zone and requires a one-time API token with `Access: Apps: Edit` and `Access: Policies: Edit`. Dev Boxer persists the resulting Access app ID and removes the setup token after a successful run.
 
 ## Modules
 

@@ -276,7 +276,7 @@ module DevBoxer
         tunnel_name = "dev-boxer-#{shell.sh!('hostname -s').strip}"
         info ""
         info "Manual Cloudflare tunnel setup required."
-        info "Create a temporary Cloudflare API token with Account > Cloudflare Tunnel:Edit."
+        info "Create a temporary Cloudflare API token with Account > Cloudflare One Connector: cloudflared: Edit."
         info "Do not save that token in config.yml or secrets.yml."
         info ""
         info "In another root shell on this VPS, run:"

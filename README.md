@@ -40,26 +40,22 @@ cp config.example.yml config.yml   # edit to taste (interactive wizard coming)
 sudo ./bootstrap.sh                # apt-installs ruby, then runs setup.rb (~10-15 min)
 ```
 
-> Dev Boxer is being rewritten from bash to Ruby. Modules 01–09 are ported;
-> module 10 is still a bash file under `scripts/` and isn't wired into
-> `setup.rb` yet (port lands in the final PR).
-
 ## Modules
 
 Setup runs 10 idempotent modules in order:
 
-| # | Module | Status | What it does |
-|---|--------|--------|--------------|
-| 01 | `security`     | ruby | SSH hardening, UFW firewall, fail2ban, unattended-upgrades |
-| 02 | `users`        | ruby | Linux user creation, SSH key, sudo |
-| 03 | `desktop`      | ruby | XFCE4 + XRDP (SSH tunnel only) |
-| 04 | `docker`       | ruby | Docker Engine + Compose |
-| 05 | `dev-tools`    | ruby | Node.js 20, Git, Python, uv, GitHub CLI |
-| 06 | `browsers`     | ruby | Chrome, Firefox, Xvfb |
-| 07 | `claude`       | ruby | Claude Code CLI + plugins + MCP |
-| 08 | `matrix-bridge`| ruby | Matron Server + claude-matrix-bridge |
-| 09 | `cloudflare`   | ruby | Cloudflare Tunnel, DNS routes, zone-token deploy |
-| 10 | `desktop-apps` | bash | GitHub Desktop, utilities |
+| # | Module | What it does |
+|---|--------|--------------|
+| 01 | `security`     | SSH hardening, UFW firewall, fail2ban, unattended-upgrades |
+| 02 | `users`        | Linux user creation, SSH key, sudo, zsh |
+| 03 | `desktop`      | XFCE4 + XRDP (SSH tunnel only) |
+| 04 | `docker`       | Docker Engine + Compose |
+| 05 | `dev-tools`    | Node.js 20, Git, Python, uv, GitHub CLI |
+| 06 | `browsers`     | Chrome, Firefox, Xvfb |
+| 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
+| 08 | `matrix-bridge`| Matron Server + claude-matrix-bridge |
+| 09 | `cloudflare`   | Cloudflare Tunnel, DNS routes, zone-token deploy |
+| 10 | `desktop-apps` | VS Code, GitHub Desktop, lazydocker, MOTD |
 
 Re-run a single module or resume from a failure:
 

@@ -1,5 +1,4 @@
 require "json"
-require "shellwords"
 require "yaml"
 
 module DevBoxer
@@ -107,19 +106,11 @@ module DevBoxer
       def create_dns_routes
         return unless current_tunnel_id
         info "Setting up DNS routes"
-        configured_hostnames.each do |host|
-          # Use sh! so a failed route creation actually raises — the previous
-          # `sh` swallowed the failure and the `ok` log lied about success.
-          shell.sh!("cloudflared tunnel route dns --overwrite-dns #{Shellwords.escape(current_tunnel_id)} #{Shellwords.escape(host)}")
+        [tunnel_hostname, hostname_matrix, hostname_viewer].compact.each do |host|
+          next if host.empty?
+          shell.sh("cloudflared tunnel route dns --overwrite-dns #{current_tunnel_id} #{host}")
           ok "DNS route: #{host} → tunnel"
         end
-      end
-
-      # Gather the hostnames actually configured by the operator. Excludes
-      # nil and empty strings so the cloudflared-config.yml template doesn't
-      # render ingress rules for hostnames that resolve nowhere.
-      def configured_hostnames
-        [tunnel_hostname, hostname_matrix, hostname_viewer].compact.reject(&:empty?)
       end
 
       def current_tunnel_id
@@ -144,31 +135,10 @@ module DevBoxer
       def tunnel_template_vars
         {
           "CLOUDFLARE_TUNNEL_ID" => current_tunnel_id,
-          "INGRESS"              => render_ingress,
+          "CF_HOSTNAME_MAIN"     => tunnel_hostname,
+          "CF_HOSTNAME_MATRIX"   => hostname_matrix,
+          "CF_HOSTNAME_VIEWER"   => hostname_viewer,
         }
-      end
-
-      # Build the cloudflared ingress list from whichever hostnames the
-      # operator configured. Skipping unset hostnames prevents rendering
-      # `hostname: ` (literal empty value) which is invalid YAML and
-      # would break the tunnel on startup.
-      def render_ingress
-        rules = []
-        if present?(hostname_matrix)
-          rules << "  - hostname: #{hostname_matrix}\n    service: http://localhost:6167"
-        end
-        if present?(hostname_viewer)
-          rules << "  - hostname: #{hostname_viewer}\n    service: http://localhost:9801"
-        end
-        if present?(tunnel_hostname)
-          rules << "  - hostname: #{tunnel_hostname}\n    service: https://localhost\n    originRequest:\n      noTLSVerify: true"
-        end
-        rules << "  - service: http_status:404"
-        rules.join("\n")
-      end
-
-      def present?(s)
-        s && !s.to_s.empty?
       end
 
       def install_systemd_unit

@@ -1,35 +1,62 @@
 require "json"
 require "net/http"
 require "securerandom"
+require "shellwords"
 require "uri"
 
 module DevBoxer
   module Modules
+    # Matrix bridge module — bundled, external, or disabled.
+    #
+    # In bundled mode, this performs full first-login onboarding:
+    #   1. Run Matron Server locally
+    #   2. Clone claude-matrix-bridge + npm install
+    #   3. Open a registration window on the homeserver
+    #   4. Register the bot (per-box, e.g. claude-bot-<host>)
+    #   5. Run setup-user.mjs from the bridge repo, which:
+    #      - Registers the human user
+    #      - Bootstraps secret storage with a recovery key
+    #      - Cross-signs the bot from the user side (Element shows verified)
+    #   6. Login as bot, create encrypted bridge room, invite user
+    #   7. Close registration window
+    #   8. Persist all credentials (bot_access_token, recovery_key, etc.) to
+    #      config.yml so re-runs are idempotent
+    #
+    # End result: the user opens Element, signs in with username + password +
+    # recovery key, the bridge room is already there, the bot is already
+    # verified, and !start works immediately.
     class MatrixBridge < ModuleBase
       module_name  "matrix-bridge"
       module_order 8
 
       HOMESERVER_LOCAL = "http://localhost:6167".freeze
+      BRIDGE_REPO = "https://github.com/yearbook/claude-matrix-bridge.git".freeze
 
       def run
         section "Matrix bridge"
 
         case mode
-        when "bundled" then setup_bundled_homeserver
-        when "external" then info "Using external homeserver: #{config.matrix.homeserver_url}"
         when "disabled"
           skip "Matrix bridge disabled in config"
           return
+        when "bundled"
+          start_matron_server
+          clone_bridge_repo
+          npm_install
+          onboard_users_if_needed
+        when "external"
+          info "Using external homeserver: #{config.matrix.homeserver_url}"
+          clone_bridge_repo
+          npm_install
         else
           raise "Unknown matrix.mode: #{mode.inspect} (expected bundled, external, or disabled)"
         end
 
-        clone_bridge_repo
-        npm_install
         write_bridge_env
         write_mcp_config
         install_systemd_units
         ok "Matrix bridge setup complete"
+        print_first_login_instructions if mode == "bundled"
       end
 
       private
@@ -40,110 +67,124 @@ module DevBoxer
       def bridge_dir = "#{home_dir}/claude-matrix-bridge"
       def matrix_server_dir = "#{home_dir}/matrix-server"
 
-      def homeserver_url
-        mode == "bundled" ? HOMESERVER_LOCAL : config.matrix.homeserver_url
+      def server_domain  = config.matrix&.server_domain  || "localhost"
+      def user_username  = config.matrix&.user_username  || username
+      def bot_username   = config.matrix&.bot_username   || default_bot_username
+      def bot_user_id    = "@#{bot_username}:#{server_domain}"
+      def user_id        = "@#{user_username}:#{server_domain}"
+      def homeserver_url = mode == "bundled" ? HOMESERVER_LOCAL : config.matrix.homeserver_url
+
+      def default_bot_username
+        host = shell.sh!("hostname -s").strip rescue "host"
+        "claude-bot-#{host}"
       end
 
       # ----- bundled homeserver -----
 
-      def setup_bundled_homeserver
-        info "Setting up bundled Matron Server homeserver"
+      def start_matron_server
+        info "Setting up bundled Matron Server"
         FileUtils.mkdir_p(matrix_server_dir)
         render_template(
           "docker-compose.matron-server.yml",
           "#{matrix_server_dir}/docker-compose.yml",
-          docker_compose_vars,
+          { "MATRIX_SERVER_DOMAIN" => server_domain },
         )
         shell.sh!("chown -R #{username}:#{username} #{matrix_server_dir}")
 
         info "Starting Matron Server"
         shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose up -d")
-
         unless shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30)
           raise "Matron Server failed to start. Check: docker logs matron-server"
         end
         ok "Matron Server is running"
+      end
 
+      def onboard_users_if_needed
         if config.matrix&.bot_access_token
-          skip "Matrix accounts already registered (token in config)"
+          skip "Matrix accounts already onboarded (bot_access_token in config)"
           return
         end
-        register_accounts_and_create_room
+        onboard_users
       end
 
-      def docker_compose_vars
-        domain = config.matrix&.server_domain
-        if domain.nil? || domain.to_s.empty?
-          raise "matrix.mode is 'bundled' but matrix.server_domain is not set in config.yml — " \
-                "set it to your matrix server name (e.g. matrix.example.com)"
+      # The full first-login flow: open registration, register bot, run
+      # setup-user.mjs (registers + bootstraps + cross-signs), login bot,
+      # create room, close registration.
+      def onboard_users
+        info "Onboarding Matrix bot + user (cross-signed first-login flow)"
+        reg_token     = SecureRandom.hex(16)
+        bot_password  = SecureRandom.hex(16)
+        user_password = config.matrix&.user_password || SecureRandom.hex(16)
+
+        # open_registration writes docker-compose.override.yml — if it (or
+        # the post-restart wait_for_url) raises, close_registration must
+        # still run to clean up the override and re-restart with
+        # registration disabled. Wrap the whole window in begin/ensure.
+        begin
+          open_registration(reg_token)
+          ok "Registration window open"
+
+          register_bot_via_api(bot_password, reg_token)
+          ok "Bot account #{bot_user_id} registered"
+
+          recovery_key = run_setup_user_mjs(user_password, reg_token)
+          ok "User #{user_id} registered, secret storage bootstrapped, bot cross-signed"
+
+          bot_token = login_bot(bot_password)
+          ok "Bot access token obtained"
+
+          room_id = create_bridge_room(bot_token)
+          ok room_id ? "Bridge room created: #{room_id}" : "Bridge room creation skipped (manual fallback)"
+
+          @generated_credentials = {
+            bot_username: bot_username,
+            bot_access_token: bot_token,
+            bot_password: bot_password,
+            user_username: user_username,
+            user_password: user_password,
+            recovery_key: recovery_key,
+            bridge_room_id: room_id,
+            hmac_secret: SecureRandom.hex(32),
+            server_domain: server_domain,
+          }
+          persist_generated_credentials
+        ensure
+          close_registration
+          ok "Registration window closed"
         end
-        { "MATRIX_SERVER_DOMAIN" => domain }
       end
 
-      def register_accounts_and_create_room
-        info "Registering Matrix accounts"
-        reg_token    = SecureRandom.hex(16)
-        bot_password = SecureRandom.hex(16)
-
-        write_compose_override(reg_token)
-        restart_compose
-        unless shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30)
-          File.delete("#{matrix_server_dir}/docker-compose.override.yml")
-          raise "Matron Server failed to restart with registration enabled"
-        end
-
-        register_account(config.matrix.bot_username, bot_password, reg_token)
-        ok "Bot account @#{config.matrix.bot_username}:#{config.matrix.server_domain} registered"
-
-        register_account(config.matrix.user_username, config.matrix.user_password, reg_token)
-        ok "User account @#{config.matrix.user_username}:#{config.matrix.server_domain} registered"
-
-        File.delete("#{matrix_server_dir}/docker-compose.override.yml")
-        restart_compose
-        unless shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30)
-          raise "Matron Server failed to restart after disabling registration"
-        end
-
-        @generated_bot_token = login_account(config.matrix.bot_username, bot_password)
-        ok "Bot access token obtained"
-
-        @generated_room_id = create_bridge_room(@generated_bot_token)
-        if @generated_room_id
-          ok "Bridge room created: #{@generated_room_id}"
-        else
-          warn "Failed to create bridge room — create it manually from your Matrix client"
-        end
-
-        persist_generated(bot_token: @generated_bot_token, room_id: @generated_room_id)
-      end
-
-      def write_compose_override(reg_token)
-        override = <<~YML
+      def open_registration(reg_token)
+        path = "#{matrix_server_dir}/docker-compose.override.yml"
+        File.write(path, <<~YML)
           services:
             matron-server:
               environment:
                 MATRON_SERVER_ALLOW_REGISTRATION: "true"
                 MATRON_SERVER_REGISTRATION_TOKEN: "#{reg_token}"
         YML
-        path = "#{matrix_server_dir}/docker-compose.override.yml"
-        File.write(path, override)
         shell.sh!("chown #{username}:#{username} #{path}")
-      end
-
-      def restart_compose
         shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose down && docker compose up -d")
+        shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30) or
+          raise "Matron Server failed to restart with registration enabled"
       end
 
-      def register_account(user, password, reg_token)
+      def close_registration
+        path = "#{matrix_server_dir}/docker-compose.override.yml"
+        File.delete(path) if File.exist?(path)
+        shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose down && docker compose up -d") rescue nil
+        shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30) rescue nil
+      end
+
+      def register_bot_via_api(password, reg_token)
         body = {
-          username: user, password: password,
+          username: bot_username, password: password,
           auth: { type: "m.login.registration_token", token: reg_token },
           inhibit_login: true,
         }
         resp = http_post("/_matrix/client/v3/register", body)
         return if resp["user_id"]
 
-        # UIA fallback — repeat with session
         if (session = resp["session"])
           body[:auth][:session] = session
           resp = http_post("/_matrix/client/v3/register", body)
@@ -151,17 +192,50 @@ module DevBoxer
         end
 
         return if resp.dig("errcode") == "M_USER_IN_USE"
-        raise "Registration failed for #{user}: #{resp.inspect}"
+        raise "Bot registration failed: #{resp.inspect}"
       end
 
-      def login_account(user, password)
+      # Use a tmpfs path so the recovery_key + password never hit a real
+      # disk — mirrors PR #222's matrix-onboard orchestrator.
+      #
+      # Shell-escape every interpolated value: `user_password` is auto-
+      # generated entropy that may contain shell-significant characters
+      # (rare but real with bytes-to-hex), and `user_username` /
+      # `bot_user_id` come from config so they're operator-controlled but
+      # we still want to fail the command rather than execute unintended
+      # shell on bad input.
+      def run_setup_user_mjs(user_password, reg_token)
+        creds_path = "/dev/shm/dev-boxer-matrix-#{SecureRandom.hex(8)}"
+        shell.run_as_user(username, "touch #{Shellwords.escape(creds_path)} && chmod 600 #{Shellwords.escape(creds_path)}")
+        cmd = [
+          "MATRIX_HOMESERVER_URL=#{Shellwords.escape(HOMESERVER_LOCAL)}",
+          "REG_TOKEN=#{Shellwords.escape(reg_token)}",
+          "node",
+          Shellwords.escape("#{bridge_dir}/setup-user.mjs"),
+          Shellwords.escape(user_username),
+          "--password", Shellwords.escape(user_password),
+          "--bot", Shellwords.escape(bot_user_id),
+          "--credentials-file", Shellwords.escape(creds_path),
+        ].join(" ")
+        shell.run_as_user(username, cmd)
+
+        contents = shell.sh!("cat #{creds_path}")
+        # setup-user.mjs writes a shell-source-able file: key='value'
+        recovery_key = contents.match(/^recovery_key=['"]?([^'"\n]+)['"]?$/)&.[](1)
+        raise "setup-user.mjs did not write recovery_key to #{creds_path}" if recovery_key.nil? || recovery_key.empty?
+        recovery_key
+      ensure
+        shell.run_as_user(username, "rm -f #{creds_path}") if creds_path
+      end
+
+      def login_bot(password)
         body = {
           type: "m.login.password",
-          identifier: { type: "m.id.user", user: user },
+          identifier: { type: "m.id.user", user: bot_username },
           password: password,
         }
         resp = http_post("/_matrix/client/v3/login", body)
-        resp["access_token"] or raise "Login failed for #{user}: #{resp.inspect}"
+        resp["access_token"] or raise "Bot login failed: #{resp.inspect}"
       end
 
       def create_bridge_room(bot_token)
@@ -170,7 +244,7 @@ module DevBoxer
           topic: "Messages in this room are forwarded to Claude Code",
           visibility: "private",
           preset: "private_chat",
-          invite: ["@#{config.matrix.user_username}:#{config.matrix.server_domain}"],
+          invite: [user_id],
           initial_state: [{
             type: "m.room.encryption",
             state_key: "",
@@ -193,21 +267,23 @@ module DevBoxer
         { "errcode" => "INVALID_RESPONSE", "raw" => res&.body }
       end
 
-      # Use Config.merge_into_file rather than appending raw lines — appending
-      # a duplicate top-level `matrix:` key would silently destroy the
-      # existing matrix section on next YAML.safe_load_file.
-      #
-      # Persist the generated HMAC secret too: bridge_env_vars memoises it
-      # for the current run, but without writing it back to disk every
-      # subsequent run would mint a fresh one and invalidate any HMAC-signed
-      # data the bridge stored from the previous run.
-      def persist_generated(bot_token:, room_id:)
+      # Use Config.merge_into_file rather than appending raw lines —
+      # appending a duplicate top-level `matrix:` key would silently
+      # destroy the existing matrix section on next YAML.safe_load_file.
+      def persist_generated_credentials
         path = File.expand_path("../../../config.yml", __dir__)
         return unless File.exist?(path)
-        generated = { "bot_access_token" => bot_token, "hmac_secret" => bridge_env_vars["HMAC_SECRET"] }
-        generated["bridge_room_id"] = room_id if room_id
+        c = @generated_credentials
+        generated = {
+          "bot_access_token" => c[:bot_access_token],
+          "bot_password"     => c[:bot_password],
+          "user_password"    => c[:user_password],
+          "recovery_key"     => c[:recovery_key],
+          "hmac_secret"      => c[:hmac_secret],
+        }
+        generated["bridge_room_id"] = c[:bridge_room_id] if c[:bridge_room_id]
         Config.merge_into_file(path, { "matrix" => generated })
-        ok "Wrote #{generated.keys.join(' + ')} back to config.yml"
+        ok "Credentials persisted to config.yml"
       end
 
       # ----- bridge repo + env -----
@@ -218,7 +294,7 @@ module DevBoxer
           shell.sh("su - #{username} -c 'cd #{bridge_dir} && git pull --ff-only'")
         else
           info "Cloning claude-matrix-bridge"
-          shell.run_as_user(username, "git clone https://github.com/matronhq/claude-matrix-bridge.git #{bridge_dir}")
+          shell.run_as_user(username, "git clone #{BRIDGE_REPO} #{bridge_dir}")
           ok "Bridge repo cloned"
         end
       end
@@ -246,12 +322,13 @@ module DevBoxer
       # Also reflects the just-generated bot_access_token, since on first
       # bundled run the in-memory `config` object pre-dates onboarding.
       def bridge_env_vars
+        creds = @generated_credentials || {}
         @bridge_env_vars ||= {
           "MATRIX_HOMESERVER_URL" => homeserver_url,
-          "MATRIX_BOT_ACCESS_TOKEN_BUNDLED" => @generated_bot_token || config.matrix&.bot_access_token,
-          "MATRIX_ALLOWED_USER_IDS" => "@#{config.matrix.user_username}:#{config.matrix.server_domain}",
+          "MATRIX_BOT_ACCESS_TOKEN_BUNDLED" => creds[:bot_access_token] || config.matrix&.bot_access_token,
+          "MATRIX_ALLOWED_USER_IDS" => user_id,
           "USERNAME" => username,
-          "HMAC_SECRET" => config.matrix&.hmac_secret || SecureRandom.hex(32),
+          "HMAC_SECRET" => creds[:hmac_secret] || config.matrix&.hmac_secret || SecureRandom.hex(32),
           "CF_HOSTNAME_VIEWER" => config.cloudflare&.tunnel&.hostname_viewer || "localhost",
         }
       end
@@ -273,6 +350,26 @@ module DevBoxer
         shell.systemctl(:restart, "claude-matrix-bridge")
         shell.systemctl(:restart, "claude-matrix-file-viewer")
         ok "Bridge services installed and started"
+      end
+
+      def print_first_login_instructions
+        c = @generated_credentials
+        return unless c
+
+        info ""
+        info "=========================================="
+        info "  Matrix bridge — first-login instructions"
+        info "=========================================="
+        info "Open Element (or any Matrix client) and:"
+        info "  1. Add custom homeserver: #{homeserver_url} (or your tunnel URL)"
+        info "  2. Sign in as #{user_id}"
+        info "     Password: #{c[:user_password]}"
+        info "  3. When prompted for Secure Backup, paste the recovery key:"
+        info "     #{c[:recovery_key]}"
+        info "  4. Open the 'Claude Code Bridge' room — bot is already verified"
+        info "  5. Send !start to begin a Claude Code session"
+        info ""
+        info "All credentials are also saved in config.yml. Keep that file safe."
       end
     end
   end

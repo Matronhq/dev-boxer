@@ -13,6 +13,7 @@ DEFAULT_CONFIG = File.join(ROOT, "config.yml")
 options = {
   config: DEFAULT_CONFIG,
   modules_dir: File.join(ROOT, "lib", "dev_boxer", "modules"),
+  templates_dir: File.join(ROOT, "templates"),
   skip: [],
 }
 config_explicit = false
@@ -25,6 +26,7 @@ parser = OptionParser.new do |opts|
   opts.on("--skip NAME",      "Skip this module (repeatable)")               { |v| options[:skip] << v }
   opts.on("--config PATH",    "Path to config.yml (default: ./config.yml)")  { |v| options[:config] = v; config_explicit = true }
   opts.on("--modules-dir DIR","Path to modules directory")                   { |v| options[:modules_dir] = v }
+  opts.on("--templates-dir DIR","Path to templates directory")               { |v| options[:templates_dir] = v }
   opts.on("-h", "--help",     "Show this help")                              { puts opts; exit 0 }
 end
 
@@ -49,7 +51,12 @@ config =
   end
 
 mods   = DevBoxer::Modules.discover(options[:modules_dir])
-runner = DevBoxer::Runner.new(modules: mods, config: config, log: log)
+runner = DevBoxer::Runner.new(
+  modules: mods,
+  config: config,
+  log: log,
+  templates_dir: options[:templates_dir],
+)
 
 begin
   runner.run(

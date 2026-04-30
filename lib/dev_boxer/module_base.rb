@@ -17,11 +17,13 @@ module DevBoxer
       end
     end
 
-    attr_reader :config, :log
+    attr_reader :config, :log, :shell, :templates_dir
 
-    def initialize(config:, log:)
+    def initialize(config:, log:, shell: Shell.new, templates_dir: nil)
       @config = config
       @log = log
+      @shell = shell
+      @templates_dir = templates_dir
     end
 
     def module_name
@@ -35,5 +37,22 @@ module DevBoxer
     def run
       raise NotImplementedError, "#{self.class} must implement #run"
     end
+
+    private
+
+    def template_path(name)
+      raise "templates_dir not set" unless templates_dir
+      File.join(templates_dir, name)
+    end
+
+    def render_template(template_name, output_path, vars, mode: nil)
+      Template.render_to(template_path(template_name), output_path, vars, mode: mode)
+    end
+
+    def section(title) = log.section(title)
+    def info(msg)      = log.info(msg)
+    def ok(msg)        = log.ok(msg)
+    def skip(msg)      = log.skip(msg)
+    def warn(msg)      = log.warn(msg)
   end
 end

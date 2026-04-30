@@ -40,25 +40,27 @@ cp config.example.yml config.yml   # edit to taste (interactive wizard coming)
 sudo ./bootstrap.sh                # apt-installs ruby, then runs setup.rb (~10-15 min)
 ```
 
-> Dev Boxer is being rewritten from bash to Ruby. The bash modules under `scripts/`
-> are still functional via `setup.sh` while the Ruby port lands incrementally.
+> Dev Boxer is being rewritten from bash to Ruby. Modules 01–06 are ported;
+> 07–10 are still bash files under `scripts/` and aren't wired into `setup.rb`
+> yet (port lands in subsequent PRs). Run them manually if needed:
+> `sudo bash scripts/07-claude.sh`.
 
 ## Modules
 
 Setup runs 10 idempotent modules in order:
 
-| # | Module | What it does |
-|---|--------|--------------|
-| 01 | `security` | SSH hardening, UFW firewall, fail2ban, unattended-upgrades |
-| 02 | `users` | Linux user creation, SSH key, sudo |
-| 03 | `desktop` | XFCE4 + XRDP (SSH tunnel only) |
-| 04 | `docker` | Docker Engine + Compose |
-| 05 | `dev-tools` | Node.js 20, Git, GitHub CLI, VS Code, Composer |
-| 06 | `browsers` | Chrome, Firefox |
-| 07 | `claude` | Claude Code CLI |
-| 08 | `matrix-bridge` | Matron Server + claude-matrix-bridge |
-| 09 | `cloudflare` | Cloudflare Tunnel, DNS records |
-| 10 | `desktop-apps` | GitHub Desktop, utilities |
+| # | Module | Status | What it does |
+|---|--------|--------|--------------|
+| 01 | `security`     | ruby | SSH hardening, UFW firewall, fail2ban, unattended-upgrades |
+| 02 | `users`        | ruby | Linux user creation, SSH key, sudo |
+| 03 | `desktop`      | ruby | XFCE4 + XRDP (SSH tunnel only) |
+| 04 | `docker`       | ruby | Docker Engine + Compose |
+| 05 | `dev-tools`    | ruby | Node.js 20, Git, Python, uv, GitHub CLI |
+| 06 | `browsers`     | ruby | Chrome, Firefox, Xvfb |
+| 07 | `claude`       | bash | Claude Code CLI |
+| 08 | `matrix-bridge`| bash | Matron Server + claude-matrix-bridge |
+| 09 | `cloudflare`   | bash | Cloudflare Tunnel, DNS records |
+| 10 | `desktop-apps` | bash | GitHub Desktop, utilities |
 
 Re-run a single module or resume from a failure:
 

@@ -1,0 +1,36 @@
+# Dev Boxer config — copy to config.yml and edit, or run `wizard.rb`.
+
+user:
+  name: dan
+  ssh_public_key: "ssh-ed25519 AAAAC3Nz... user@laptop"
+
+ssh:
+  port: 2222
+
+desktop:
+  enabled: true
+
+docker:
+  prune:
+    interval: 2h
+    keep_until: 4h
+
+claude:
+  plugins:
+    - superpowers
+    - context7
+    - serena
+
+matrix:
+  mode: bundled            # bundled | external | disabled
+  homeserver: matrix.example.com
+  bot_username: claude-bot
+
+cloudflare:
+  enabled: false
+  account_id: ""
+  zone_id: ""
+  api_token: ""
+  tunnel:
+    hostname: dev.example.com
+    managed_locally: false

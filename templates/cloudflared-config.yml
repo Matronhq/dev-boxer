@@ -1,0 +1,6 @@
+# Cloudflare Tunnel config — deployed by dev-boxer
+tunnel: {{CLOUDFLARE_TUNNEL_ID}}
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+{{INGRESS}}

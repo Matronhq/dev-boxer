@@ -1,0 +1,61 @@
+# Dev Boxer config — copy to config.yml and edit.
+
+user:
+  name: dev
+  ssh_public_key: "ssh-ed25519 AAAAC3Nz... user@laptop"
+
+ssh:
+  port: 2222
+
+desktop:
+  enabled: true
+
+docker:
+  # Optional: relocate Docker + containerd storage to a separate volume
+  # (e.g. a big data disk or an encrypted /secure mount). Leave nil for the
+  # system default under /var/lib/{docker,containerd}.
+  data_root: null         # e.g. "/secure/docker"
+  containerd_root: null   # e.g. "/secure/containerd" (auto-derived from data_root if nil)
+  prune:
+    interval: 2h          # how often docker-prune.timer fires
+    keep_until: 4h        # untag images / build cache older than this
+
+claude:
+  plugins:
+    - superpowers
+    - context7
+    - serena
+
+matrix:
+  mode: bundled            # bundled | external | disabled
+  server_domain: matrix.example.com   # the matrix server name
+  user_username: dev        # local part of your matrix user (default: linux user.name)
+  bot_username: null        # default: claude-bot-<hostname>; override here if you want
+  # All secrets generated during onboarding (bot_access_token, bot_password,
+  # user_password, bridge_room_id, hmac_secret) are written to ./secrets.yml
+  # — gitignored, mode 0600 — NOT here. The recovery key is written to
+  # ~/recovery-key.txt with a "delete after copying" header.
+
+hello_world:
+  port: 9810             # deploys a localhost:port "hello world" smoke-test service
+
+cloudflare:
+  enabled: true
+  zone_name: example.com
+  # zone_api_token is written to secrets.yml by the first-run wizard.
+  # Optional api_token is used once for tunnel creation, then wiped.
+  tunnel:
+    hostname: dev.example.com
+    hostname_matrix: matrix.example.com
+    hostname_viewer: viewer.example.com
+    create_manually: false
+    config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml
+  access:
+    enabled: true
+    account_id: null        # optional override; otherwise derived from zone_name
+    app_id: null            # persisted after the Access app is created
+    app_name: Dev Boxer
+    session_duration: 24h
+    allowed_emails: []
+    allowed_email_domains:
+      - example.com

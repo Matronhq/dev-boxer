@@ -56,6 +56,7 @@ runner = DevBoxer::Runner.new(
   config: config,
   log: log,
   templates_dir: options[:templates_dir],
+  secrets_path: DevBoxer::Config.secrets_path_for(options[:config]),
 )
 
 begin

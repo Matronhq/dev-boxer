@@ -87,6 +87,39 @@ class ConfigTest < Minitest::Test
     end
   end
 
+  def test_loads_sibling_secrets_yml_and_merges
+    Dir.mktmpdir do |dir|
+      File.write("#{dir}/config.yml",  "user:\n  name: dan\nmatrix:\n  mode: bundled\n")
+      File.write("#{dir}/secrets.yml", "matrix:\n  bot_access_token: secret123\n")
+      config = DevBoxer::Config.load("#{dir}/config.yml")
+      assert_equal "dan",       config.user.name
+      assert_equal "bundled",   config.matrix.mode
+      assert_equal "secret123", config.matrix.bot_access_token
+    end
+  end
+
+  def test_secrets_yml_overrides_config_yml_on_conflict
+    Dir.mktmpdir do |dir|
+      File.write("#{dir}/config.yml",  "matrix:\n  bot_access_token: from_config\n")
+      File.write("#{dir}/secrets.yml", "matrix:\n  bot_access_token: from_secrets\n")
+      config = DevBoxer::Config.load("#{dir}/config.yml")
+      assert_equal "from_secrets", config.matrix.bot_access_token
+    end
+  end
+
+  def test_missing_secrets_yml_is_fine
+    Dir.mktmpdir do |dir|
+      File.write("#{dir}/config.yml", "user:\n  name: dan\n")
+      config = DevBoxer::Config.load("#{dir}/config.yml")
+      assert_equal "dan", config.user.name
+    end
+  end
+
+  def test_secrets_path_for_returns_sibling
+    assert_equal "/foo/secrets.yml", DevBoxer::Config.secrets_path_for("/foo/config.yml")
+    assert_equal "/foo/secrets.yml", DevBoxer::Config.secrets_path_for("/foo/anything.yml")
+  end
+
   def test_does_not_claim_to_respond_to_coercion_methods
     config = DevBoxer::Config.from_hash("user" => { "name" => "dan" })
     refute config.respond_to?(:to_ary), "to_ary trips Array()/splat"
@@ -107,8 +140,6 @@ class ConfigTest < Minitest::Test
   end
 
   def test_coercion_method_with_matching_key_still_works
-    # Defensive: if someone has a YAML key that happens to be `to_ary` etc.,
-    # accessing it should still work via method_missing.
     config = DevBoxer::Config.from_hash("to_ary" => "weird-but-legal")
     assert_equal "weird-but-legal", config.to_ary
   end

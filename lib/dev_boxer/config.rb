@@ -7,11 +7,21 @@ module DevBoxer
 
     def self.load(path)
       raise NotFound, "Config not found: #{path}" unless File.exist?(path)
-      from_hash(YAML.safe_load_file(path) || {})
+      base = YAML.safe_load_file(path) || {}
+      secrets_path = secrets_path_for(path)
+      if File.exist?(secrets_path)
+        secrets = YAML.safe_load_file(secrets_path) || {}
+        base = deep_merge(base, secrets)
+      end
+      from_hash(base)
     end
 
     def self.from_hash(hash)
       new(hash)
+    end
+
+    def self.secrets_path_for(config_path)
+      File.join(File.dirname(config_path), "secrets.yml")
     end
 
     def self.deep_merge(a, b)
@@ -46,9 +56,7 @@ module DevBoxer
     # Methods Ruby invokes during implicit type coercion. Claiming to
     # respond to them (or letting method_missing return nil for them)
     # makes splat / Array() / string concat / etc. raise a confusing
-    # TypeError instead of giving the caller's own NoMethodError. We
-    # selectively delegate to super for these unless an explicit hash
-    # key by that name exists.
+    # TypeError instead of giving the caller's own NoMethodError.
     COERCION_METHODS = %i[
       to_ary to_a to_str to_hash to_int to_proc to_io to_path
     ].freeze

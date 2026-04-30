@@ -35,7 +35,10 @@ cloudflare:
   enabled: false
   account_id: ""
   zone_id: ""
-  api_token: ""
+  api_token: ""           # admin token, used once to create the tunnel — wiped after
+  zone_api_token: ""      # zone-scoped token, deployed to ~/.cloudflare/ for user tools
   tunnel:
     hostname: dev.example.com
-    managed_locally: false
+    hostname_matrix: matrix.example.com
+    hostname_viewer: viewer.example.com
+    config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml

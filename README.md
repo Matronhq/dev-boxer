@@ -40,9 +40,9 @@ cp config.example.yml config.yml   # edit to taste (interactive wizard coming)
 sudo ./bootstrap.sh                # apt-installs ruby, then runs setup.rb (~10-15 min)
 ```
 
-> Dev Boxer is being rewritten from bash to Ruby. Modules 01–08 are ported;
-> 09–10 are still bash files under `scripts/` and aren't wired into `setup.rb`
-> yet (port lands in subsequent PRs).
+> Dev Boxer is being rewritten from bash to Ruby. Modules 01–09 are ported;
+> module 10 is still a bash file under `scripts/` and isn't wired into
+> `setup.rb` yet (port lands in the final PR).
 
 ## Modules
 
@@ -58,7 +58,7 @@ Setup runs 10 idempotent modules in order:
 | 06 | `browsers`     | ruby | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | ruby | Claude Code CLI + plugins + MCP |
 | 08 | `matrix-bridge`| ruby | Matron Server + claude-matrix-bridge |
-| 09 | `cloudflare`   | bash | Cloudflare Tunnel, DNS records |
+| 09 | `cloudflare`   | ruby | Cloudflare Tunnel, DNS routes, zone-token deploy |
 | 10 | `desktop-apps` | bash | GitHub Desktop, utilities |
 
 Re-run a single module or resume from a failure:

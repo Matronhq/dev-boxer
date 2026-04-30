@@ -2,12 +2,13 @@ module DevBoxer
   class Runner
     UnknownModule = Class.new(StandardError)
 
-    def initialize(modules:, config:, log:, shell: Shell.new, templates_dir: nil)
+    def initialize(modules:, config:, log:, shell: Shell.new, templates_dir: nil, secrets_path: nil)
       @modules = modules.sort_by { |m| m.module_order || 0 }
       @config = config
       @log = log
       @shell = shell
       @templates_dir = templates_dir
+      @secrets_path = secrets_path
     end
 
     def run(only: nil, from: nil, skip: [], dry_run: false)
@@ -32,6 +33,7 @@ module DevBoxer
           log: @log,
           shell: @shell,
           templates_dir: @templates_dir,
+          secrets_path: @secrets_path,
         ).run
       end
     end

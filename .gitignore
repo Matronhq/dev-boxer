@@ -1,4 +1,6 @@
 config.env
 config.yml
+secrets.yml
+recovery-key.txt
 *.log
 .DS_Store

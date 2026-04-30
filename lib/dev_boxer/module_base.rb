@@ -17,13 +17,14 @@ module DevBoxer
       end
     end
 
-    attr_reader :config, :log, :shell, :templates_dir, :secrets_path
+    attr_reader :config, :log, :shell, :templates_dir, :config_path, :secrets_path
 
-    def initialize(config:, log:, shell: Shell.new, templates_dir: nil, secrets_path: nil)
+    def initialize(config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil)
       @config = config
       @log = log
       @shell = shell
       @templates_dir = templates_dir
+      @config_path = config_path
       @secrets_path = secrets_path
     end
 

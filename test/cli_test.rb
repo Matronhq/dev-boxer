@@ -18,6 +18,8 @@ class CLITest < Minitest::Test
     assert_match(/--from/,    out)
     assert_match(/--skip/,    out)
     assert_match(/--config/,  out)
+    assert_match(/--wizard-only/, out)
+    assert_match(/--non-interactive/, out)
   end
 
   def test_dry_run_with_empty_modules_dir_prints_empty_plan
@@ -88,6 +90,23 @@ class CLITest < Minitest::Test
       )
       refute status.success?, "expected nonzero exit when --config points at a missing file"
       assert_match(/not found/i, err)
+    end
+  end
+
+  def test_non_interactive_incomplete_config_exits_nonzero
+    Dir.mktmpdir do |dir|
+      cfg = File.join(dir, "config.yml")
+      File.write(cfg, "user:\n  name: test\n")
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+
+      _out, err, status = run_setup(
+        "--config", cfg, "--modules-dir", mods_dir, "--non-interactive"
+      )
+
+      refute status.success?, "expected nonzero exit for incomplete config"
+      assert_match(/Config is incomplete/, err)
+      assert_match(/cloudflare\.enabled/, err)
     end
   end
 end

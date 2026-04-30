@@ -202,8 +202,7 @@ module DevBoxer
         raise "Bot registration failed: #{resp.inspect}"
       end
 
-      # Use a tmpfs path so the recovery_key + password never hit a real
-      # disk — mirrors PR #222's matrix-onboard orchestrator.
+      # Use a tmpfs path so the recovery_key + password never hit a real disk.
       #
       # Shell-escape every interpolated value: `user_password` is auto-
       # generated entropy that may contain shell-significant characters

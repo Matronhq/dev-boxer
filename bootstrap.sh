@@ -2,6 +2,7 @@
 # bootstrap.sh — ensure Ruby is installed, then exec the Ruby orchestrator.
 # Designed for a fresh Ubuntu 24.04 root shell.
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 if ! command -v ruby >/dev/null 2>&1; then
     echo "Installing Ruby..."
@@ -27,8 +28,7 @@ for arg in "$@"; do
 done
 
 if ! $has_config_flag && [ ! -f "$SCRIPT_DIR/config.yml" ]; then
-    echo "No config.yml found. Copy config.example.yml or pass --config <path>." >&2
-    exit 1
+    echo "No config.yml found. Starting first-run setup..."
 fi
 
 exec ruby "$SCRIPT_DIR/setup.rb" "$@"

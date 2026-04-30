@@ -2,10 +2,7 @@ module DevBoxer
   module Modules
     # Deploys a tiny local HTTP server used to verify that a Cloudflare
     # Tunnel hostname actually reaches this machine, independent of the
-    # rest of the stack. Inspired by yearbook-infra PR #222's hello_world
-    # recipe — "is the tunnel up?" should answer in one curl.
-    #
-    # Opt-in via config.hello_world.enabled: true.
+    # rest of the stack.
     class HelloWorld < ModuleBase
       module_name  "hello-world"
       module_order 11
@@ -15,11 +12,6 @@ module DevBoxer
 
       def run
         section "Hello world smoke-test service"
-
-        unless config.hello_world&.enabled
-          skip "hello_world disabled in config"
-          return
-        end
 
         port = config.hello_world&.port || 9810
         deploy_doc_root

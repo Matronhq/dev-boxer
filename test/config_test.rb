@@ -143,4 +143,71 @@ class ConfigTest < Minitest::Test
     config = DevBoxer::Config.from_hash("to_ary" => "weird-but-legal")
     assert_equal "weird-but-legal", config.to_ary
   end
+
+  def test_validation_accepts_tunnel_id_without_setup_token
+    config = DevBoxer::Config.from_hash(valid_public_config("cloudflare" => {
+      "api_token" => nil,
+      "tunnel" => { "id" => "existing-tunnel-id" },
+    }))
+
+    assert_empty DevBoxer::Config.validation_errors(config)
+  end
+
+  def test_validation_requires_setup_token_until_tunnel_exists_unless_manual
+    hash = valid_public_config
+    hash["cloudflare"].delete("api_token")
+    hash["cloudflare"]["tunnel"].delete("id")
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "cloudflare.api_token is required until cloudflare.tunnel.id exists, unless cloudflare.tunnel.create_manually is true"
+  end
+
+  def test_validation_allows_manual_tunnel_setup_without_setup_token
+    hash = valid_public_config
+    hash["cloudflare"].delete("api_token")
+    hash["cloudflare"]["tunnel"].delete("id")
+    hash["cloudflare"]["tunnel"]["create_manually"] = true
+
+    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
+  def test_validation_rejects_unsafe_linux_username
+    hash = valid_public_config
+    hash["user"]["name"] = "dev;reboot"
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "user.name must be a shell-safe Linux username"
+  end
+
+  private
+
+  def valid_public_config(overrides = {})
+    DevBoxer::Config.deep_merge({
+      "user" => {
+        "name" => "dev",
+        "ssh_public_key" => "ssh-ed25519 AAAATEST dev@example.com",
+        "rdp_password" => "rdp-secret",
+      },
+      "ssh" => { "port" => 2222 },
+      "matrix" => {
+        "mode" => "bundled",
+        "server_domain" => "matrix.example.com",
+        "user_username" => "dev",
+      },
+      "cloudflare" => {
+        "enabled" => true,
+        "api_token" => "admin-token",
+        "zone_api_token" => "zone-token",
+        "tunnel" => {
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => "matrix.example.com",
+          "hostname_viewer" => "viewer.example.com",
+          "create_manually" => false,
+        },
+      },
+      "hello_world" => { "port" => 9810 },
+    }, overrides)
+  end
 end

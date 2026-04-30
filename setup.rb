@@ -15,6 +15,9 @@ options = {
   modules_dir: File.join(ROOT, "lib", "dev_boxer", "modules"),
   templates_dir: File.join(ROOT, "templates"),
   skip: [],
+  non_interactive: false,
+  reconfigure: false,
+  wizard_only: false,
 }
 config_explicit = false
 
@@ -27,6 +30,9 @@ parser = OptionParser.new do |opts|
   opts.on("--config PATH",    "Path to config.yml (default: ./config.yml)")  { |v| options[:config] = v; config_explicit = true }
   opts.on("--modules-dir DIR","Path to modules directory")                   { |v| options[:modules_dir] = v }
   opts.on("--templates-dir DIR","Path to templates directory")               { |v| options[:templates_dir] = v }
+  opts.on("--wizard-only",    "Run first-run setup wizard, then exit")       { options[:wizard_only] = true }
+  opts.on("--reconfigure",    "Force the setup wizard before running")       { options[:reconfigure] = true }
+  opts.on("--non-interactive","Fail instead of prompting for config")        { options[:non_interactive] = true }
   opts.on("-h", "--help",     "Show this help")                              { puts opts; exit 0 }
 end
 
@@ -40,15 +46,66 @@ end
 
 log = DevBoxer::Log.new
 
+interactive = $stdin.tty? && $stdout.tty?
+
+run_wizard = lambda do |force: false|
+  if options[:non_interactive] || !interactive
+    warn "Config file is missing or incomplete: #{options[:config]}"
+    warn "Run setup interactively first, or create config.yml and secrets.yml manually."
+    exit 2
+  end
+  DevBoxer::Wizard.run(config_path: options[:config], force: force)
+end
+
+load_config = lambda do
+  DevBoxer::Config.load(options[:config])
+end
+
+if options[:wizard_only]
+  run_wizard.call(force: options[:reconfigure])
+  begin
+    DevBoxer::Config.validate!(load_config.call)
+  rescue DevBoxer::Config::Invalid => e
+    warn e.message
+    exit 2
+  end
+  exit 0
+end
+
+run_wizard.call(force: true) if options[:reconfigure]
+
 config =
   if File.exist?(options[:config])
-    DevBoxer::Config.load(options[:config])
+    load_config.call
   elsif config_explicit
     warn "Config file not found: #{options[:config]}"
     exit 2
   else
-    DevBoxer::Config.from_hash({})
+    run_wizard.call
+    load_config.call
   end
+
+unless options[:dry_run]
+  errors = DevBoxer::Config.validation_errors(config)
+  unless errors.empty?
+    if options[:non_interactive] || !interactive
+      warn "Config is incomplete:"
+      errors.each { |error| warn "- #{error}" }
+      exit 2
+    end
+
+    warn "Config is incomplete; starting first-run setup."
+    run_wizard.call(force: true)
+    config = load_config.call
+
+    begin
+      DevBoxer::Config.validate!(config)
+    rescue DevBoxer::Config::Invalid => e
+      warn e.message
+      exit 2
+    end
+  end
+end
 
 mods   = DevBoxer::Modules.discover(options[:modules_dir])
 runner = DevBoxer::Runner.new(
@@ -56,6 +113,7 @@ runner = DevBoxer::Runner.new(
   config: config,
   log: log,
   templates_dir: options[:templates_dir],
+  config_path: options[:config],
   secrets_path: DevBoxer::Config.secrets_path_for(options[:config]),
 )
 

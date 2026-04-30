@@ -83,9 +83,8 @@ module DevBoxer
       end
 
       # Optional: relocate docker + containerd storage onto a separate volume
-      # (e.g. a large data disk, or an encrypted /secure mount). Inspired by
-      # yearbook-infra PR #222's docker_data_root recipe — generalised so it
-      # works without LUKS. Set config.docker.data_root to opt in.
+      # (e.g. a large data disk, or an encrypted /secure mount). Set
+      # config.docker.data_root to opt in.
       def relocate_data_root
         docker_mount = mount_point_for(data_root)
         unless docker_mount
@@ -157,9 +156,8 @@ module DevBoxer
         UNIT
       end
 
-      # Aggressive prune cadence (yearbook-infra PR #222 tightened from 6h →
-      # 2h, until-filter 12h → 4h). Keeps the OS disk healthy when running
-      # CI runners, multi-project builds, or other image-churn workloads.
+      # Aggressive prune cadence keeps the OS disk healthy when running CI
+      # runners, multi-project builds, or other image-churn workloads.
       def install_prune_timer
         write_prune_script
         write_prune_unit

@@ -6,7 +6,6 @@ module DevBoxer
       module_name  "claude"
       module_order 7
 
-      # Mirrors yearbook-infra PR #222's plugin list (15 plugins).
       DEFAULT_PLUGINS = %w[
         claude-code-setup
         claude-md-management
@@ -57,9 +56,8 @@ module DevBoxer
         ok "Claude Code CLI installed"
       end
 
-      # PR #222 fix: zsh's .zshrc isn't sourced for non-interactive `su - user -c '...'`
-      # invocations, so without .zshenv the `claude` binary in ~/.local/bin is not
-      # on PATH for subsequent `run_as_user` commands (plugins, marketplace, etc.).
+      # zsh's .zshrc isn't sourced for non-interactive `su - user -c '...'`
+      # invocations, so .zshenv also needs the Claude binary on PATH.
       def ensure_local_bin_on_path
         line = 'export PATH="$HOME/.local/bin:$PATH"'
         %w[.bashrc .zshrc .zshenv].each do |rc|
@@ -89,8 +87,8 @@ module DevBoxer
         shell.sh!("chown -R #{username}:#{username} #{claude_dir}")
       end
 
-      # PR #222 fix: marketplace MUST be registered before any plugin install
-      # — the CLI ships with none configured by default.
+      # The marketplace must be registered before plugin install because the
+      # CLI ships with none configured by default.
       def register_marketplace
         if shell.sh("su - #{username} -c 'claude plugin marketplace list 2>/dev/null' | grep -q claude-plugins-official")
           skip "Anthropic plugins marketplace already registered"

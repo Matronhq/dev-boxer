@@ -19,11 +19,13 @@ class WizardTest < Minitest::Test
         "alice-matrix",
       ].join("\n") + "\n")
 
-      result = DevBoxer::Wizard.run(config_path: config_path, input: input, output: StringIO.new)
+      output = StringIO.new
+      result = DevBoxer::Wizard.run(config_path: config_path, input: input, output: output)
 
       assert_equal :created, result
       config = YAML.safe_load_file(config_path)
       secrets = YAML.safe_load_file(secrets_path)
+      wizard_output = output.string
 
       assert_equal "alice", config.dig("user", "name")
       assert_equal "ssh-ed25519 AAAATEST alice@example.com", config.dig("user", "ssh_public_key")
@@ -50,6 +52,15 @@ class WizardTest < Minitest::Test
       assert_nil secrets.dig("cloudflare", "access", "api_token")
       assert secrets.dig("user", "rdp_password")
       assert_equal 0o600, File.stat(secrets_path).mode & 0o777
+      assert_includes wizard_output, "Cloudflare zone DNS API token:"
+      assert_includes wizard_output, "What: A zone-scoped Cloudflare API token for example.com."
+      assert_includes wizard_output, "Why: Dev Boxer keeps this token in secrets.yml"
+      assert_includes wizard_output, "How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens"
+      assert_includes wizard_output, "Cloudflare One Connector: cloudflared: Edit"
+      assert_includes wizard_output, "Access: Apps: Edit"
+      assert_includes wizard_output, "Access: Policies: Edit"
+      assert_includes wizard_output, "One-time Cloudflare account setup token:"
+      assert_includes wizard_output, "Cleanup: Dev Boxer deletes this token from secrets.yml after setup succeeds."
 
       assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.load(config_path))
     end

@@ -56,17 +56,19 @@ It derives `dev.<domain>`, `matrix.<domain>`, and `viewer.<domain>` automaticall
 
 Register or transfer a domain with [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/), or add an existing domain to Cloudflare DNS before running the installer.
 
+We recommend giving the dev box its own domain so project subdomains stay isolated from your main sites. Low-cost domains such as `.uk` or `.us` often start around `$5-6/year`, depending on current registrar pricing.
+
 Create a zone-scoped DNS API token from [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) with:
 
 - Zone permissions: `Zone:Read` and `DNS:Edit`
-- Zone resource: the domain you will use, e.g. `example.com`
+- Zone resource: only the domain you will use, e.g. `example.com`
 
 For first-run Cloudflare setup, Dev Boxer uses two tokens:
 
-- A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`. This stays on the machine in `secrets.yml` so Dev Boxer can manage subdomain DNS records.
+- A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`. This stays on the machine in `secrets.yml` so Dev Boxer can manage DNS records for `dev`, `matrix`, `viewer`, and future project subdomains. Scope it to this domain only, not all zones.
 - A temporary account setup token for initial tunnel and Access setup. It needs account permissions `Cloudflare One Connector: cloudflared: Edit`, `Access: Apps: Edit`, and `Access: Policies: Edit`. Dev Boxer stores it only in `secrets.yml`, uses it once, then wipes it after setup succeeds.
 
-You can skip automatic tunnel creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID.
+You can skip automatic tunnel and Access creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID. If you skip automation, you can create the Cloudflare Access app manually later.
 
 Dev Boxer creates proxied Cloudflare DNS records for all configured tunnel hostnames, including `matrix.<domain>`, using the zone DNS token.
 

@@ -68,7 +68,15 @@ module DevBoxer
       def bridge_dir = "#{home_dir}/claude-matrix-bridge"
       def matrix_server_dir = "#{home_dir}/matrix-server"
 
-      def server_domain  = config.matrix&.server_domain  || "localhost"
+      def server_domain
+        s = config.matrix&.server_domain
+        if s.nil? || s.to_s.empty?
+          raise "matrix.server_domain is not set in config.yml — set it to your matrix server name " \
+                "(e.g. matrix.example.com). It cannot be defaulted because user IDs and the matron " \
+                "server identity are derived from it."
+        end
+        s
+      end
       def user_username  = config.matrix&.user_username  || username
       def bot_username   = config.matrix&.bot_username   || default_bot_username
       def bot_user_id    = "@#{bot_username}:#{server_domain}"

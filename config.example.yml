@@ -11,9 +11,14 @@ desktop:
   enabled: true
 
 docker:
+  # Optional: relocate Docker + containerd storage to a separate volume
+  # (e.g. a big data disk or an encrypted /secure mount). Leave nil for the
+  # system default under /var/lib/{docker,containerd}.
+  data_root: null         # e.g. "/secure/docker"
+  containerd_root: null   # e.g. "/secure/containerd" (auto-derived from data_root if nil)
   prune:
-    interval: 2h
-    keep_until: 4h
+    interval: 2h          # how often docker-prune.timer fires
+    keep_until: 4h        # untag images / build cache older than this
 
 claude:
   plugins:

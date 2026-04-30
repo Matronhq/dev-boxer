@@ -84,12 +84,6 @@ module DevBoxer
         info "Registering Matrix accounts"
         reg_token    = SecureRandom.hex(16)
         bot_password = SecureRandom.hex(16)
-        # config.example.yml documents user_password as "otherwise auto-generated";
-        # honour that contract here (was being passed through as nil/empty,
-        # which made registration fail with no clear error).
-        user_password = config.matrix&.user_password
-        user_password = SecureRandom.hex(16) if user_password.nil? || user_password.to_s.empty?
-        @generated_user_password = user_password
 
         write_compose_override(reg_token)
         restart_compose
@@ -101,7 +95,7 @@ module DevBoxer
         register_account(config.matrix.bot_username, bot_password, reg_token)
         ok "Bot account @#{config.matrix.bot_username}:#{config.matrix.server_domain} registered"
 
-        register_account(config.matrix.user_username, user_password, reg_token)
+        register_account(config.matrix.user_username, config.matrix.user_password, reg_token)
         ok "User account @#{config.matrix.user_username}:#{config.matrix.server_domain} registered"
 
         File.delete("#{matrix_server_dir}/docker-compose.override.yml")
@@ -212,10 +206,6 @@ module DevBoxer
         return unless File.exist?(path)
         generated = { "bot_access_token" => bot_token, "hmac_secret" => bridge_env_vars["HMAC_SECRET"] }
         generated["bridge_room_id"] = room_id if room_id
-        # Persist the auto-generated user password too so the operator can
-        # recover it for first Element login. If the user supplied one
-        # explicitly in config.matrix.user_password, that's preserved.
-        generated["user_password"] = @generated_user_password if @generated_user_password
         Config.merge_into_file(path, { "matrix" => generated })
         ok "Wrote #{generated.keys.join(' + ')} back to config.yml"
       end

@@ -43,11 +43,23 @@ module DevBoxer
       wrap(@hash[key.to_s])
     end
 
+    # Methods Ruby invokes during implicit type coercion. Claiming to
+    # respond to them (or letting method_missing return nil for them)
+    # makes splat / Array() / string concat / etc. raise a confusing
+    # TypeError instead of giving the caller's own NoMethodError. We
+    # selectively delegate to super for these unless an explicit hash
+    # key by that name exists.
+    COERCION_METHODS = %i[
+      to_ary to_a to_str to_hash to_int to_proc to_io to_path
+    ].freeze
+
     def respond_to_missing?(name, _include_private = false)
+      return false if COERCION_METHODS.include?(name) && !@hash.key?(name.to_s)
       true
     end
 
     def method_missing(name, *args, &block)
+      return super if COERCION_METHODS.include?(name) && !@hash.key?(name.to_s)
       return super unless args.empty? && !block
       wrap(@hash[name.to_s])
     end

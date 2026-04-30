@@ -86,4 +86,30 @@ class ConfigTest < Minitest::Test
       assert_equal 1, raw.scan(/^matrix:/m).length, "expected one matrix: key, found:\n#{raw}"
     end
   end
+
+  def test_does_not_claim_to_respond_to_coercion_methods
+    config = DevBoxer::Config.from_hash("user" => { "name" => "dan" })
+    refute config.respond_to?(:to_ary), "to_ary trips Array()/splat"
+    refute config.respond_to?(:to_str), "to_str trips string concat"
+    refute config.respond_to?(:to_hash), "to_hash trips ** splat"
+    refute config.respond_to?(:to_int), "to_int trips Integer()"
+    refute config.respond_to?(:to_proc), "to_proc trips & in method calls"
+  end
+
+  def test_array_wrap_does_not_raise
+    config = DevBoxer::Config.from_hash({})
+    assert_equal [config], Array(config)
+  end
+
+  def test_responds_to_actual_keys
+    config = DevBoxer::Config.from_hash("matrix" => {})
+    assert config.respond_to?(:matrix)
+  end
+
+  def test_coercion_method_with_matching_key_still_works
+    # Defensive: if someone has a YAML key that happens to be `to_ary` etc.,
+    # accessing it should still work via method_missing.
+    config = DevBoxer::Config.from_hash("to_ary" => "weird-but-legal")
+    assert_equal "weird-but-legal", config.to_ary
+  end
 end

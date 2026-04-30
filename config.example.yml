@@ -31,6 +31,10 @@ matrix:
   homeserver: matrix.example.com
   bot_username: claude-bot
 
+hello_world:
+  enabled: false          # if true, deploys a localhost:port "hello world" smoke-test service
+  port: 9810
+
 cloudflare:
   enabled: false
   account_id: ""

@@ -10,18 +10,18 @@ class RunnerTest < Minitest::Test
     ran = @ran
 
     @mod_a = Class.new(DevBoxer::ModuleBase) do
-      name "alpha"
-      order 2
+      module_name "alpha"
+      module_order 2
       define_method(:run) { ran << "alpha" }
     end
     @mod_b = Class.new(DevBoxer::ModuleBase) do
-      name "beta"
-      order 1
+      module_name "beta"
+      module_order 1
       define_method(:run) { ran << "beta" }
     end
     @mod_c = Class.new(DevBoxer::ModuleBase) do
-      name "gamma"
-      order 3
+      module_name "gamma"
+      module_order 3
       define_method(:run) { ran << "gamma" }
     end
 
@@ -68,7 +68,7 @@ class RunnerTest < Minitest::Test
 
   def test_modules_with_nil_order_dont_crash_sort
     nil_order_module = Class.new(DevBoxer::ModuleBase) do
-      name "delta"
+      module_name "delta"
       define_method(:run) { }
     end
     runner = DevBoxer::Runner.new(

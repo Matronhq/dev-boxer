@@ -16,8 +16,18 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ ! -f "$SCRIPT_DIR/config.yml" ]; then
-    echo "No config.yml found. Run wizard.rb first, or copy config.example.yml."
+# Friendly check only when neither $SCRIPT_DIR/config.yml exists nor the user
+# passed --config <path> through. If they did pass --config, setup.rb will
+# validate the path itself and exit 2 with a clear error if it's missing.
+has_config_flag=false
+for arg in "$@"; do
+    case "$arg" in
+        --config|--config=*) has_config_flag=true ;;
+    esac
+done
+
+if ! $has_config_flag && [ ! -f "$SCRIPT_DIR/config.yml" ]; then
+    echo "No config.yml found. Copy config.example.yml or pass --config <path>." >&2
     exit 1
 fi
 

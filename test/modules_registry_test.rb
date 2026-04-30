@@ -14,8 +14,8 @@ class ModulesRegistryTest < Minitest::Test
         module DevBoxer
           module Modules
             class Alpha < ModuleBase
-              name "alpha"
-              order 1
+              module_name "alpha"
+              module_order 1
               def run; end
             end
           end
@@ -25,8 +25,8 @@ class ModulesRegistryTest < Minitest::Test
         module DevBoxer
           module Modules
             class Beta < ModuleBase
-              name "beta"
-              order 2
+              module_name "beta"
+              module_order 2
               def run; end
             end
           end

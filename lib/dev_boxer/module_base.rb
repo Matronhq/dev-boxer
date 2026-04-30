@@ -1,22 +1,19 @@
 module DevBoxer
   class ModuleBase
+    # DSL: `module_name "security"` and `module_order 1`. We deliberately
+    # avoid `name`/`order` as DSL identifiers because `Module#name` is a
+    # core Ruby method (returns the class's qualified name) and overriding
+    # it breaks introspection, error messages, and any tooling that expects
+    # the standard behaviour.
     class << self
-      def name(value = nil)
+      def module_name(value = nil)
         return @module_name if value.nil?
         @module_name = value
       end
 
-      def order(value = nil)
+      def module_order(value = nil)
         return @module_order if value.nil?
         @module_order = value
-      end
-
-      def module_name
-        @module_name
-      end
-
-      def module_order
-        @module_order
       end
     end
 
@@ -27,11 +24,11 @@ module DevBoxer
       @log = log
     end
 
-    def name
+    def module_name
       self.class.module_name
     end
 
-    def order
+    def module_order
       self.class.module_order
     end
 

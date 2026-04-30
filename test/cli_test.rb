@@ -45,8 +45,8 @@ class CLITest < Minitest::Test
         module DevBoxer
           module Modules
             class Demo < ModuleBase
-              name "demo"
-              order 1
+              module_name "demo"
+              module_order 1
               def run; end
             end
           end

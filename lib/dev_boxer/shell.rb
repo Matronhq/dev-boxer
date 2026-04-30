@@ -30,7 +30,10 @@ module DevBoxer
     def sh!(cmd, **opts)
       success, stdout, stderr = @runner.call(cmd, opts)
       unless success
-        raise Error, "command failed: #{cmd}\n--- stdout ---\n#{stdout}--- stderr ---\n#{stderr}"
+        # Force a newline between stdout and the stderr header so callers
+        # whose stdout doesn't end in \n still get a readable separator.
+        sep = stdout.end_with?("\n") || stdout.empty? ? "" : "\n"
+        raise Error, "command failed: #{cmd}\n--- stdout ---\n#{stdout}#{sep}--- stderr ---\n#{stderr}"
       end
       stdout
     end

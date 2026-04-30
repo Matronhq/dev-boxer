@@ -89,7 +89,7 @@ class ShellTest < Minitest::Test
     captured_opts = nil
     runner = lambda do |_cmd, opts = {}|
       captured_opts = opts
-      [true, ""]
+      [true, "", ""]
     end
     sh = DevBoxer::Shell.new(runner: runner)
     sh.sh!("chpasswd", stdin: "dan:p'a$$word\n")

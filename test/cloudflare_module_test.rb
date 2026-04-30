@@ -45,7 +45,7 @@ class CloudflareModuleTest < Minitest::Test
           "cloudflare" => { "zone_api_token" => "zone-token" },
         ),
         log: DevBoxer::Log.new(io: StringIO.new, color: false),
-        shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, ""] }),
+        shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
         templates_dir: File.expand_path("../templates", __dir__),
         config_path: config_path,
         secrets_path: secrets_path,
@@ -65,7 +65,7 @@ class CloudflareModuleTest < Minitest::Test
     DevBoxer::Modules::Cloudflare.new(
       config: DevBoxer::Config.from_hash("cloudflare" => { "api_token" => "admin-token" }),
       log: DevBoxer::Log.new(io: StringIO.new, color: false),
-      shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, ""] }),
+      shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
       templates_dir: File.expand_path("../templates", __dir__),
       config_path: config_path,
       secrets_path: secrets_path,

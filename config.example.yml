@@ -1,7 +1,7 @@
-# Dev Boxer config — copy to config.yml and edit, or run `wizard.rb`.
+# Dev Boxer config — copy to config.yml and edit.
 
 user:
-  name: dan
+  name: dev
   ssh_public_key: "ssh-ed25519 AAAAC3Nz... user@laptop"
 
 ssh:
@@ -29,7 +29,7 @@ claude:
 matrix:
   mode: bundled            # bundled | external | disabled
   server_domain: matrix.example.com   # the matrix server name
-  user_username: dan        # local part of your matrix user (default: linux user.name)
+  user_username: dev        # local part of your matrix user (default: linux user.name)
   bot_username: null        # default: claude-bot-<hostname>; override here if you want
   # All secrets generated during onboarding (bot_access_token, bot_password,
   # user_password, bridge_room_id, hmac_secret) are written to ./secrets.yml
@@ -37,17 +37,15 @@ matrix:
   # ~/recovery-key.txt with a "delete after copying" header.
 
 hello_world:
-  enabled: false          # if true, deploys a localhost:port "hello world" smoke-test service
-  port: 9810
+  port: 9810             # deploys a localhost:port "hello world" smoke-test service
 
 cloudflare:
-  enabled: false
-  account_id: ""
-  zone_id: ""
-  api_token: ""           # admin token, used once to create the tunnel — wiped after
-  zone_api_token: ""      # zone-scoped token, deployed to ~/.cloudflare/ for user tools
+  enabled: true
+  # zone_api_token is written to secrets.yml by the first-run wizard.
+  # Optional api_token is used once for tunnel creation, then wiped.
   tunnel:
     hostname: dev.example.com
     hostname_matrix: matrix.example.com
     hostname_viewer: viewer.example.com
+    create_manually: false
     config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml

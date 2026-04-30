@@ -1,6 +1,6 @@
 # Dev Boxer
 
-Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with Matrix chat bridge, desktop GUI, and security hardening -- in one command.
+Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with Matrix chat bridge, desktop GUI, Cloudflare Tunnel, and security hardening -- in one command.
 
 ## Part of the Matron ecosystem
 
@@ -26,23 +26,47 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 
 - Fresh Ubuntu 24.04 VPS with root SSH access
 - Cloudflare account with a domain configured
+- Cloudflare zone DNS API token
+- Optional one-time Cloudflare Tunnel setup token, or willingness to create the tunnel manually
 - SSH key pair
 
 ## Quick start
 
+Run this on the VPS as root:
+
 ```bash
-ssh root@your-vps-ip
-
-git clone https://github.com/matronhq/dev-boxer.git
-cd dev-boxer
-
-cp config.example.yml config.yml   # edit to taste (interactive wizard coming)
-sudo ./bootstrap.sh                # apt-installs ruby, then runs setup.rb (~10-15 min)
+curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh | bash
 ```
+
+The installer clones Dev Boxer to `/opt/dev-boxer`, prompts for the minimum required settings, writes `config.yml` and gitignored `secrets.yml`, then runs the full setup.
+
+It asks for:
+
+- Linux username, SSH public key, and SSH port
+- Base domain, e.g. `example.com`
+- Cloudflare zone DNS API token
+- Whether Dev Boxer should create the Cloudflare tunnel automatically
+- Matrix username
+
+It derives `dev.<domain>`, `matrix.<domain>`, and `viewer.<domain>` automatically.
+
+### Cloudflare setup
+
+Register or transfer a domain with [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/), or add an existing domain to Cloudflare DNS before running the installer.
+
+Create a zone-scoped DNS API token from [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) with:
+
+- Zone permissions: `Zone:Read` and `DNS:Edit`
+- Zone resource: the domain you will use, e.g. `example.com`
+
+For tunnel creation, choose one of:
+
+- Let Dev Boxer create the tunnel automatically: create a temporary API token with account permission `Cloudflare Tunnel:Edit`. The installer stores it only in `secrets.yml`, uses it once, then wipes it after the tunnel credentials are created.
+- Create the tunnel manually: skip the setup token. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID.
 
 ## Modules
 
-Setup runs 10 idempotent modules in order:
+Setup runs 11 idempotent modules in order:
 
 | # | Module | What it does |
 |---|--------|--------------|
@@ -54,9 +78,9 @@ Setup runs 10 idempotent modules in order:
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
 | 08 | `matrix-bridge`| Matron Server + claude-matrix-bridge |
-| 09 | `cloudflare`   | Cloudflare Tunnel, DNS routes, zone-token deploy |
+| 09 | `cloudflare`   | Cloudflare Tunnel, DNS routes, zone token deploy |
 | 10 | `desktop-apps` | VS Code, GitHub Desktop, lazydocker, MOTD |
-| 11 | `hello-world`  | Optional `localhost:9810` tunnel smoke-test service (opt-in) |
+| 11 | `hello-world`  | `localhost:9810` tunnel smoke-test service |
 
 Re-run a single module or resume from a failure:
 
@@ -69,6 +93,9 @@ sudo ./setup.rb --skip desktop --dry-run
 ## Development
 
 ```bash
+git clone https://github.com/matronhq/dev-boxer.git
+cd dev-boxer
+cp config.example.yml config.yml   # edit to taste, or run ./bootstrap.sh for the wizard
 rake test          # run the minitest suite
 ruby setup.rb --dry-run --config config.example.yml --modules-dir lib/dev_boxer/modules
 ```

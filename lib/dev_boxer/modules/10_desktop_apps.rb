@@ -143,8 +143,7 @@ module DevBoxer
       end
 
       # Drop a small MOTD telling new SSH/RDP arrivals what's running and where
-      # to look. Inspired by yearbook-infra PR #222's per-host MOTD but kept
-      # generic — just useful pointers, no project-specific gating.
+      # to look.
       def install_motd
         body = <<~MOTD
           #!/bin/bash

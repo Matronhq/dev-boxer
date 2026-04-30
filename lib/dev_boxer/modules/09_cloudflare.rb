@@ -94,7 +94,13 @@ module DevBoxer
 
         ok "Tunnel created: #{tunnel_name} (id: #{new_id})"
         persist_tunnel_id(new_id)
-        cleanup_setup_token
+        # NB: cleanup_setup_token is intentionally NOT called here. The
+        # token must remain in config until create_dns_routes succeeds —
+        # otherwise a network failure between tunnel creation and DNS
+        # route creation would leave DNS setup permanently un-retryable
+        # (the `setup_token` accessor reads from disk, and the file no
+        # longer has it). `run()` calls cleanup_setup_token only after
+        # both create_tunnel AND create_dns_routes complete successfully.
       end
 
       # Use Config.merge_into_file rather than appending raw lines —

@@ -61,22 +61,25 @@ module DevBoxer
 
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
       manual_tunnel = false
-      setup_token = nil
       if tunnel_id.to_s.empty?
-        explain_tunnel_setup_token
         if confirm("Let Dev Boxer create the Cloudflare tunnel now?", default: true)
-          setup_token = ask(
-            "One-time Cloudflare Tunnel setup token",
-            default: existing.dig("cloudflare", "api_token"),
-            secret: true,
-          )
+          manual_tunnel = false
         else
           manual_tunnel = true
           output.puts
           output.puts "Dev Boxer will pause during the Cloudflare module with manual tunnel instructions."
         end
       end
-      access_config, access_secrets = build_access_config(existing)
+      access_config = build_access_config(existing)
+      setup_token = nil
+      if needs_setup_token?(tunnel_id: tunnel_id, manual_tunnel: manual_tunnel, access_config: access_config)
+        explain_cloudflare_setup_token
+        setup_token = ask(
+          "One-time Cloudflare account setup token",
+          default: existing.dig("cloudflare", "api_token"),
+          secret: true,
+        )
+      end
       matrix_user = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
@@ -127,7 +130,6 @@ module DevBoxer
         "cloudflare" => {
           "api_token" => setup_token,
           "zone_api_token" => zone_token,
-          "access" => access_secrets,
         }.compact,
       }
 
@@ -139,32 +141,30 @@ module DevBoxer
       output.puts "Cloudflare Access can protect dev/viewer hostnames while leaving matrix open for Matrix clients."
       enabled = confirm("Set up Cloudflare Zero Trust Access for dev/viewer now?", default: true)
       unless enabled
-        return [{ "enabled" => false }, nil]
+        return { "enabled" => false }
       end
 
-      access_token = ask(
-        "One-time Cloudflare Access setup token",
-        default: existing.dig("cloudflare", "access", "api_token"),
-        secret: true,
-      )
       allowed = ask(
         "Allowed emails or email domains (comma-separated)",
         default: default_access_allowed(existing),
       )
       allowed_emails, allowed_domains = parse_access_allowed(allowed)
 
-      [
-        {
-          "enabled" => true,
-          "account_id" => existing.dig("cloudflare", "access", "account_id"),
-          "app_id" => existing.dig("cloudflare", "access", "app_id"),
-          "app_name" => existing.dig("cloudflare", "access", "app_name") || "Dev Boxer",
-          "session_duration" => existing.dig("cloudflare", "access", "session_duration") || "24h",
-          "allowed_emails" => allowed_emails,
-          "allowed_email_domains" => allowed_domains,
-        }.compact,
-        { "api_token" => access_token }.compact,
-      ]
+      {
+        "enabled" => true,
+        "account_id" => existing.dig("cloudflare", "access", "account_id"),
+        "app_id" => existing.dig("cloudflare", "access", "app_id"),
+        "app_name" => existing.dig("cloudflare", "access", "app_name") || "Dev Boxer",
+        "session_duration" => existing.dig("cloudflare", "access", "session_duration") || "24h",
+        "allowed_emails" => allowed_emails,
+        "allowed_email_domains" => allowed_domains,
+      }.compact
+    end
+
+    def needs_setup_token?(tunnel_id:, manual_tunnel:, access_config:)
+      tunnel_needs_token = tunnel_id.to_s.empty? && manual_tunnel != true
+      access_needs_token = access_config["enabled"] == true && access_config["app_id"].to_s.empty?
+      tunnel_needs_token || access_needs_token
     end
 
     def default_access_allowed(existing)
@@ -204,13 +204,13 @@ module DevBoxer
       end
     end
 
-    def explain_tunnel_setup_token
+    def explain_cloudflare_setup_token
       output.puts
-      output.puts "Cloudflare tunnel setup:"
-      output.puts "  - The zone DNS token is kept in secrets.yml for DNS route creation."
-      output.puts "  - Automatic tunnel creation needs a separate one-time token with Account > Cloudflare Tunnel:Edit."
-      output.puts "  - If you provide it, Dev Boxer deletes it from secrets.yml after the tunnel is created."
-      output.puts "  - You can skip it and create the tunnel manually when prompted later."
+      output.puts "Cloudflare setup:"
+      output.puts "  - The zone DNS token is kept in secrets.yml for DNS records."
+      output.puts "  - One temporary account token can create the tunnel and optional Access app."
+      output.puts "  - It needs Account > Cloudflare Tunnel:Edit plus Access application/policy edit permissions."
+      output.puts "  - Dev Boxer deletes this account token from secrets.yml after setup succeeds."
       output.puts
     end
 

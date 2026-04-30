@@ -122,7 +122,6 @@ class CloudflareModuleTest < Minitest::Test
         "access" => {
           "enabled" => true,
           "account_id" => "account-123",
-          "api_token" => "access-token",
           "allowed_emails" => ["alice@example.com"],
           "allowed_email_domains" => ["example.com"],
         },
@@ -139,22 +138,37 @@ class CloudflareModuleTest < Minitest::Test
     ], payload.dig("policies", 0, "include")
   end
 
-  def test_cleanup_access_token_clears_config_and_secrets
+  def test_configure_access_uses_top_level_setup_token
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
-      File.write(config_path, { "cloudflare" => { "access" => { "api_token" => "from-config" } } }.to_yaml)
-      File.write(secrets_path, { "cloudflare" => { "access" => { "api_token" => "from-secrets" } } }.to_yaml)
-
+      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      calls = []
       mod = build_cloudflare_module(
         config_path: config_path,
         secrets_path: secrets_path,
-        config_hash: cloudflare_config("access" => { "api_token" => "from-config" }),
+        config_hash: cloudflare_config(
+          "api_token" => "setup-token",
+          "access" => {
+            "enabled" => true,
+            "allowed_email_domains" => ["example.com"],
+          },
+        ),
       )
-      mod.send(:cleanup_access_token)
 
-      assert_nil YAML.safe_load_file(config_path).dig("cloudflare", "access", "api_token")
-      assert_nil YAML.safe_load_file(secrets_path).dig("cloudflare", "access", "api_token")
+      api = lambda do |token:, method:, path:, query: {}, body: nil|
+        calls << { token: token, method: method, path: path, query: query, body: body }
+        return [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }] if path == "/zones"
+        { "id" => "access-app-123" }
+      end
+
+      mod.stub(:cloudflare_api, api) do
+        mod.send(:configure_cloudflare_access)
+      end
+
+      access_call = calls.find { |call| call[:path] == "/accounts/account-123/access/apps" }
+      assert_equal "setup-token", access_call[:token]
+      assert_equal "access-app-123", YAML.safe_load_file(config_path).dig("cloudflare", "access", "app_id")
     end
   end
 

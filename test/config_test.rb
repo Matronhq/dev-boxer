@@ -207,10 +207,11 @@ class ConfigTest < Minitest::Test
         "allowed_email_domains" => ["example.com"],
       },
     })
+    hash["cloudflare"].delete("api_token")
 
     errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
 
-    assert_includes errors, "cloudflare.access.api_token is required until cloudflare.access.app_id exists"
+    assert_includes errors, "cloudflare.api_token is required until cloudflare.access.app_id exists"
   end
 
   def test_validation_allows_access_app_without_token_after_setup

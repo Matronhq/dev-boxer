@@ -179,8 +179,8 @@ module DevBoxer
           services:
             matron-server:
               environment:
-                MATRON_SERVER_ALLOW_REGISTRATION: "true"
-                MATRON_SERVER_REGISTRATION_TOKEN: "#{reg_token}"
+                TUWUNEL_ALLOW_REGISTRATION: "true"
+                TUWUNEL_REGISTRATION_TOKEN: "#{reg_token}"
         YML
         shell.sh!("chown #{username}:#{username} #{path}")
         shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose down && docker compose up -d")

@@ -40,10 +40,9 @@ cp config.example.yml config.yml   # edit to taste (interactive wizard coming)
 sudo ./bootstrap.sh                # apt-installs ruby, then runs setup.rb (~10-15 min)
 ```
 
-> Dev Boxer is being rewritten from bash to Ruby. Modules 01–06 are ported;
-> 07–10 are still bash files under `scripts/` and aren't wired into `setup.rb`
-> yet (port lands in subsequent PRs). Run them manually if needed:
-> `sudo bash scripts/07-claude.sh`.
+> Dev Boxer is being rewritten from bash to Ruby. Modules 01–07 are ported;
+> 08–10 are still bash files under `scripts/` and aren't wired into `setup.rb`
+> yet (port lands in subsequent PRs).
 
 ## Modules
 
@@ -57,7 +56,7 @@ Setup runs 10 idempotent modules in order:
 | 04 | `docker`       | ruby | Docker Engine + Compose |
 | 05 | `dev-tools`    | ruby | Node.js 20, Git, Python, uv, GitHub CLI |
 | 06 | `browsers`     | ruby | Chrome, Firefox, Xvfb |
-| 07 | `claude`       | bash | Claude Code CLI |
+| 07 | `claude`       | ruby | Claude Code CLI + plugins + MCP |
 | 08 | `matrix-bridge`| bash | Matron Server + claude-matrix-bridge |
 | 09 | `cloudflare`   | bash | Cloudflare Tunnel, DNS records |
 | 10 | `desktop-apps` | bash | GitHub Desktop, utilities |

@@ -14,7 +14,7 @@ module DevBoxer
     # raised Error message. The runner returns [success, stdout, stderr]
     # so each consumer can pick what it needs.
     DEFAULT_RUNNER = lambda do |cmd, opts = {}|
-      stdout, stderr, status = Open3.capture3(cmd, stdin_data: opts[:stdin] || "")
+      stdout, stderr, status = Open3.capture3("/bin/sh", "-c", cmd, stdin_data: opts[:stdin] || "")
       [status.success?, stdout, stderr]
     end
 

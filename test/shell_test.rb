@@ -95,4 +95,9 @@ class ShellTest < Minitest::Test
     sh.sh!("chpasswd", stdin: "dan:p'a$$word\n")
     assert_equal "dan:p'a$$word\n", captured_opts[:stdin]
   end
+
+  def test_default_runner_executes_shell_builtins
+    sh = DevBoxer::Shell.new
+    assert_includes sh.sh!("command -v sh"), "sh"
+  end
 end

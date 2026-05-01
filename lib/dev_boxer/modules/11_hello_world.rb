@@ -1,3 +1,5 @@
+require "yaml"
+
 module DevBoxer
   module Modules
     # Deploys a tiny local HTTP server used to verify that a Cloudflare
@@ -20,9 +22,13 @@ module DevBoxer
         shell.systemctl(:enable, "dev-boxer-hello-world")
         shell.systemctl(:restart, "dev-boxer-hello-world")
         ok "Hello-world service running on http://localhost:#{port}"
+        print_matrix_login_instructions
       end
 
       private
+
+      def username = config.user.name
+      def home_dir = "/home/#{username}"
 
       def deploy_doc_root
         FileUtils.mkdir_p(DOC_ROOT)
@@ -47,6 +53,62 @@ module DevBoxer
           [Install]
           WantedBy=multi-user.target
         UNIT
+      end
+
+      def print_matrix_login_instructions
+        details = matrix_login_details
+        return unless details
+
+        info ""
+        info "=========================================="
+        info "  Matrix bridge — Matron first login"
+        info "=========================================="
+        info "Open Matron:"
+        info "  URL: #{details[:homeserver_url]}"
+        info "  User ID: #{details[:user_id]}"
+        info "  Password: #{details[:password] || '(missing from secrets.yml)'}"
+        info "  Secure Backup recovery key: #{details[:recovery_key] || '(not found; check ~/recovery-key.txt if still present)'}"
+        info ""
+        info "After login, open the 'Claude Code Bridge' room and send !start."
+      end
+
+      def matrix_login_details
+        hash = merged_config_hash
+        matrix = hash["matrix"] || {}
+        return nil if matrix["mode"] == "disabled"
+
+        server_domain = matrix["server_domain"] || "your-domain"
+        user_username = matrix["user_username"] || username
+        matrix_hostname = hash.dig("cloudflare", "tunnel", "hostname_matrix") || server_domain
+
+        {
+          homeserver_url: public_url(matrix_hostname),
+          user_id: "@#{user_username}:#{server_domain}",
+          password: matrix["user_password"],
+          recovery_key: matrix_recovery_key,
+        }
+      end
+
+      def merged_config_hash
+        base = config.respond_to?(:to_h) ? config.to_h : {}
+        return base unless secrets_path && File.exist?(secrets_path)
+
+        Config.deep_merge(base, YAML.safe_load_file(secrets_path) || {})
+      end
+
+      def public_url(hostname)
+        value = hostname.to_s
+        value.start_with?("http://", "https://") ? value : "https://#{value}"
+      end
+
+      def matrix_recovery_key
+        path = "#{home_dir}/recovery-key.txt"
+        return nil unless File.exist?(path)
+
+        File.readlines(path)
+          .map(&:strip)
+          .reject { |line| line.empty? || line.start_with?("#") }
+          .last
       end
     end
   end

@@ -32,6 +32,45 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_create_tunnel_places_cloudflared_flags_before_name
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+      credentials_path = File.join(dir, "cloudflared", "credentials.json")
+      FileUtils.mkdir_p(File.dirname(credentials_path))
+      File.write(credentials_path, JSON.dump("TunnelID" => "tunnel-123"))
+      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      recorded = []
+      shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+        recorded << cmd
+        [true, cmd == "hostname -s" ? "dev-6\n" : "", ""]
+      })
+      mod = DevBoxer::Modules::Cloudflare.new(
+        config: DevBoxer::Config.from_hash(cloudflare_config(
+          "api_token" => "setup-token",
+          "tunnel" => {
+            "id" => nil,
+            "hostname" => "dev.example.com",
+            "hostname_matrix" => "matrix.example.com",
+            "hostname_viewer" => "viewer.example.com",
+          },
+        )),
+        log: DevBoxer::Log.new(io: StringIO.new, color: false),
+        shell: shell,
+        templates_dir: File.expand_path("../templates", __dir__),
+        config_path: config_path,
+        secrets_path: secrets_path,
+      )
+
+      mod.stub(:credentials_path, credentials_path) do
+        mod.send(:create_tunnel)
+      end
+
+      assert_includes recorded, "cloudflared tunnel create --credentials-file #{credentials_path} -o json dev-boxer-dev-6"
+      assert_equal "tunnel-123", YAML.safe_load_file(config_path).dig("cloudflare", "tunnel", "id")
+    end
+  end
+
   def test_write_user_credentials_deploys_zone_token_without_zone_id
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")

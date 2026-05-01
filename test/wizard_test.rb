@@ -11,6 +11,7 @@ class WizardTest < Minitest::Test
         "ssh-ed25519 AAAATEST alice@example.com",
         "2223",
         "example.com",
+        "yes",
         "zone-token",
         "yes",
         "alice@example.com, example.com",
@@ -38,6 +39,7 @@ class WizardTest < Minitest::Test
       assert_equal "dev.example.com", config.dig("cloudflare", "tunnel", "hostname")
       assert_equal "matrix.example.com", config.dig("cloudflare", "tunnel", "hostname_matrix")
       assert_equal "viewer.example.com", config.dig("cloudflare", "tunnel", "hostname_viewer")
+      assert_equal false, config.dig("cloudflare", "dns", "create_manually")
       assert_equal false, config.dig("cloudflare", "tunnel", "create_manually")
       assert_equal true, config.dig("cloudflare", "access", "enabled")
       assert_nil config.dig("cloudflare", "access", "account_id")
@@ -65,6 +67,8 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "new subdomains for projects you make"
       assert_includes wizard_output, "How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens"
       assert_includes wizard_output, "Scope: Limit the token to the example.com zone only. Do not grant access to all zones."
+      assert_includes wizard_output, "Alternative: Choose no below if you prefer to create each required subdomain manually."
+      assert_includes wizard_output, "Let Dev Boxer manage DNS records for this domain?"
       assert_includes wizard_output, "Let Dev Boxer create the Cloudflare tunnel and Zero Trust Access app now?"
       assert_includes wizard_output, "Cloudflare One Connector: cloudflared: Edit"
       assert_includes wizard_output, "Access: Apps: Edit"
@@ -105,7 +109,7 @@ class WizardTest < Minitest::Test
         "ssh-ed25519 AAAATEST alice@example.com",
         "2223",
         "example.com",
-        "zone-token",
+        "no",
         "no",
         "alice-matrix",
       ].join("\n") + "\n")
@@ -117,9 +121,15 @@ class WizardTest < Minitest::Test
       secrets = YAML.safe_load_file(secrets_path)
 
       assert_equal true, config.dig("cloudflare", "tunnel", "create_manually")
+      assert_equal true, config.dig("cloudflare", "dns", "create_manually")
       assert_equal false, config.dig("cloudflare", "access", "enabled")
       assert_nil secrets.dig("cloudflare", "api_token")
-      assert_equal "zone-token", secrets.dig("cloudflare", "zone_api_token")
+      assert_nil secrets.dig("cloudflare", "zone_api_token")
+      assert_includes output.string, "Manual DNS selected."
+      assert_includes output.string, "Dev Boxer will not store a DNS API token."
+      assert_includes output.string, "create any future project subdomains yourself"
+      assert_includes output.string, "Cloudflare Access will be manual because DNS is manual."
+      assert_includes output.string, "Let Dev Boxer create the Cloudflare tunnel now?"
       assert_includes output.string, "Manual Cloudflare setup selected."
       assert_includes output.string, "Dev Boxer will install cloudflared"
       assert_includes output.string, "Dev Boxer will not create a Zero Trust Access app."

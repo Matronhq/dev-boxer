@@ -42,6 +42,7 @@ module DevBoxer
       def setup_token = config.cloudflare&.api_token
       def zone_token = config.cloudflare&.zone_api_token
       def zone_name = config.cloudflare&.zone_name
+      def dns_managed_manually? = config.cloudflare&.dns&.create_manually == true
       def tunnel_id = config.cloudflare&.tunnel&.id
       def tunnel_hostname = config.cloudflare&.tunnel&.hostname
       def hostname_matrix = config.cloudflare&.tunnel&.hostname_matrix
@@ -124,7 +125,7 @@ module DevBoxer
         return unless current_tunnel_id
 
         if zone_token.nil? || zone_token.to_s.empty?
-          skip "Skipping DNS route creation (cloudflare.zone_api_token not set)"
+          print_manual_dns_instructions("#{current_tunnel_id}.cfargotunnel.com")
           return
         end
 
@@ -134,6 +135,17 @@ module DevBoxer
         configured_hostnames.each do |host|
           upsert_tunnel_dns_record(zone_id, host, target)
           ok "DNS route: #{host} → tunnel"
+        end
+      end
+
+      def print_manual_dns_instructions(target)
+        if dns_managed_manually?
+          info "Manual DNS setup required."
+        else
+          skip "Skipping DNS route creation (cloudflare.zone_api_token not set)"
+        end
+        configured_hostnames.each do |host|
+          info "Create proxied CNAME: #{host} -> #{target}"
         end
       end
 

@@ -71,6 +71,7 @@ For first-run Cloudflare setup, Dev Boxer uses two tokens:
 You can skip automatic tunnel and Access creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID. If you skip automation, you can create the Cloudflare Access app manually later.
 
 Dev Boxer creates proxied Cloudflare DNS records for all configured tunnel hostnames, including `matrix.<domain>`, using the zone DNS token.
+If a matching CNAME already exists and points somewhere else, Dev Boxer asks before updating it. It never deletes DNS records.
 
 ### Cloudflare Access
 

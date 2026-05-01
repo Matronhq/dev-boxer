@@ -133,8 +133,16 @@ module DevBoxer
         zone_id = cloudflare_zone_id
         target = "#{current_tunnel_id}.cfargotunnel.com"
         configured_hostnames.each do |host|
-          upsert_tunnel_dns_record(zone_id, host, target)
-          ok "DNS route: #{host} → tunnel"
+          case upsert_tunnel_dns_record(zone_id, host, target)
+          when :created
+            ok "DNS route created: #{host} → tunnel"
+          when :updated
+            ok "DNS route updated: #{host} → tunnel"
+          when :unchanged
+            skip "DNS route already configured: #{host}"
+          when :skipped
+            warn "Skipped DNS route update for #{host}"
+          end
         end
       end
 
@@ -199,10 +207,33 @@ module DevBoxer
         }
 
         if existing
+          return :unchanged if dns_record_matches?(existing, target)
+          return :skipped unless confirm_dns_record_update(hostname, existing, target)
+
           cloudflare_api(token: zone_token, method: :put, path: "/zones/#{zone_id}/dns_records/#{existing["id"]}", body: body)
+          :updated
         else
           cloudflare_api(token: zone_token, method: :post, path: "/zones/#{zone_id}/dns_records", body: body)
+          :created
         end
+      end
+
+      def dns_record_matches?(record, target)
+        record["content"] == target && record["proxied"] == true
+      end
+
+      def confirm_dns_record_update(hostname, record, target)
+        current = record["content"].to_s
+        proxied = record.key?("proxied") ? record["proxied"] : "unknown"
+        message = "Existing DNS record for #{hostname} points to #{current} (proxied: #{proxied}). Update it to #{target}?"
+
+        unless $stdin.tty?
+          raise "#{message} Re-run interactively to confirm, or choose manual DNS setup."
+        end
+
+        print "#{message} [y/N]: "
+        answer = $stdin.gets.to_s.strip.downcase
+        %w[y yes].include?(answer)
       end
 
       def configure_cloudflare_access

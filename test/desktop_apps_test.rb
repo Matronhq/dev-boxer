@@ -20,7 +20,7 @@ class DesktopAppsTest < Minitest::Test
     assert_includes vars["USER_EXPERIENCE_GUIDANCE"], "intermediate mode"
   end
 
-  def test_setup_desktop_script_runs_desktop_then_desktop_apps
+  def test_setup_desktop_script_runs_only_desktop_module
     mod = build_module("intermediate")
 
     script = mod.send(:setup_desktop_script)

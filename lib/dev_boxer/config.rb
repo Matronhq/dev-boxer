@@ -67,7 +67,6 @@ module DevBoxer
         matrix.server_domain
         matrix.user_username
         cloudflare.zone_name
-        cloudflare.zone_api_token
         cloudflare.tunnel.hostname
         cloudflare.tunnel.hostname_matrix
         cloudflare.tunnel.hostname_viewer
@@ -76,6 +75,11 @@ module DevBoxer
 
       unless hash.dig("cloudflare", "enabled") == true
         errors << "cloudflare.enabled must be true"
+      end
+
+      if blank?(hash.dig("cloudflare", "zone_api_token")) &&
+          hash.dig("cloudflare", "dns", "create_manually") != true
+        errors << "cloudflare.zone_api_token is required unless cloudflare.dns.create_manually is true"
       end
 
       if blank?(hash.dig("cloudflare", "tunnel", "id")) &&

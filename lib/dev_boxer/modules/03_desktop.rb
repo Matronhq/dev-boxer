@@ -4,6 +4,13 @@ module DevBoxer
       module_name  "desktop"
       module_order 3
 
+      SHORTCUTS = [
+        ["VS Code",  "code",                  "visual-studio-code"],
+        ["Firefox",  "firefox",               "firefox"],
+        ["Chrome",   "google-chrome-stable",  "google-chrome"],
+        ["Terminal", "xfce4-terminal",        "utilities-terminal"],
+      ].freeze
+
       XFWM4_XML = <<~XML
         <?xml version="1.0" encoding="UTF-8"?>
         <channel name="xfwm4" version="1.0">
@@ -19,6 +26,9 @@ module DevBoxer
         install_xfce
         configure_xfwm
         install_xrdp
+        install_vscode
+        install_github_desktop
+        write_desktop_shortcuts
         ok "Desktop environment setup complete"
         info "Access via SSH tunnel: ssh -L 3389:localhost:3389 #{username}@<server-ip> -p #{ssh_port}"
       end
@@ -74,6 +84,69 @@ module DevBoxer
         shell.systemctl(:enable, "xrdp")
         shell.systemctl(:restart, "xrdp")
         ok "XRDP configured and started"
+      end
+
+      def install_vscode
+        if shell.command_exists?("code")
+          skip "VS Code already installed"
+          return
+        end
+        info "Installing VS Code"
+        shell.sh!(
+          "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc " \
+          "| gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg"
+        )
+        arch = shell.sh!("dpkg --print-architecture").strip
+        repo = "deb [arch=#{arch} signed-by=/usr/share/keyrings/microsoft.gpg] " \
+               "https://packages.microsoft.com/repos/code stable main\n"
+        shell.write_file("/etc/apt/sources.list.d/vscode.list", repo)
+        shell.apt_update
+        shell.apt_install("code")
+        ok "VS Code installed"
+      end
+
+      def install_github_desktop
+        if shell.command_exists?("github-desktop")
+          skip "GitHub Desktop already installed"
+          return
+        end
+        info "Installing GitHub Desktop"
+        shell.sh!(
+          "curl -fsSL https://apt.packages.shiftkey.dev/gpg.key " \
+          "| gpg --dearmor --yes -o /usr/share/keyrings/shiftkey-packages.gpg"
+        )
+        arch = shell.sh!("dpkg --print-architecture").strip
+        repo = "deb [arch=#{arch} signed-by=/usr/share/keyrings/shiftkey-packages.gpg] " \
+               "https://apt.packages.shiftkey.dev/ubuntu/ any main\n"
+        shell.write_file("/etc/apt/sources.list.d/shiftkey-packages.list", repo)
+        shell.apt_update
+        shell.apt_install("github-desktop")
+        ok "GitHub Desktop installed"
+      rescue Shell::Error => e
+        warn "GitHub Desktop install skipped (#{first_error_line(e)})"
+      end
+
+      def first_error_line(error)
+        error.message.lines.map(&:strip).find { |line| !line.empty? } || error.class.name
+      end
+
+      def write_desktop_shortcuts
+        desktop_dir = "#{home_dir}/Desktop"
+        FileUtils.mkdir_p(desktop_dir)
+        SHORTCUTS.each do |name, exec, icon|
+          path = "#{desktop_dir}/#{name}.desktop"
+          File.write(path, <<~ENTRY)
+            [Desktop Entry]
+            Type=Application
+            Name=#{name}
+            Exec=#{exec}
+            Icon=#{icon}
+            Terminal=false
+          ENTRY
+          File.chmod(0o755, path)
+        end
+        shell.sh!("chown -R #{username}:#{username} #{desktop_dir}")
+        ok "Desktop shortcuts created"
       end
     end
   end

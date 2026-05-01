@@ -10,6 +10,7 @@ module DevBoxer
       module_name  "cloudflare"
       module_order 9
       API_BASE = "https://api.cloudflare.com/client/v4".freeze
+      CREDENTIALS_PATH = "/etc/cloudflared/credentials.json".freeze
 
       def run
         section "Cloudflare Tunnel"
@@ -54,6 +55,7 @@ module DevBoxer
       def access_app_id = access_config&.app_id
       def access_app_name = access_config&.app_name || "Dev Boxer"
       def access_session_duration = access_config&.session_duration || "24h"
+      def credentials_path = CREDENTIALS_PATH
 
       def install_cloudflared
         if shell.command_exists?("cloudflared")
@@ -75,7 +77,7 @@ module DevBoxer
       end
 
       def create_tunnel
-        FileUtils.mkdir_p("/etc/cloudflared")
+        FileUtils.mkdir_p(File.dirname(credentials_path))
 
         if tunnel_id
           skip "Tunnel already exists (id: #{tunnel_id})"
@@ -93,16 +95,17 @@ module DevBoxer
         # tunnel creation; the value is cleared before later modules run.
         ENV["TUNNEL_API_TOKEN"] = setup_token
         shell.sh!(
-          "cloudflared tunnel create #{Shellwords.escape(tunnel_name)} " \
-          "--credentials-file /etc/cloudflared/credentials.json -o json",
+          "cloudflared tunnel create " \
+          "--credentials-file #{Shellwords.escape(credentials_path)} -o json " \
+          "#{Shellwords.escape(tunnel_name)}",
         )
 
-        unless File.exist?("/etc/cloudflared/credentials.json")
+        unless File.exist?(credentials_path)
           raise "Tunnel creation reported success but credentials.json missing"
         end
 
-        new_id = JSON.parse(File.read("/etc/cloudflared/credentials.json"))["TunnelID"]
-        raise "Could not extract TunnelID from credentials.json" unless new_id
+        new_id = JSON.parse(File.read(credentials_path))["TunnelID"]
+        raise "Could not extract TunnelID from #{credentials_path}" unless new_id
 
         ok "Tunnel created: #{tunnel_name} (id: #{new_id})"
         persist_tunnel_id(new_id)
@@ -324,7 +327,7 @@ module DevBoxer
         info ""
         info "In another root shell on this VPS, run:"
         info "  export TUNNEL_API_TOKEN=<temporary-token>"
-        info "  cloudflared tunnel create #{Shellwords.escape(tunnel_name)} --credentials-file /etc/cloudflared/credentials.json -o json"
+        info "  cloudflared tunnel create --credentials-file #{Shellwords.escape(credentials_path)} -o json #{Shellwords.escape(tunnel_name)}"
         info "  unset TUNNEL_API_TOKEN"
         info ""
         info "Then paste the TunnelID below. Dev Boxer will persist only the tunnel ID."
@@ -337,8 +340,8 @@ module DevBoxer
           info "TunnelID is required."
         end
 
-        unless File.exist?("/etc/cloudflared/credentials.json")
-          raise "Manual tunnel credentials not found at /etc/cloudflared/credentials.json"
+        unless File.exist?(credentials_path)
+          raise "Manual tunnel credentials not found at #{credentials_path}"
         end
 
         persist_tunnel_id(manual_tunnel_id)
@@ -348,8 +351,8 @@ module DevBoxer
       def current_tunnel_id
         return @current_tunnel_id if @current_tunnel_id
         return tunnel_id if tunnel_id
-        return nil unless File.exist?("/etc/cloudflared/credentials.json")
-        JSON.parse(File.read("/etc/cloudflared/credentials.json"))["TunnelID"]
+        return nil unless File.exist?(credentials_path)
+        JSON.parse(File.read(credentials_path))["TunnelID"]
       rescue StandardError
         nil
       end

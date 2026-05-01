@@ -259,11 +259,6 @@ module DevBoxer
           info "  Viewer:  https://#{config.cloudflare.tunnel.hostname_viewer}" if config.cloudflare.tunnel.hostname_viewer
           info ""
         end
-        info "Matrix bridge:"
-        info "  1. Open Element/Matron, set homeserver to https://#{config.cloudflare&.tunnel&.hostname_matrix || 'your-matrix-hostname'}"
-        info "  2. Log in as @#{config.matrix&.user_username || 'your-username'}:#{config.matrix&.server_domain || 'your-domain'}"
-        info "  3. Open the 'Claude Code Bridge' room and send !start"
-        info ""
         info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
       end
     end

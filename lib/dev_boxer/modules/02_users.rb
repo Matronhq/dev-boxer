@@ -13,7 +13,7 @@ module DevBoxer
         install_ssh_key
         set_rdp_password if config.user&.rdp_password
         seed_known_hosts
-        restart_sshd
+        restart_ssh_service
         ok "User setup complete"
       end
 
@@ -100,10 +100,10 @@ module DevBoxer
         end
       end
 
-      def restart_sshd
-        info "Restarting sshd with hardened config"
-        shell.systemctl(:restart, "sshd")
-        ok "sshd restarted (key-only auth now active)"
+      def restart_ssh_service
+        info "Restarting SSH with hardened config"
+        shell.systemctl(:restart, "ssh")
+        ok "SSH restarted (key-only auth now active)"
       end
     end
   end

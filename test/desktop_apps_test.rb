@@ -26,15 +26,15 @@ class DesktopAppsTest < Minitest::Test
     script = mod.send(:setup_desktop_script)
 
     assert_includes script, "--only desktop"
-    assert_includes script, "--only desktop-apps"
+    refute_includes script, "--only desktop-apps"
     assert_includes script, "Installing optional XFCE/XRDP desktop"
   end
 
-  def test_desktop_apps_are_skipped_without_desktop_environment
+  def test_final_setup_does_not_install_gui_apps
     recorded = []
     shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
       recorded << cmd
-      [false, "", ""]
+      [true, cmd == "dpkg --print-architecture" ? "amd64\n" : "", ""]
     })
     mod = DevBoxer::Modules::DesktopApps.new(
       config: config("intermediate"),
@@ -42,8 +42,9 @@ class DesktopAppsTest < Minitest::Test
       shell: shell,
       templates_dir: File.expand_path("../templates", __dir__),
     )
-
-    mod.send(:install_desktop_apps_if_available)
+    mod.stub(:lazydocker_latest_version, "0.25.2") do
+      mod.send(:install_lazydocker)
+    end
 
     refute(recorded.any? { |cmd| cmd.include?("github-desktop") })
     refute(recorded.any? { |cmd| cmd.include?("code") })

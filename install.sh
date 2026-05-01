@@ -33,7 +33,7 @@ if [ "${VERSION_ID:-}" != "24.04" ]; then
     printf 'Warning: Dev Boxer is tested on Ubuntu 24.04; detected %s.\n' "${PRETTY_NAME:-Ubuntu}"
 fi
 
-log "Installing installer prerequisites"
+log "Installing prerequisites"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl git ruby

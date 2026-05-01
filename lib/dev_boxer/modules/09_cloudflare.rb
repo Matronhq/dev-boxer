@@ -21,13 +21,9 @@ module DevBoxer
         end
 
         install_cloudflared
-        begin
-          create_tunnel
-          create_dns_routes
-          configure_cloudflare_access
-        ensure
-          ENV.delete("TUNNEL_API_TOKEN")
-        end
+        create_tunnel
+        create_dns_routes
+        configure_cloudflare_access
         deploy_tunnel_config
         install_systemd_unit
         write_user_credentials
@@ -51,7 +47,8 @@ module DevBoxer
       def config_managed_locally? = config.cloudflare&.tunnel&.config_managed_locally
       def access_config = config.cloudflare&.access
       def access_enabled? = access_config&.enabled == true
-      def access_account_id = access_config&.account_id || cloudflare_zone_account_id
+      def cloudflare_account_id = config.cloudflare&.account_id || access_config&.account_id || (zone_token.to_s.empty? ? nil : cloudflare_zone_account_id)
+      def access_account_id = cloudflare_account_id
       def access_app_id = access_config&.app_id
       def access_app_name = access_config&.app_name || "Dev Boxer"
       def access_session_duration = access_config&.session_duration || "24h"
@@ -91,20 +88,13 @@ module DevBoxer
 
         info "Creating Cloudflare tunnel"
         tunnel_name = "dev-boxer-#{shell.sh!('hostname -s').strip}"
-        # cloudflared reads TUNNEL_API_TOKEN from the process environment for
-        # tunnel creation; the value is cleared before later modules run.
-        ENV["TUNNEL_API_TOKEN"] = setup_token
-        shell.sh!(
-          "cloudflared tunnel create " \
-          "--credentials-file #{Shellwords.escape(credentials_path)} -o json " \
-          "#{Shellwords.escape(tunnel_name)}",
-        )
+        result = create_tunnel_via_api(tunnel_name)
+        credentials = result["credentials_file"]
+        raise "Cloudflare API did not return tunnel credentials" unless credentials.is_a?(Hash)
 
-        unless File.exist?(credentials_path)
-          raise "Tunnel creation reported success but credentials.json missing"
-        end
+        write_tunnel_credentials(credentials)
 
-        new_id = JSON.parse(File.read(credentials_path))["TunnelID"]
+        new_id = result["id"] || credentials["TunnelID"]
         raise "Could not extract TunnelID from #{credentials_path}" unless new_id
 
         ok "Tunnel created: #{tunnel_name} (id: #{new_id})"
@@ -112,6 +102,27 @@ module DevBoxer
         # NB: cleanup_setup_token is intentionally NOT called here. `run()`
         # removes it only after DNS and optional Access setup complete, so a
         # partial first run remains easy to retry.
+      end
+
+      def create_tunnel_via_api(tunnel_name)
+        account_id = cloudflare_account_id
+        raise "Cloudflare account ID could not be derived from zone #{zone_name.inspect}; set cloudflare.access.account_id" if account_id.to_s.empty?
+
+        cloudflare_api(
+          token: setup_token,
+          method: :post,
+          path: "/accounts/#{account_id}/cfd_tunnel",
+          body: {
+            "name" => tunnel_name,
+            "config_src" => "local",
+          },
+        )
+      end
+
+      def write_tunnel_credentials(credentials)
+        FileUtils.mkdir_p(File.dirname(credentials_path))
+        File.write(credentials_path, JSON.pretty_generate(credentials) + "\n")
+        File.chmod(0o600, credentials_path)
       end
 
       # Use Config.merge_into_file rather than appending raw lines —
@@ -322,13 +333,11 @@ module DevBoxer
         tunnel_name = "dev-boxer-#{shell.sh!('hostname -s').strip}"
         info ""
         info "Manual Cloudflare tunnel setup required."
-        info "Create a temporary Cloudflare API token with Account > Cloudflare One Connector: cloudflared: Edit."
-        info "Do not save that token in config.yml or secrets.yml."
+        info "Manual setup uses cloudflared login to create an origin certificate in this root shell."
         info ""
         info "In another root shell on this VPS, run:"
-        info "  export TUNNEL_API_TOKEN=<temporary-token>"
+        info "  cloudflared tunnel login"
         info "  cloudflared tunnel create --credentials-file #{Shellwords.escape(credentials_path)} -o json #{Shellwords.escape(tunnel_name)}"
-        info "  unset TUNNEL_API_TOKEN"
         info ""
         info "Then paste the TunnelID below. Dev Boxer will persist only the tunnel ID."
 

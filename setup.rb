@@ -2,8 +2,51 @@
 # frozen_string_literal: true
 
 require "optparse"
+require "rbconfig"
 
 ROOT = File.expand_path(__dir__)
+
+def git_capture(*args)
+  output = IO.popen(["git", "-C", ROOT, *args], err: File::NULL, &:read)
+  $?.success? ? output.strip : nil
+end
+
+def git_success?(*args)
+  system("git", "-C", ROOT, *args, out: File::NULL, err: File::NULL)
+end
+
+def auto_update_checkout
+  return unless Process.uid.zero?
+  return if ENV["DEV_BOXER_SKIP_AUTO_UPDATE"] == "1"
+  return unless Dir.exist?(File.join(ROOT, ".git"))
+
+  branch = git_capture("rev-parse", "--abbrev-ref", "HEAD")
+  return if branch.nil? || branch.empty? || branch == "HEAD"
+
+  unless git_success?("diff", "--quiet") && git_success?("diff", "--cached", "--quiet")
+    warn "Dev Boxer checkout has local modifications; skipping auto-update."
+    return
+  end
+
+  before = git_capture("rev-parse", "HEAD")
+  return unless before
+
+  unless git_success?("fetch", "--quiet", "origin", branch) &&
+      git_success?("pull", "--ff-only", "--quiet", "origin", branch)
+    warn "Could not auto-update Dev Boxer; continuing with the current checkout."
+    return
+  end
+
+  after = git_capture("rev-parse", "HEAD")
+  return if after.nil? || after == before
+
+  warn "Updated Dev Boxer to #{after[0, 7]}; restarting setup."
+  ENV["DEV_BOXER_SKIP_AUTO_UPDATE"] = "1"
+  exec RbConfig.ruby, File.join(ROOT, "setup.rb"), *ARGV
+end
+
+auto_update_checkout
+
 $LOAD_PATH.unshift(File.join(ROOT, "lib"))
 
 require "dev_boxer"

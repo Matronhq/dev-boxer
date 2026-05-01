@@ -350,7 +350,7 @@ module DevBoxer
       output.puts
       output.puts "Manual Cloudflare setup selected."
       output.puts "  Tunnel: Dev Boxer will install cloudflared, print a one-time tunnel creation command, and ask you to paste the resulting TunnelID."
-      output.puts "  Token: The manual tunnel command needs a temporary account token with Cloudflare One Connector: cloudflared: Edit."
+      output.puts "  Login: The manual tunnel command starts with cloudflared tunnel login, which opens a Cloudflare authorization URL."
       output.puts "  Access: Dev Boxer will not create a Zero Trust Access app. Protect dev/viewer manually later if you want browser SSO."
       output.puts
     end

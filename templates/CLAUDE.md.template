@@ -1,130 +1,109 @@
-# Dev Boxer
+# Dev Boxer Claude Instructions
 
-This is a remote development server set up by dev-boxer.
+You are running on a Dev Boxer remote development server. This file is for Claude Code, not a human connection guide.
 
-## Machine Details
+## Machine Context
 
-- **User:** {{USERNAME}}
-- **OS:** Ubuntu 24.04
-- **SSH:** Port {{SSH_PORT}} (key-only auth)
-- **RDP:** Port 3389 (via SSH tunnel)
+- User: `{{USERNAME}}`
+- Home directory: `/home/{{USERNAME}}`
+- OS: Ubuntu 24.04
+- SSH: key-only auth on port `{{SSH_PORT}}`
+- Desktop: optional XFCE/XRDP; run `/home/{{USERNAME}}/setup-desktop` if the user asks for a GUI
+- Main tunnel hostname: `{{CF_HOSTNAME_MAIN}}`
+- Matrix homeserver hostname: `{{CF_HOSTNAME_MATRIX}}`
+- File viewer hostname: `{{CF_HOSTNAME_VIEWER}}`
 
-## How to Connect
+## How To Work Here
 
-### SSH
+- Make new projects under `/home/{{USERNAME}}/projects` unless the user gives a different location.
+- Create the project directory if it does not exist.
+- Prefer the toolchain already installed on this box before adding new tools.
+- For GitHub work, use the GitHub CLI (`gh`) when possible.
+- Before changing a repo, inspect its existing README, package files, task runner, tests, and local conventions.
+- Run the smallest useful verification after changes. If you cannot verify something, tell the user what remains unverified.
+- Do not expose secrets in chat, logs, commits, screenshots, or generated files.
+- Ask the user before destructive actions, force pushes, deleting data, changing billing/account settings, or widening public access.
 
-```bash
-ssh -p {{SSH_PORT}} {{USERNAME}}@<server-ip>
-```
+## User Collaboration
 
-### RDP (Remote Desktop)
+{{USER_EXPERIENCE_GUIDANCE}}
 
-RDP is bound to localhost only. Tunnel it over SSH first:
+## Cloudflare DNS
 
-```bash
-ssh -p {{SSH_PORT}} -L 3389:localhost:3389 {{USERNAME}}@<server-ip>
-```
+This box may have a zone-scoped Cloudflare DNS API token at `/home/{{USERNAME}}/.cloudflare/token`.
 
-Then connect your RDP client to `localhost:3389`. The desktop session uses XFCE via XRDP.
+- Use it only for the Cloudflare zone configured for this Dev Boxer host.
+- Cloudflare zone: `{{CF_ZONE_NAME}}`
+- It is intended for creating and updating DNS records for project subdomains.
+- Do not print, commit, or transmit the token.
+- Prefer proxied CNAME records to the existing Cloudflare Tunnel target when exposing local web projects.
+- If the token file is missing, ask the user whether DNS is manual before trying to create records.
 
-## Matrix Bridge
+The main tunnel hostnames are:
 
-The claude-matrix-bridge service connects Matrix chat to Claude Code CLI sessions, letting you interact with Claude Code from any Matrix client.
+- `{{CF_HOSTNAME_MAIN}}`
+- `{{CF_HOSTNAME_MATRIX}}`
+- `{{CF_HOSTNAME_VIEWER}}`
 
-### How It Works
+## Installed Tools
 
-The bridge listens for messages in your Matrix room and routes them to an active Claude Code session. A file viewer service exposes session output at the viewer URL. Commands are sent as Matrix messages starting with `!`.
-
-### Bridge Commands
-
-| Command | Description |
-|---|---|
-| `!start [workdir]` | Start a new Claude Code session (optionally in a specific directory) |
-| `!stop` | Stop the current Claude Code session |
-| `!status` | Show status of all active sessions |
-| `!sessions` | List all sessions with IDs |
-| `!resume <id>` | Resume a specific session by ID |
-| `!restart` | Restart the bridge service |
-| `!working` | Show the current working directory |
-| `!help` | Show available commands |
-
-### Service Management
-
-```bash
-# Status
-sudo systemctl status claude-matrix-bridge.service
-sudo systemctl status claude-matrix-file-viewer.service
-
-# Restart
-sudo systemctl restart claude-matrix-bridge.service
-sudo systemctl restart claude-matrix-file-viewer.service
-
-# Logs
-sudo journalctl -u claude-matrix-bridge.service -f
-sudo journalctl -u claude-matrix-file-viewer.service -f
-```
-
-## Cloudflare Tunnel
-
-Traffic is routed through a Cloudflare Tunnel — no inbound ports exposed.
-
-| Service | URL |
-|---|---|
-| Main | https://{{CF_HOSTNAME_MAIN}} |
-| Matrix homeserver | https://{{CF_HOSTNAME_MATRIX}} |
-| File viewer | https://{{CF_HOSTNAME_VIEWER}} |
-
-### Tunnel Service Management
-
-```bash
-sudo systemctl status cloudflared-tunnel.service
-sudo systemctl restart cloudflared-tunnel.service
-sudo journalctl -u cloudflared-tunnel.service -f
-```
-
-## Installed Software
-
-- **Docker** + Docker Compose
-- **Node.js 20**
-- **Python 3** + pip + uv
-- **Git** + GitHub CLI (`gh`)
-- **Google Chrome** + Firefox
-- **VS Code** (`code`)
-- **GitHub Desktop**
-- **lazydocker** (TUI for Docker)
+- Docker and Docker Compose
+- Node.js 22 and npm
+- Python 3, pip, venv, and uv
+- Git and GitHub CLI (`gh`)
+- Chrome, Firefox, and Xvfb
+- lazydocker
+- Optional after `~/setup-desktop`: XFCE/XRDP, VS Code, GitHub Desktop, desktop shortcuts
 
 ## Claude Code Plugins
 
-The following Claude Code plugins are installed:
+The default Dev Boxer setup installs these Claude Code plugins:
 
-- **superpowers** — Planning, TDD, debugging, code review workflows
-- **context7** — Fetch live library and framework documentation
-- **serena** — Semantic coding tools with symbol-level navigation
-- **feature-dev** — Guided feature development with architecture focus
-- **code-review** — Pull request review automation
-- **code-simplifier** — Review changed code for reuse, quality, and efficiency
-- **claude-md-management** — Audit and improve CLAUDE.md files
-- **github** — GitHub operations via MCP
-- **frontend-design** — Production-grade frontend interface generation
-- **security-guidance** — Security review and guidance
+- `claude-code-setup`
+- `claude-md-management`
+- `code-review`
+- `code-simplifier`
+- `context7`
+- `feature-dev`
+- `figma`
+- `frontend-design`
+- `github`
+- `greptile`
+- `ralph-loop`
+- `security-guidance`
+- `serena`
+- `superpowers`
+- `typescript-lsp`
 
 ## MCP Servers
 
 ### Chrome DevTools MCP
 
-Provides browser automation inside headless Chrome, launched via `xvfb-run` so it works without a display server.
-
-Configured in `~/.claude/mcp-config.json`. Used for UI testing, screenshots, and web scraping from within Claude Code sessions.
+Configured in `~/.claude/mcp-config.json`. Use it for UI testing, screenshots, browser debugging, and web scraping from Claude Code sessions.
 
 ### ask-user MCP
 
-Lets Claude Code ask you questions interactively by sending a message through the Matrix bridge and waiting for your reply. This allows Claude to request secrets, clarifications, or confirmations during automated tasks.
+Use this when you need clarification, secrets, or confirmation during an unattended Matrix bridge session.
 
-## Security
+## Useful Services
 
-- **SSH:** Key-only authentication on port {{SSH_PORT}}, root login disabled
-- **fail2ban:** Bans IPs after 6 failed SSH attempts within 10 minutes (5-minute ban)
-- **UFW:** Default deny-all inbound; only SSH port {{SSH_PORT}} allowed
-- **Auto-updates:** Unattended upgrades enabled; automatic reboots at 03:00 UTC
-- **Cloudflare Tunnel:** All web traffic goes outbound through the tunnel — no inbound ports 80/443 open
-- **Prometheus node_exporter:** Running on localhost:9100 (not exposed externally)
+```bash
+sudo systemctl status claude-matrix-bridge.service
+sudo systemctl status claude-matrix-file-viewer.service
+sudo systemctl status cloudflared-tunnel.service
+```
+
+```bash
+sudo journalctl -u claude-matrix-bridge.service -f
+sudo journalctl -u claude-matrix-file-viewer.service -f
+sudo journalctl -u cloudflared-tunnel.service -f
+```
+
+## Security Notes
+
+- UFW defaults to deny inbound traffic.
+- Web traffic should go out through Cloudflare Tunnel, not open inbound ports 80/443.
+- SSH root login is disabled.
+- fail2ban protects SSH.
+- Unattended security updates are enabled with automatic reboots at 03:00 UTC.
+- Prometheus node_exporter runs on localhost:9100 and is not exposed externally.

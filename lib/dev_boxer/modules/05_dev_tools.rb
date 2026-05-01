@@ -29,12 +29,12 @@ module DevBoxer
       end
 
       def install_node
-        if shell.command_exists?("node") && shell.sh!("node --version").include?("v20")
-          skip "Node.js 20 already installed"
+        if shell.command_exists?("node") && shell.sh!("node --version").include?("v22")
+          skip "Node.js 22 already installed"
           return
         end
-        info "Installing Node.js 20 LTS"
-        shell.sh!("curl -fsSL https://deb.nodesource.com/setup_20.x | bash -")
+        info "Installing Node.js 22 LTS"
+        shell.sh!("curl -fsSL https://deb.nodesource.com/setup_22.x | bash -")
         shell.apt_install("nodejs")
         ok "Node.js installed"
       end

@@ -1,5 +1,6 @@
 require "json"
 require "net/http"
+require "shellwords"
 require "uri"
 
 module DevBoxer
@@ -24,11 +25,10 @@ module DevBoxer
       MOTD_PATH = "/etc/update-motd.d/60-dev-boxer".freeze
 
       def run
-        section "Desktop apps & final setup"
-        install_vscode
-        install_github_desktop
+        section "Final setup"
         install_lazydocker
-        write_desktop_shortcuts
+        install_desktop_apps_if_available
+        write_setup_scripts
         write_claude_md
         install_motd
         ok "Setup complete!"
@@ -40,6 +40,7 @@ module DevBoxer
       def username = config.user.name
       def home_dir = "/home/#{username}"
       def ssh_port = config.ssh&.port || 2222
+      def setup_path = File.expand_path("../../../setup.rb", __dir__)
 
       def install_vscode
         if shell.command_exists?("code")
@@ -123,6 +124,44 @@ module DevBoxer
         ok "Desktop shortcuts created"
       end
 
+      def install_desktop_apps_if_available
+        unless desktop_environment_installed?
+          skip "Desktop GUI apps skipped (run ~/setup-desktop to install XFCE/XRDP first)"
+          return
+        end
+
+        install_vscode
+        install_github_desktop
+        write_desktop_shortcuts
+      end
+
+      def desktop_environment_installed?
+        shell.command_exists?("xfce4-terminal")
+      end
+
+      def write_setup_scripts
+        script_path = "#{home_dir}/setup-desktop"
+        shell.write_file(script_path, setup_desktop_script, mode: 0o755, owner: "#{username}:#{username}")
+        ok "Optional setup scripts installed in #{home_dir}"
+      end
+
+      def setup_desktop_script
+        <<~SH
+          #!/bin/sh
+          set -eu
+
+          SETUP=#{Shellwords.escape(setup_path)}
+
+          echo "Installing optional XFCE/XRDP desktop..."
+          sudo "$SETUP" --only desktop
+
+          echo "Installing desktop GUI apps and shortcuts..."
+          sudo "$SETUP" --only desktop-apps
+
+          echo "Desktop setup complete."
+        SH
+      end
+
       def write_claude_md
         info "Generating CLAUDE.md"
         claude_dir = "#{home_dir}/.claude"
@@ -134,15 +173,53 @@ module DevBoxer
 
       def claude_md_vars
         {
-          "USERNAME"          => username,
-          "SSH_PORT"          => ssh_port,
-          "CF_HOSTNAME_MAIN"  => config.cloudflare&.tunnel&.hostname,
-          "CF_HOSTNAME_MATRIX"=> config.cloudflare&.tunnel&.hostname_matrix,
-          "CF_HOSTNAME_VIEWER"=> config.cloudflare&.tunnel&.hostname_viewer,
+          "USERNAME"                => username,
+          "SSH_PORT"                => ssh_port,
+          "CF_HOSTNAME_MAIN"        => config.cloudflare&.tunnel&.hostname,
+          "CF_HOSTNAME_MATRIX"      => config.cloudflare&.tunnel&.hostname_matrix,
+          "CF_HOSTNAME_VIEWER"      => config.cloudflare&.tunnel&.hostname_viewer,
+          "CF_ZONE_NAME"            => config.cloudflare&.zone_name,
+          "USER_EXPERIENCE_GUIDANCE" => user_experience_guidance,
         }
       end
 
-      # Drop a small MOTD telling new SSH/RDP arrivals what's running and where
+      def user_experience_guidance
+        case claude_experience_level
+        when "beginner"
+          <<~TEXT.strip
+            The user selected beginner mode.
+
+            - Explain your plan in plain language before substantial changes.
+            - Briefly explain commands before running them when the purpose may not be obvious.
+            - Ask before choosing between meaningful technical options.
+            - Summarize what changed, how it was verified, and what the user can try next.
+          TEXT
+        when "advanced"
+          <<~TEXT.strip
+            The user selected advanced mode.
+
+            - Be concise and focus on diffs, tests, blockers, and tradeoffs.
+            - Make reasonable implementation decisions from the surrounding code.
+            - Ask only when a choice changes product behavior, cost, data, security, or deployment risk.
+          TEXT
+        else
+          <<~TEXT.strip
+            The user selected intermediate mode.
+
+            - Keep explanations concise, but include enough context for non-obvious changes.
+            - Proceed on routine implementation choices that match the existing project.
+            - Ask when requirements are ambiguous or when there are meaningful tradeoffs.
+            - Include verification steps and any remaining risks in the final summary.
+          TEXT
+        end
+      end
+
+      def claude_experience_level
+        level = config.claude&.experience_level.to_s
+        %w[beginner intermediate advanced].include?(level) ? level : "intermediate"
+      end
+
+      # Drop a small MOTD telling new SSH arrivals what's running and where
       # to look.
       def install_motd
         body = <<~MOTD
@@ -155,6 +232,7 @@ module DevBoxer
           │  Logs:      journalctl -u claude-matrix-bridge -f            │
           │  Restart:   sudo systemctl restart claude-matrix-bridge      │
           │  Bridge:    cd ~/claude-matrix-bridge                        │
+          │  Desktop:   ~/setup-desktop                                  │
           │  Setup log: /var/log/dev-boxer-setup.log                     │
           └──────────────────────────────────────────────────────────────┘
 
@@ -168,7 +246,11 @@ module DevBoxer
         info ""
         info "=== Connection details ==="
         info "SSH:  ssh #{username}@<server-ip> -p #{ssh_port}"
-        info "RDP:  ssh -L 3389:localhost:3389 #{username}@<server-ip> -p #{ssh_port}"
+        if desktop_environment_installed?
+          info "RDP:  ssh -L 3389:localhost:3389 #{username}@<server-ip> -p #{ssh_port}"
+        else
+          info "Desktop: optional; run ~/setup-desktop after SSH login"
+        end
         info ""
         if config.cloudflare&.tunnel&.hostname
           info "Tunnel URLs:"

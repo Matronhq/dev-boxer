@@ -17,6 +17,7 @@ class WizardTest < Minitest::Test
         "alice@example.com, example.com",
         "setup-token",
         "alice-matrix",
+        "intermediate",
       ].join("\n") + "\n")
 
       output = StringIO.new
@@ -30,8 +31,10 @@ class WizardTest < Minitest::Test
       assert_equal "alice", config.dig("user", "name")
       assert_equal "ssh-ed25519 AAAATEST alice@example.com", config.dig("user", "ssh_public_key")
       assert_equal 2223, config.dig("ssh", "port")
+      assert_equal false, config.dig("desktop", "enabled")
       assert_equal "matrix.example.com", config.dig("matrix", "server_domain")
       assert_equal "alice-matrix", config.dig("matrix", "user_username")
+      assert_equal "intermediate", config.dig("claude", "experience_level")
       assert_equal true, config.dig("cloudflare", "enabled")
       assert_equal "example.com", config.dig("cloudflare", "zone_name")
       assert_nil config.dig("cloudflare", "account_id")
@@ -59,6 +62,11 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "== 2. Domain and DNS =="
       assert_includes wizard_output, "== 3. Cloudflare tunnel and Access =="
       assert_includes wizard_output, "== 4. Matrix user =="
+      assert_includes wizard_output, "== 5. Claude behavior =="
+      assert_includes wizard_output, "Claude behavior:"
+      assert_includes wizard_output, "Beginner: explain more"
+      assert_includes wizard_output, "Intermediate: concise explanations"
+      assert_includes wizard_output, "Advanced: terse summaries"
       assert_includes wizard_output, "can create new subdomains for projects you make"
       assert_includes wizard_output, "Tip: We recommend giving the box its own domain."
       assert_includes wizard_output, "Cost: Low-cost domains such as .uk or .us often start around $5-6/year"
@@ -112,6 +120,7 @@ class WizardTest < Minitest::Test
         "no",
         "no",
         "alice-matrix",
+        "advanced",
       ].join("\n") + "\n")
 
       output = StringIO.new
@@ -123,6 +132,8 @@ class WizardTest < Minitest::Test
       assert_equal true, config.dig("cloudflare", "tunnel", "create_manually")
       assert_equal true, config.dig("cloudflare", "dns", "create_manually")
       assert_equal false, config.dig("cloudflare", "access", "enabled")
+      assert_equal false, config.dig("desktop", "enabled")
+      assert_equal "advanced", config.dig("claude", "experience_level")
       assert_nil secrets.dig("cloudflare", "api_token")
       assert_nil secrets.dig("cloudflare", "zone_api_token")
       assert_includes output.string, "Manual DNS selected."

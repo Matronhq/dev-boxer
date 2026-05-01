@@ -79,4 +79,41 @@ class RunnerTest < Minitest::Test
     runner.run(dry_run: true)
     assert_match(/delta/, @out.string)
   end
+
+  def test_desktop_module_is_skipped_by_default
+    ran = @ran
+    desktop = Class.new(DevBoxer::ModuleBase) do
+      module_name "desktop"
+      module_order 1
+      define_method(:run) { ran << "desktop" }
+    end
+    beta = @mod_b
+    runner = DevBoxer::Runner.new(
+      modules: [desktop, beta],
+      config: DevBoxer::Config.from_hash("desktop" => { "enabled" => false }),
+      log: @log,
+    )
+
+    runner.run
+
+    assert_equal %w[beta], @ran
+  end
+
+  def test_explicit_desktop_module_runs_even_when_disabled
+    ran = @ran
+    desktop = Class.new(DevBoxer::ModuleBase) do
+      module_name "desktop"
+      module_order 1
+      define_method(:run) { ran << "desktop" }
+    end
+    runner = DevBoxer::Runner.new(
+      modules: [desktop],
+      config: DevBoxer::Config.from_hash("desktop" => { "enabled" => false }),
+      log: @log,
+    )
+
+    runner.run(only: "desktop")
+
+    assert_equal %w[desktop], @ran
+  end
 end

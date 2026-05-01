@@ -21,7 +21,7 @@ module DevBoxer
       selected = selected.select { |m| m.module_name == only } if only
       selected = selected.drop_while { |m| m.module_name != from } if from
       selected = selected.reject { |m| skip.include?(m.module_name) }
-      selected = selected.reject { |m| optional_module_disabled?(m) } unless only || from
+      selected = selected.reject { |m| optional_module_disabled?(m) } unless only
 
       if dry_run
         @log.section("Plan")

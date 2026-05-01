@@ -216,8 +216,8 @@ module DevBoxer
 
     def print_welcome
       output.puts color("  +------------------------------------------------+", "36")
-      output.puts color("  |                  DEV BOXER                     |", "35")
-      output.puts color("  |       Remote Claude Code dev box setup         |", "36")
+      output.puts color("  |                   DEV BOXER                    |", "35")
+      output.puts color("  |        Remote Claude Code dev box setup        |", "36")
       output.puts color("  +------------------------------------------------+", "36")
       output.puts "Press Enter to accept the default shown in brackets."
       output.puts

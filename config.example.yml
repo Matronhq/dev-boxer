@@ -44,6 +44,8 @@ cloudflare:
   zone_name: example.com
   # zone_api_token is written to secrets.yml by the first-run wizard.
   # Optional api_token is used once for tunnel + Access setup, then wiped.
+  dns:
+    create_manually: false
   tunnel:
     hostname: dev.example.com
     hostname_matrix: matrix.example.com

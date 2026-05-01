@@ -44,10 +44,10 @@ It asks for:
 
 - Linux username, SSH public key, and SSH port
 - Base domain, e.g. `example.com`
-- Cloudflare zone DNS API token
-- Whether Dev Boxer should create the Cloudflare tunnel automatically
-- Whether Dev Boxer should create a Cloudflare Access app for `dev.<domain>` and `viewer.<domain>`
-- One temporary Cloudflare account setup token if either automatic tunnel or Access setup is enabled
+- Whether Dev Boxer should manage Cloudflare DNS automatically, or whether you will create the required subdomains manually
+- Cloudflare zone DNS API token if automatic DNS management is enabled
+- Whether Dev Boxer should create the Cloudflare tunnel and Access app automatically, or whether you will create them manually
+- One temporary Cloudflare account setup token if automatic tunnel and Access setup is enabled
 - Matrix username
 
 It derives `dev.<domain>`, `matrix.<domain>`, and `viewer.<domain>` automatically.
@@ -56,7 +56,7 @@ It derives `dev.<domain>`, `matrix.<domain>`, and `viewer.<domain>` automaticall
 
 Register or transfer a domain with [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/), or add an existing domain to Cloudflare DNS before running the installer.
 
-We recommend giving the dev box its own domain so project subdomains stay isolated from your main sites. Low-cost domains such as `.uk` or `.us` often start around `$5-6/year`, depending on current registrar pricing.
+We recommend giving the dev box its own domain. Dev Boxer can then create new subdomains for projects you make, alongside `dev`, `matrix`, and `viewer`. Low-cost domains such as `.uk` or `.us` often start around `$5-6/year`, depending on current registrar pricing.
 
 Create a zone-scoped DNS API token from [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) with:
 
@@ -65,7 +65,7 @@ Create a zone-scoped DNS API token from [Cloudflare API Tokens](https://dash.clo
 
 For first-run Cloudflare setup, Dev Boxer uses two tokens:
 
-- A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`. This stays on the machine in `secrets.yml` so Dev Boxer can manage DNS records for `dev`, `matrix`, `viewer`, and future project subdomains. Scope it to this domain only, not all zones.
+- A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`. This stays on the machine in `secrets.yml` so Dev Boxer can manage DNS records for `dev`, `matrix`, `viewer`, and new subdomains for projects you make. Scope it to this domain only, not all zones. If you prefer not to keep a DNS token on the box, choose manual DNS setup and create the required proxied CNAME records yourself. With manual DNS, Cloudflare Access setup is manual too because Dev Boxer cannot derive the account from the zone token.
 - A temporary account setup token for initial tunnel and Access setup. It needs account permissions `Cloudflare One Connector: cloudflared: Edit`, `Access: Apps: Edit`, and `Access: Policies: Edit`. Dev Boxer stores it only in `secrets.yml`, uses it once, then wipes it after setup succeeds.
 
 You can skip automatic tunnel and Access creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel create ...` command to run with your temporary token in another root shell. It then asks for the resulting `TunnelID` and stores only that ID. If you skip automation, you can create the Cloudflare Access app manually later.

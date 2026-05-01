@@ -24,7 +24,10 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 
 ## Prerequisites
 
-- Fresh Ubuntu 24.04 VPS with root SSH access
+- A fresh **Ubuntu 24.04** machine with sudo access. Anywhere works:
+  - **Cheap VPS** (Hetzner / DigitalOcean / etc., ~$5/mo) — fastest path
+  - **Spare desktop or laptop** at home (no monthly fee — see [No VPS?](#no-vps-use-spare-hardware))
+  - **VM** (multipass, OrbStack, Hyper-V) on top of macOS or Windows
 - Cloudflare account with a domain configured
 - Cloudflare zone DNS API token
 - Optional one-time Cloudflare account setup token for automated tunnel and Access setup
@@ -51,6 +54,27 @@ It asks for:
 - Matrix username
 
 It derives `dev.<domain>`, `matrix.<domain>`, and `viewer.<domain>` automatically.
+
+### No VPS? Use spare hardware
+
+Cloudflare Tunnel handles "expose a home box to the internet" without port forwarding or a static IP, so an old Mac mini, a NUC, a retired laptop, or even a Raspberry Pi 4/5 (8 GB+) runs Dev Boxer just as well as a paid VPS — and you skip the $5–20/month rental fee.
+
+Three on-ramps depending on what you have:
+
+**PC / Intel Mac / mini PC.** Wipe and install [Ubuntu 24.04 Server](https://ubuntu.com/download/server) from a USB stick (use [Etcher](https://etcher.balena.io/) or `dd` to write the ISO). Boot, finish the installer, then run the Quick start curl command above.
+
+**Apple Silicon Mac.** [Asahi Linux](https://asahilinux.org/) on bare metal is still rough; the easier path is a VM with [multipass](https://multipass.run/):
+
+```bash
+brew install --cask multipass
+multipass launch 24.04 --name devbox --cpus 4 --memory 8G --disk 50G
+multipass shell devbox
+# then run the Quick start curl command inside the VM
+```
+
+**Windows desktop.** Either install [WSL2 + Ubuntu 24.04](https://learn.microsoft.com/en-us/windows/wsl/install) (caveats: WSL2's systemd support is limited and the XRDP desktop module won't work cleanly) or spin up a real Ubuntu VM via Hyper-V — Hyper-V is the cleaner option for the full feature set.
+
+**Tradeoffs vs. a VPS.** The box has to stay on (keep it plugged in, disable sleep, set BIOS to wake-on-power-loss); flaky home internet means flaky access; and DDoS protection / uptime is on you. But $0/month and 16 GB RAM with a real CPU often beats $5/month and 2 GB RAM if you've got the hardware sitting around.
 
 ### Cloudflare setup
 

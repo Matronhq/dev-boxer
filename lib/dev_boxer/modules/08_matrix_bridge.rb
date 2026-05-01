@@ -59,7 +59,6 @@ module DevBoxer
         write_mcp_config
         install_systemd_units
         ok "Matrix bridge setup complete"
-        print_first_login_instructions if mode == "bundled"
       end
 
       private
@@ -471,26 +470,6 @@ module DevBoxer
         ok "Bridge services installed and started"
       end
 
-      def print_first_login_instructions
-        c = @generated_credentials
-        return unless c
-
-        info ""
-        info "=========================================="
-        info "  Matrix bridge — first-login instructions"
-        info "=========================================="
-        info "Open Element (or any Matrix client) and:"
-        info "  1. Add custom homeserver: #{homeserver_url} (or your tunnel URL)"
-        info "  2. Sign in as #{user_id}"
-        info "     Password: #{c[:user_password]}"
-        info "  3. When prompted for Secure Backup, paste the recovery key from:"
-        info "     #{home_dir}/recovery-key.txt"
-        info "  4. Open the 'Claude Code Bridge' room — bot is already verified"
-        info "  5. Send !start to begin a Claude Code session"
-        info ""
-        info "Bridge secrets (bot token, etc.):  #{secrets_path} (mode 0600)"
-        info "Recovery key (delete after copy):  #{home_dir}/recovery-key.txt (mode 0400)"
-      end
     end
   end
 end

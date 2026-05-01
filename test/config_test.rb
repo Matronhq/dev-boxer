@@ -200,6 +200,15 @@ class ConfigTest < Minitest::Test
     assert_includes errors, "cloudflare.zone_name is required"
   end
 
+  def test_validation_requires_zone_token_unless_dns_is_manual
+    hash = valid_public_config
+    hash["cloudflare"].delete("zone_api_token")
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "cloudflare.zone_api_token is required unless cloudflare.dns.create_manually is true"
+  end
+
   def test_validation_requires_access_setup_token_until_app_exists
     hash = valid_public_config("cloudflare" => {
       "access" => {
@@ -221,6 +230,15 @@ class ConfigTest < Minitest::Test
         "app_id" => "app-123",
         "allowed_email_domains" => ["example.com"],
       },
+    })
+
+    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
+  def test_validation_allows_manual_dns_without_zone_token
+    hash = valid_public_config("cloudflare" => {
+      "zone_api_token" => nil,
+      "dns" => { "create_manually" => true },
     })
 
     assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))

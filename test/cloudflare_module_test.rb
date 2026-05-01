@@ -98,6 +98,35 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_manual_dns_prints_required_cname_records
+    log_io = StringIO.new
+    mod = DevBoxer::Modules::Cloudflare.new(
+      config: DevBoxer::Config.from_hash(cloudflare_config(
+        "zone_api_token" => nil,
+        "dns" => { "create_manually" => true },
+        "tunnel" => {
+          "id" => "tunnel-123",
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => "matrix.example.com",
+          "hostname_viewer" => "viewer.example.com",
+        },
+      )),
+      log: DevBoxer::Log.new(io: log_io, color: false),
+      shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
+      templates_dir: File.expand_path("../templates", __dir__),
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+    )
+
+    mod.send(:create_dns_routes)
+
+    output = log_io.string
+    assert_includes output, "Manual DNS setup required."
+    assert_includes output, "Create proxied CNAME: dev.example.com -> tunnel-123.cfargotunnel.com"
+    assert_includes output, "Create proxied CNAME: matrix.example.com -> tunnel-123.cfargotunnel.com"
+    assert_includes output, "Create proxied CNAME: viewer.example.com -> tunnel-123.cfargotunnel.com"
+  end
+
   def test_cloudflare_access_excludes_matrix_hostname
     mod = build_cloudflare_module(
       config_path: "/tmp/config.yml",

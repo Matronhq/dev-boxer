@@ -55,16 +55,11 @@ module DevBoxer
       section_header("2. Domain and DNS")
       explain_base_domain
       base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
-      explain_cloudflare_zone_token(base_domain)
-      zone_token = ask(
-        "Cloudflare zone DNS API token",
-        default: existing.dig("cloudflare", "zone_api_token"),
-        secret: true,
-      )
+      manual_dns, zone_token = choose_dns_setup(existing, base_domain)
 
       section_header("3. Cloudflare tunnel and Access")
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
-      manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id)
+      manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id, manual_dns: manual_dns)
       setup_token = nil
       if needs_setup_token?(tunnel_id: tunnel_id, manual_tunnel: manual_tunnel, access_config: access_config)
         explain_cloudflare_setup_token
@@ -107,6 +102,9 @@ module DevBoxer
         "cloudflare" => {
           "enabled" => true,
           "zone_name" => base_domain,
+          "dns" => {
+            "create_manually" => manual_dns,
+          },
           "tunnel" => {
             "id" => tunnel_id,
             "hostname" => "dev.#{base_domain}",
@@ -132,10 +130,39 @@ module DevBoxer
       [config, secrets]
     end
 
-    def choose_cloudflare_setup(existing, tunnel_id)
+    def choose_dns_setup(existing, base_domain)
+      explain_cloudflare_zone_token(base_domain)
+      if confirm("Let Dev Boxer manage DNS records for this domain?", default: true)
+        zone_token = ask(
+          "Cloudflare zone DNS API token",
+          default: existing.dig("cloudflare", "zone_api_token"),
+          secret: true,
+        )
+        [false, zone_token]
+      else
+        explain_manual_dns_setup(base_domain)
+        [true, nil]
+      end
+    end
+
+    def choose_cloudflare_setup(existing, tunnel_id, manual_dns:)
       if !tunnel_id.to_s.empty?
         output.puts "Cloudflare tunnel already configured (id: #{tunnel_id})."
+        if manual_dns
+          explain_manual_access_after_manual_dns
+          return [false, { "enabled" => false }]
+        end
         return [false, build_access_config(existing, enabled: true)]
+      end
+
+      if manual_dns
+        explain_manual_access_after_manual_dns
+        if confirm("Let Dev Boxer create the Cloudflare tunnel now?", default: true)
+          return [false, { "enabled" => false }]
+        end
+
+        explain_manual_cloudflare_setup
+        return [true, { "enabled" => false }]
       end
 
       explain_cloudflare_automation
@@ -188,16 +215,10 @@ module DevBoxer
     end
 
     def print_welcome
-      banner = <<~'BANNER'
-         __  __       _                   ____
-        |  \/  | __ _| |_ _ __ ___  _ __ | __ )  _____  __
-        | |\/| |/ _` | __| '__/ _ \| '_ \|  _ \ / _ \ \/ /
-        | |  | | (_| | |_| | | (_) | | | | |_) | (_) >  <
-        |_|  |_|\__,_|\__|_|  \___/|_| |_|____/ \___/_/\_\
-                         Dev Boxer
-      BANNER
-      output.puts color(banner, "36")
-      output.puts color("Remote Claude Code dev box setup", "35")
+      output.puts color("  +------------------------------------------------+", "36")
+      output.puts color("  |                   DEV BOXER                    |", "35")
+      output.puts color("  |        Remote Claude Code dev box setup        |", "36")
+      output.puts color("  +------------------------------------------------+", "36")
       output.puts "Press Enter to accept the default shown in brackets."
       output.puts
     end
@@ -240,8 +261,8 @@ module DevBoxer
       output.puts
       output.puts "Base domain:"
       output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
-      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, and viewer.<domain>."
-      output.puts "  Recommendation: Give the box its own domain so project subdomains stay isolated from your main sites."
+      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, viewer.<domain>, and can create new subdomains for projects you make."
+      output.puts "  Tip: We recommend giving the box its own domain."
       output.puts "  Cost: Low-cost domains such as .uk or .us often start around $5-6/year, depending on current registrar pricing."
       output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
       output.puts "  Link: https://www.cloudflare.com/products/registrar/"
@@ -252,9 +273,31 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare zone DNS API token:"
       output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
-      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, and future project subdomains."
+      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, and new subdomains for projects you make."
       output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
       output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
+      output.puts "  Alternative: Choose no below if you prefer to create each required subdomain manually."
+      output.puts
+    end
+
+    def explain_manual_dns_setup(base_domain)
+      output.puts
+      output.puts "Manual DNS selected."
+      output.puts "  Dev Boxer will not store a DNS API token."
+      output.puts "  After the tunnel exists, create proxied CNAME records for:"
+      output.puts "    - dev.#{base_domain}"
+      output.puts "    - matrix.#{base_domain}"
+      output.puts "    - viewer.#{base_domain}"
+      output.puts "  Point each record at the tunnel target Dev Boxer prints, usually <TunnelID>.cfargotunnel.com."
+      output.puts "  You will also need to create any future project subdomains yourself."
+      output.puts
+    end
+
+    def explain_manual_access_after_manual_dns
+      output.puts
+      output.puts "Cloudflare Access will be manual because DNS is manual."
+      output.puts "  Dev Boxer normally derives the Cloudflare account from the zone DNS token."
+      output.puts "  Without that token, create the Access app manually later if you want browser SSO for dev/viewer."
       output.puts
     end
 

@@ -51,7 +51,7 @@ module DevBoxer
       # Always invoke apt-get install — apt is itself idempotent for already-
       # installed-and-current packages and it correctly handles version
       # upgrades when a newer version is in repos (e.g. after a NodeSource
-      # repo swap from v18 → v20). The previous skip-if-installed
+      # repo swap from v20 -> v22). The previous skip-if-installed
       # short-circuit silently prevented those upgrades.
       sh!("DEBIAN_FRONTEND=noninteractive apt-get install -y -qq #{pkgs.map { |p| Shellwords.escape(p) }.join(' ')}")
     end

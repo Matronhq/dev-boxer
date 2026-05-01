@@ -90,14 +90,14 @@ Setup runs 11 idempotent modules in order:
 |---|--------|--------------|
 | 01 | `security`     | SSH hardening, UFW firewall, fail2ban, unattended-upgrades |
 | 02 | `users`        | Linux user creation, SSH key, sudo, zsh |
-| 03 | `desktop`      | XFCE4 + XRDP (SSH tunnel only) |
+| 03 | `desktop`      | Optional XFCE4 + XRDP (run `~/setup-desktop`) |
 | 04 | `docker`       | Docker Engine + Compose |
-| 05 | `dev-tools`    | Node.js 20, Git, Python, uv, GitHub CLI |
+| 05 | `dev-tools`    | Node.js 22, Git, Python, uv, GitHub CLI |
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
 | 08 | `matrix-bridge`| Matron Server + claude-matrix-bridge |
 | 09 | `cloudflare`   | Cloudflare Tunnel, DNS routes, zone token deploy |
-| 10 | `desktop-apps` | VS Code, GitHub Desktop, lazydocker, MOTD |
+| 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |
 | 11 | `hello-world`  | `localhost:9810` tunnel smoke-test service |
 
 Re-run a single module or resume from a failure:

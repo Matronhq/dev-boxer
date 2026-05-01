@@ -30,9 +30,7 @@ module DevBoxer
         return :reused if confirm("Reuse existing config?", default: true)
       end
 
-      output.puts "Dev Boxer first-run setup"
-      output.puts "Press Enter to accept the default shown in brackets."
-      output.puts
+      print_welcome
 
       config, secrets = build_config(existing)
       write_yaml(config_path, config, mode: 0o644)
@@ -49,9 +47,12 @@ module DevBoxer
     attr_reader :config_path, :secrets_path, :input, :output
 
     def build_config(existing)
+      section_header("1. Server login")
       username = ask("Linux username", default: existing.dig("user", "name") || default_username)
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
+
+      section_header("2. Domain and DNS")
       explain_base_domain
       base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
       explain_cloudflare_zone_token(base_domain)
@@ -61,18 +62,9 @@ module DevBoxer
         secret: true,
       )
 
+      section_header("3. Cloudflare tunnel and Access")
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
-      manual_tunnel = false
-      if tunnel_id.to_s.empty?
-        if confirm("Let Dev Boxer create the Cloudflare tunnel now?", default: true)
-          manual_tunnel = false
-        else
-          manual_tunnel = true
-          output.puts
-          output.puts "Dev Boxer will pause during the Cloudflare module with manual tunnel instructions."
-        end
-      end
-      access_config = build_access_config(existing)
+      manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id)
       setup_token = nil
       if needs_setup_token?(tunnel_id: tunnel_id, manual_tunnel: manual_tunnel, access_config: access_config)
         explain_cloudflare_setup_token
@@ -82,6 +74,8 @@ module DevBoxer
           secret: true,
         )
       end
+
+      section_header("4. Matrix user")
       matrix_user = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
@@ -138,13 +132,23 @@ module DevBoxer
       [config, secrets]
     end
 
-    def build_access_config(existing)
-      output.puts
-      output.puts "Cloudflare Access can protect dev/viewer hostnames while leaving matrix open for Matrix clients."
-      enabled = confirm("Set up Cloudflare Zero Trust Access for dev/viewer now?", default: true)
-      unless enabled
-        return { "enabled" => false }
+    def choose_cloudflare_setup(existing, tunnel_id)
+      if !tunnel_id.to_s.empty?
+        output.puts "Cloudflare tunnel already configured (id: #{tunnel_id})."
+        return [false, build_access_config(existing, enabled: true)]
       end
+
+      explain_cloudflare_automation
+      if confirm("Let Dev Boxer create the Cloudflare tunnel and Zero Trust Access app now?", default: true)
+        [false, build_access_config(existing, enabled: true)]
+      else
+        explain_manual_cloudflare_setup
+        [true, { "enabled" => false }]
+      end
+    end
+
+    def build_access_config(existing, enabled:)
+      return { "enabled" => false } unless enabled
 
       allowed = ask(
         "Allowed emails or email domains (comma-separated)",
@@ -183,6 +187,32 @@ module DevBoxer
       items.partition { |item| item.include?("@") }
     end
 
+    def print_welcome
+      banner = <<~'BANNER'
+         __  __       _                   ____
+        |  \/  | __ _| |_ _ __ ___  _ __ | __ )  _____  __
+        | |\/| |/ _` | __| '__/ _ \| '_ \|  _ \ / _ \ \/ /
+        | |  | | (_| | |_| | | (_) | | | | |_) | (_) >  <
+        |_|  |_|\__,_|\__|_|  \___/|_| |_|____/ \___/_/\_\
+                         Dev Boxer
+      BANNER
+      output.puts color(banner, "36")
+      output.puts color("Remote Claude Code dev box setup", "35")
+      output.puts "Press Enter to accept the default shown in brackets."
+      output.puts
+    end
+
+    def section_header(title)
+      output.puts
+      output.puts color("== #{title} ==", "36")
+      output.puts color("-" * (title.length + 6), "36")
+    end
+
+    def color(text, code)
+      return text unless output.respond_to?(:tty?) && output.tty?
+      "\e[#{code}m#{text}\e[0m"
+    end
+
     def ask(label, default: nil, required: true, secret: false)
       loop do
         output.print(prompt_for(label, default, secret))
@@ -211,6 +241,8 @@ module DevBoxer
       output.puts "Base domain:"
       output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
       output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, and viewer.<domain>."
+      output.puts "  Recommendation: Give the box its own domain so project subdomains stay isolated from your main sites."
+      output.puts "  Cost: Low-cost domains such as .uk or .us often start around $5-6/year, depending on current registrar pricing."
       output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
       output.puts "  Link: https://www.cloudflare.com/products/registrar/"
       output.puts
@@ -220,9 +252,29 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare zone DNS API token:"
       output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
-      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, and viewer."
+      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, and future project subdomains."
       output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
-      output.puts "  Scope: Limit the token to the #{base_domain} zone only."
+      output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
+      output.puts
+    end
+
+    def explain_cloudflare_automation
+      output.puts
+      output.puts "Cloudflare automation:"
+      output.puts "  What: Dev Boxer can create one Cloudflare Tunnel and one Zero Trust Access app."
+      output.puts "  Why: The tunnel exposes dev.<domain>, matrix.<domain>, and viewer.<domain> without opening inbound ports."
+      output.puts "       Access protects dev/viewer in the browser, while matrix stays outside Access so Matrix clients work normally."
+      output.puts "  Manual option: If you prefer, choose no. Dev Boxer will pause later with the exact cloudflared tunnel command, then ask for the TunnelID."
+      output.puts "                 You can create the Access app manually after setup using docs/cloudflare-access.md."
+      output.puts
+    end
+
+    def explain_manual_cloudflare_setup
+      output.puts
+      output.puts "Manual Cloudflare setup selected."
+      output.puts "  Tunnel: Dev Boxer will install cloudflared, print a one-time tunnel creation command, and ask you to paste the resulting TunnelID."
+      output.puts "  Token: The manual tunnel command needs a temporary account token with Cloudflare One Connector: cloudflared: Edit."
+      output.puts "  Access: Dev Boxer will not create a Zero Trust Access app. Protect dev/viewer manually later if you want browser SSO."
       output.puts
     end
 

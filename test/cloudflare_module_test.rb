@@ -32,21 +32,23 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
-  def test_create_tunnel_places_cloudflared_flags_before_name
+  def test_create_tunnel_uses_cloudflare_api_and_writes_credentials
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
       credentials_path = File.join(dir, "cloudflared", "credentials.json")
-      FileUtils.mkdir_p(File.dirname(credentials_path))
-      File.write(credentials_path, JSON.dump("TunnelID" => "tunnel-123"))
       File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
-      recorded = []
+      calls = []
       shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
-        recorded << cmd
         [true, cmd == "hostname -s" ? "dev-6\n" : "", ""]
       })
-      mod = DevBoxer::Modules::Cloudflare.new(
-        config: DevBoxer::Config.from_hash(cloudflare_config(
+      mod = build_cloudflare_module(
+        config_path: config_path,
+        secrets_path: secrets_path,
+        shell: shell,
+        config_hash: cloudflare_config(
+          "zone_name" => "example.com",
+          "zone_api_token" => "zone-token",
           "api_token" => "setup-token",
           "tunnel" => {
             "id" => nil,
@@ -54,19 +56,37 @@ class CloudflareModuleTest < Minitest::Test
             "hostname_matrix" => "matrix.example.com",
             "hostname_viewer" => "viewer.example.com",
           },
-        )),
-        log: DevBoxer::Log.new(io: StringIO.new, color: false),
-        shell: shell,
-        templates_dir: File.expand_path("../templates", __dir__),
-        config_path: config_path,
-        secrets_path: secrets_path,
+        ),
       )
-
-      mod.stub(:credentials_path, credentials_path) do
-        mod.send(:create_tunnel)
+      api = lambda do |token:, method:, path:, query: {}, body: nil|
+        calls << { token: token, method: method, path: path, query: query, body: body }
+        return [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }] if path == "/zones"
+        if path == "/accounts/account-123/cfd_tunnel"
+          return {
+            "id" => "tunnel-123",
+            "credentials_file" => {
+              "AccountTag" => "account-123",
+              "TunnelID" => "tunnel-123",
+              "TunnelName" => "dev-boxer-dev-6",
+              "TunnelSecret" => "secret",
+            },
+          }
+        end
+        raise "unexpected API call: #{method} #{path}"
       end
 
-      assert_includes recorded, "cloudflared tunnel create --credentials-file #{credentials_path} -o json dev-boxer-dev-6"
+      mod.stub(:credentials_path, credentials_path) do
+        mod.stub(:cloudflare_api, api) do
+          mod.send(:create_tunnel)
+        end
+      end
+
+      create_call = calls.find { |call| call[:path] == "/accounts/account-123/cfd_tunnel" }
+      assert_equal "setup-token", create_call[:token]
+      assert_equal :post, create_call[:method]
+      assert_equal({ "name" => "dev-boxer-dev-6", "config_src" => "local" }, create_call[:body])
+      assert_equal "tunnel-123", JSON.parse(File.read(credentials_path))["TunnelID"]
+      assert_equal 0o600, File.stat(credentials_path).mode & 0o777
       assert_equal "tunnel-123", YAML.safe_load_file(config_path).dig("cloudflare", "tunnel", "id")
     end
   end
@@ -331,11 +351,11 @@ class CloudflareModuleTest < Minitest::Test
 
   private
 
-  def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } }, log_io: StringIO.new)
+  def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } }, log_io: StringIO.new, shell: nil)
     DevBoxer::Modules::Cloudflare.new(
       config: DevBoxer::Config.from_hash(config_hash),
       log: DevBoxer::Log.new(io: log_io, color: false),
-      shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
+      shell: shell || DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
       templates_dir: File.expand_path("../templates", __dir__),
       config_path: config_path,
       secrets_path: secrets_path,

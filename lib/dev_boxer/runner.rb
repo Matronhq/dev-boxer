@@ -21,6 +21,7 @@ module DevBoxer
       selected = selected.select { |m| m.module_name == only } if only
       selected = selected.drop_while { |m| m.module_name != from } if from
       selected = selected.reject { |m| skip.include?(m.module_name) }
+      selected = selected.reject { |m| optional_module_disabled?(m) } unless only
 
       if dry_run
         @log.section("Plan")
@@ -45,6 +46,10 @@ module DevBoxer
     def validate_known!(module_name)
       return if @modules.any? { |m| m.module_name == module_name }
       raise UnknownModule, "No such module: #{module_name}"
+    end
+
+    def optional_module_disabled?(mod)
+      mod.module_name == "desktop" && @config.desktop&.enabled != true
     end
   end
 end

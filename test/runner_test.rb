@@ -79,4 +79,69 @@ class RunnerTest < Minitest::Test
     runner.run(dry_run: true)
     assert_match(/delta/, @out.string)
   end
+
+  def test_desktop_module_is_skipped_by_default
+    ran = @ran
+    desktop = Class.new(DevBoxer::ModuleBase) do
+      module_name "desktop"
+      module_order 1
+      define_method(:run) { ran << "desktop" }
+    end
+    beta = @mod_b
+    runner = DevBoxer::Runner.new(
+      modules: [desktop, beta],
+      config: DevBoxer::Config.from_hash("desktop" => { "enabled" => false }),
+      log: @log,
+    )
+
+    runner.run
+
+    assert_equal %w[beta], @ran
+  end
+
+  def test_from_still_skips_disabled_desktop_module
+    ran = @ran
+    users = Class.new(DevBoxer::ModuleBase) do
+      module_name "users"
+      module_order 2
+      define_method(:run) { ran << "users" }
+    end
+    desktop = Class.new(DevBoxer::ModuleBase) do
+      module_name "desktop"
+      module_order 3
+      define_method(:run) { ran << "desktop" }
+    end
+    docker = Class.new(DevBoxer::ModuleBase) do
+      module_name "docker"
+      module_order 4
+      define_method(:run) { ran << "docker" }
+    end
+    runner = DevBoxer::Runner.new(
+      modules: [users, desktop, docker],
+      config: DevBoxer::Config.from_hash("desktop" => { "enabled" => false }),
+      log: @log,
+    )
+
+    runner.run(from: "users")
+
+    assert_equal %w[users docker], @ran
+  end
+
+  def test_explicit_desktop_module_runs_even_when_disabled
+    ran = @ran
+    desktop = Class.new(DevBoxer::ModuleBase) do
+      module_name "desktop"
+      module_order 1
+      define_method(:run) { ran << "desktop" }
+    end
+    runner = DevBoxer::Runner.new(
+      modules: [desktop],
+      config: DevBoxer::Config.from_hash("desktop" => { "enabled" => false }),
+      log: @log,
+    )
+
+    runner.run(only: "desktop")
+
+    assert_equal %w[desktop], @ran
+  end
 end

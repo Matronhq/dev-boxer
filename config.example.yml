@@ -8,7 +8,7 @@ ssh:
   port: 2222
 
 desktop:
-  enabled: true
+  enabled: false          # optional; run ~/setup-desktop after setup if you want XFCE/XRDP
 
 docker:
   # Optional: relocate Docker + containerd storage to a separate volume
@@ -21,6 +21,7 @@ docker:
     keep_until: 4h        # untag images / build cache older than this
 
 claude:
+  experience_level: intermediate  # beginner | intermediate | advanced
   plugins:
     - superpowers
     - context7

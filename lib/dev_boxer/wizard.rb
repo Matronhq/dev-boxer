@@ -8,6 +8,8 @@ module DevBoxer
     DEFAULT_USERNAME = "dev".freeze
     DEFAULT_SSH_PORT = 2222
     DEFAULT_HELLO_WORLD_PORT = 9810
+    DEFAULT_EXPERIENCE_LEVEL = "intermediate".freeze
+    EXPERIENCE_LEVELS = %w[beginner intermediate advanced].freeze
 
     def self.run(config_path:, input: $stdin, output: $stdout, force: false)
       new(config_path: config_path, input: input, output: output).run(force: force)
@@ -72,6 +74,8 @@ module DevBoxer
 
       section_header("4. Matrix user")
       matrix_user = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
+      section_header("5. Claude behavior")
+      claude_config = build_claude_config(existing)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
       config = {
@@ -81,6 +85,9 @@ module DevBoxer
         },
         "ssh" => {
           "port" => ssh_port,
+        },
+        "desktop" => {
+          "enabled" => false,
         },
         "docker" => {
           "data_root" => nil,
@@ -96,6 +103,7 @@ module DevBoxer
           "user_username" => matrix_user,
           "bot_username" => nil,
         },
+        "claude" => claude_config,
         "hello_world" => {
           "port" => DEFAULT_HELLO_WORLD_PORT,
         },
@@ -128,6 +136,32 @@ module DevBoxer
       }
 
       [config, secrets]
+    end
+
+    def build_claude_config(existing)
+      output.puts
+      output.puts "Claude behavior:"
+      output.puts "  Beginner: explain more, ask before meaningful technical choices, summarize next steps."
+      output.puts "  Intermediate: concise explanations, proceed on routine choices, ask on tradeoffs."
+      output.puts "  Advanced: terse summaries, proceed with reasonable assumptions, focus on diffs/tests/blockers."
+      output.puts
+
+      level = ask_experience_level(existing)
+      config = { "experience_level" => level }
+      plugins = existing.dig("claude", "plugins")
+      config["plugins"] = plugins unless plugins.nil?
+      config
+    end
+
+    def ask_experience_level(existing)
+      existing_level = existing.dig("claude", "experience_level").to_s.downcase
+      default = EXPERIENCE_LEVELS.include?(existing_level) ? existing_level : DEFAULT_EXPERIENCE_LEVEL
+      loop do
+        level = ask("Claude user experience level", default: default).to_s.downcase
+        return level if EXPERIENCE_LEVELS.include?(level)
+
+        output.puts "Choose one of: #{EXPERIENCE_LEVELS.join(", ")}."
+      end
     end
 
     def choose_dns_setup(existing, base_domain)

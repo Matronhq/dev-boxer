@@ -51,16 +51,18 @@ class WizardTest < Minitest::Test
       assert_nil secrets.dig("cloudflare", "access", "api_token")
       assert secrets.dig("user", "rdp_password")
       assert_equal 0o600, File.stat(secrets_path).mode & 0o777
+      assert_includes wizard_output, "DEV BOXER"
       assert_includes wizard_output, "Remote Claude Code dev box setup"
       assert_includes wizard_output, "== 1. Server login =="
       assert_includes wizard_output, "== 2. Domain and DNS =="
       assert_includes wizard_output, "== 3. Cloudflare tunnel and Access =="
       assert_includes wizard_output, "== 4. Matrix user =="
-      assert_includes wizard_output, "Recommendation: Give the box its own domain"
+      assert_includes wizard_output, "can create new subdomains for projects you make"
+      assert_includes wizard_output, "Tip: We recommend giving the box its own domain."
       assert_includes wizard_output, "Cost: Low-cost domains such as .uk or .us often start around $5-6/year"
       assert_includes wizard_output, "Cloudflare zone DNS API token:"
       assert_includes wizard_output, "What: A zone-scoped Cloudflare API token for example.com."
-      assert_includes wizard_output, "future project subdomains"
+      assert_includes wizard_output, "new subdomains for projects you make"
       assert_includes wizard_output, "How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens"
       assert_includes wizard_output, "Scope: Limit the token to the example.com zone only. Do not grant access to all zones."
       assert_includes wizard_output, "Let Dev Boxer create the Cloudflare tunnel and Zero Trust Access app now?"

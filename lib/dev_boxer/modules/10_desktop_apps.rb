@@ -15,19 +15,11 @@ module DevBoxer
         "armhf" => "armv6",
       }.freeze
 
-      SHORTCUTS = [
-        ["VS Code",  "code",                  "visual-studio-code"],
-        ["Firefox",  "firefox",               "firefox"],
-        ["Chrome",   "google-chrome-stable",  "google-chrome"],
-        ["Terminal", "xfce4-terminal",        "utilities-terminal"],
-      ].freeze
-
       MOTD_PATH = "/etc/update-motd.d/60-dev-boxer".freeze
 
       def run
         section "Final setup"
         install_lazydocker
-        install_desktop_apps_if_available
         write_setup_scripts
         write_claude_md
         install_motd
@@ -42,52 +34,13 @@ module DevBoxer
       def ssh_port = config.ssh&.port || 2222
       def setup_path = File.expand_path("../../../setup.rb", __dir__)
 
-      def install_vscode
-        if shell.command_exists?("code")
-          skip "VS Code already installed"
-          return
-        end
-        info "Installing VS Code"
-        shell.sh!(
-          "curl -fsSL https://packages.microsoft.com/keys/microsoft.asc " \
-          "| gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg"
-        )
-        arch = shell.sh!("dpkg --print-architecture").strip
-        repo = "deb [arch=#{arch} signed-by=/usr/share/keyrings/microsoft.gpg] " \
-               "https://packages.microsoft.com/repos/code stable main\n"
-        shell.write_file("/etc/apt/sources.list.d/vscode.list", repo)
-        shell.apt_update
-        shell.apt_install("code")
-        ok "VS Code installed"
-      end
-
-      def install_github_desktop
-        if shell.command_exists?("github-desktop")
-          skip "GitHub Desktop already installed"
-          return
-        end
-        info "Installing GitHub Desktop"
-        shell.sh!(
-          "curl -fsSL https://apt.packages.shiftkey.dev/gpg.key " \
-          "| gpg --dearmor --yes -o /usr/share/keyrings/shiftkey-packages.gpg"
-        )
-        arch = shell.sh!("dpkg --print-architecture").strip
-        repo = "deb [arch=#{arch} signed-by=/usr/share/keyrings/shiftkey-packages.gpg] " \
-               "https://apt.packages.shiftkey.dev/ubuntu/ any main\n"
-        shell.write_file("/etc/apt/sources.list.d/shiftkey-packages.list", repo)
-        shell.apt_update
-        shell.apt_install("github-desktop")
-        ok "GitHub Desktop installed"
-      end
-
       def install_lazydocker
         if shell.command_exists?("lazydocker")
           skip "lazydocker already installed"
           return
         end
         info "Installing lazydocker"
-        # Detect arch the same way install_vscode and install_github_desktop
-        # do, then map dpkg's arch names to lazydocker's release-tag names.
+        # Map dpkg's arch names to lazydocker's release-tag names.
         # Hardcoding x86_64 broke ARM-based VPSes (e.g. Hetzner ARM, AWS Graviton).
         dpkg_arch = shell.sh!("dpkg --print-architecture").strip
         ld_arch = LAZYDOCKER_ARCH[dpkg_arch] ||
@@ -103,36 +56,6 @@ module DevBoxer
         uri = URI("https://api.github.com/repos/jesseduffield/lazydocker/releases/latest")
         resp = Net::HTTP.get(uri)
         JSON.parse(resp).fetch("tag_name").sub(/\Av/, "")
-      end
-
-      def write_desktop_shortcuts
-        desktop_dir = "#{home_dir}/Desktop"
-        FileUtils.mkdir_p(desktop_dir)
-        SHORTCUTS.each do |name, exec, icon|
-          path = "#{desktop_dir}/#{name}.desktop"
-          File.write(path, <<~ENTRY)
-            [Desktop Entry]
-            Type=Application
-            Name=#{name}
-            Exec=#{exec}
-            Icon=#{icon}
-            Terminal=false
-          ENTRY
-          File.chmod(0o755, path)
-        end
-        shell.sh!("chown -R #{username}:#{username} #{desktop_dir}")
-        ok "Desktop shortcuts created"
-      end
-
-      def install_desktop_apps_if_available
-        unless desktop_environment_installed?
-          skip "Desktop GUI apps skipped (run ~/setup-desktop to install XFCE/XRDP first)"
-          return
-        end
-
-        install_vscode
-        install_github_desktop
-        write_desktop_shortcuts
       end
 
       def desktop_environment_installed?
@@ -154,9 +77,6 @@ module DevBoxer
 
           echo "Installing optional XFCE/XRDP desktop..."
           sudo "$SETUP" --only desktop
-
-          echo "Installing desktop GUI apps and shortcuts..."
-          sudo "$SETUP" --only desktop-apps
 
           echo "Desktop setup complete."
         SH

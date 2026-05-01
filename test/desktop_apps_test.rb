@@ -20,21 +20,25 @@ class DesktopAppsTest < Minitest::Test
     assert_includes vars["USER_EXPERIENCE_GUIDANCE"], "intermediate mode"
   end
 
-  def test_setup_desktop_script_runs_desktop_then_desktop_apps
+  def test_setup_desktop_script_runs_only_desktop_module
     mod = build_module("intermediate")
 
     script = mod.send(:setup_desktop_script)
 
     assert_includes script, "--only desktop"
-    assert_includes script, "--only desktop-apps"
+    refute_includes script, "--only desktop-apps"
     assert_includes script, "Installing optional XFCE/XRDP desktop"
   end
 
-  def test_desktop_apps_are_skipped_without_desktop_environment
+  def test_final_setup_run_does_not_install_gui_apps
     recorded = []
     shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
       recorded << cmd
-      [false, "", ""]
+      if cmd.include?("command -v lazydocker")
+        [false, "", ""]
+      else
+        [true, cmd == "dpkg --print-architecture" ? "amd64\n" : "", ""]
+      end
     })
     mod = DevBoxer::Modules::DesktopApps.new(
       config: config("intermediate"),
@@ -43,7 +47,17 @@ class DesktopAppsTest < Minitest::Test
       templates_dir: File.expand_path("../templates", __dir__),
     )
 
-    mod.send(:install_desktop_apps_if_available)
+    mod.stub(:lazydocker_latest_version, "0.25.2") do
+      mod.stub(:write_setup_scripts, nil) do
+        mod.stub(:write_claude_md, nil) do
+          mod.stub(:install_motd, nil) do
+            mod.stub(:print_summary, nil) do
+              mod.run
+            end
+          end
+        end
+      end
+    end
 
     refute(recorded.any? { |cmd| cmd.include?("github-desktop") })
     refute(recorded.any? { |cmd| cmd.include?("code") })

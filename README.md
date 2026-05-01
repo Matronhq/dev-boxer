@@ -114,7 +114,7 @@ Setup runs 11 idempotent modules in order:
 |---|--------|--------------|
 | 01 | `security`     | SSH hardening, UFW firewall, fail2ban, unattended-upgrades |
 | 02 | `users`        | Linux user creation, SSH key, sudo, zsh |
-| 03 | `desktop`      | Optional XFCE4 + XRDP (run `~/setup-desktop`) |
+| 03 | `desktop`      | Optional XFCE4 + XRDP + GUI apps (run `~/setup-desktop`) |
 | 04 | `docker`       | Docker Engine + Compose |
 | 05 | `dev-tools`    | Node.js 22, Git, Python, uv, GitHub CLI |
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |

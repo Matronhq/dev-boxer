@@ -35,4 +35,23 @@ class TemplateTest < Minitest::Test
       DevBoxer::Template.render("/no/such/template", {})
     end
   end
+
+  def test_claude_md_template_is_agent_facing
+    template = File.expand_path("../templates/CLAUDE.md.template", __dir__)
+    rendered = DevBoxer::Template.render(template, {
+      "USERNAME" => "dev",
+      "SSH_PORT" => 2222,
+      "CF_HOSTNAME_MAIN" => "dev.example.com",
+      "CF_HOSTNAME_MATRIX" => "matrix.example.com",
+      "CF_HOSTNAME_VIEWER" => "viewer.example.com",
+      "CF_ZONE_NAME" => "example.com",
+      "USER_EXPERIENCE_GUIDANCE" => "The user selected intermediate mode.",
+    })
+
+    assert_includes rendered, "This file is for Claude Code, not a human connection guide."
+    assert_includes rendered, "Make new projects under `/home/dev/projects`"
+    assert_includes rendered, "Cloudflare zone: `example.com`"
+    refute_includes rendered, "Bridge Commands"
+    refute_includes rendered, "`!start"
+  end
 end

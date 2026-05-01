@@ -38,4 +38,19 @@ class ModulesRegistryTest < Minitest::Test
       assert_equal %w[alpha beta], names
     end
   end
+
+  def test_collect_subclasses_ignores_instance_singleton_classes
+    klass = Class.new(DevBoxer::ModuleBase) do
+      module_name "singleton-test"
+      module_order 99
+      def run; end
+    end
+    instance = klass.new(config: DevBoxer::Config.from_hash({}), log: DevBoxer::Log.new(io: StringIO.new, color: false))
+    def instance.stubbed_method; end
+
+    subclasses = DevBoxer::Modules.collect_subclasses
+
+    assert_includes subclasses, klass
+    refute_includes subclasses, instance.singleton_class
+  end
 end

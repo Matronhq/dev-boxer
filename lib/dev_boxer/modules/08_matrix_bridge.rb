@@ -44,11 +44,13 @@ module DevBoxer
           start_matron_server
           clone_bridge_repo
           npm_install
+          patch_bridge_setup_user
           onboard_users_if_needed
         when "external"
           info "Using external homeserver: #{config.matrix.homeserver_url}"
           clone_bridge_repo
           npm_install
+          patch_bridge_setup_user
         else
           raise "Unknown matrix.mode: #{mode.inspect} (expected bundled, external, or disabled)"
         end
@@ -126,8 +128,9 @@ module DevBoxer
       def onboard_users
         info "Onboarding Matrix bot + user (cross-signed first-login flow)"
         reg_token     = SecureRandom.hex(16)
-        bot_password  = SecureRandom.hex(16)
+        bot_password  = config.matrix&.bot_password || SecureRandom.hex(16)
         user_password = config.matrix&.user_password || SecureRandom.hex(16)
+        persist_partial_onboarding_passwords(bot_password, user_password)
 
         # open_registration writes docker-compose.override.yml — if it (or
         # the post-restart wait_for_url) raises, close_registration must
@@ -254,6 +257,25 @@ module DevBoxer
         recovery_key
       ensure
         shell.run_as_user(username, "rm -f #{creds_path}") if creds_path
+      end
+
+      def persist_partial_onboarding_passwords(bot_password, user_password)
+        raise "secrets_path not provided to runner" unless secrets_path
+
+        existing = File.exist?(secrets_path) ? (YAML.safe_load_file(secrets_path) || {}) : {}
+        merged = Config.deep_merge(existing, {
+          "matrix" => {
+            "bot_username" => bot_username,
+            "bot_password" => bot_password,
+            "user_username" => user_username,
+            "user_password" => user_password,
+            "server_domain" => server_domain,
+          },
+        })
+        FileUtils.mkdir_p(File.dirname(secrets_path))
+        body = header_for_secrets_file + merged.to_yaml.sub(/\A---\n/, "")
+        write_secret_file(secrets_path, body, mode: 0o600)
+        ok "Partial Matrix onboarding credentials persisted to #{secrets_path}"
       end
 
       def login_bot(password)
@@ -384,6 +406,26 @@ module DevBoxer
           shell.run_as_user(username, "cd #{bridge_dir} && npm install")
           ok "npm dependencies installed"
         end
+      end
+
+      def patch_bridge_setup_user
+        path = "#{bridge_dir}/setup-user.mjs"
+        return unless File.exist?(path)
+
+        source = File.read(path)
+        patched = source.sub(
+          "client.createRecoveryKeyFromPassphrase()",
+          "cryptoApi.createRecoveryKeyFromPassphrase()",
+        )
+
+        if patched == source
+          skip "Matrix user setup script already compatible"
+          return
+        end
+
+        File.write(path, patched)
+        shell.sh!("chown #{username}:#{username} #{path}")
+        ok "Matrix user setup script patched for current matrix-js-sdk"
       end
 
       def write_bridge_env

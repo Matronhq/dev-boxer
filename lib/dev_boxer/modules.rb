@@ -12,7 +12,7 @@ module DevBoxer
     end
 
     def self.collect_subclasses
-      ObjectSpace.each_object(Class).select { |c| c < DevBoxer::ModuleBase }
+      ObjectSpace.each_object(Class).select { |c| c < DevBoxer::ModuleBase && !c.singleton_class? }
     end
 
     def self.source_location_of(klass)

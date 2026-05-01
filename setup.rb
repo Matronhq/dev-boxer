@@ -31,8 +31,7 @@ def auto_update_checkout
   before = git_capture("rev-parse", "HEAD")
   return unless before
 
-  unless git_success?("fetch", "--quiet", "origin", branch) &&
-      git_success?("pull", "--ff-only", "--quiet", "origin", branch)
+  unless git_success?("pull", "--ff-only", "--quiet", "origin", branch)
     warn "Could not auto-update Dev Boxer; continuing with the current checkout."
     return
   end

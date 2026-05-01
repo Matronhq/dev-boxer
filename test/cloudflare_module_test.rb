@@ -98,6 +98,95 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_existing_dns_route_is_not_updated_when_already_correct
+    calls = []
+    log_io = StringIO.new
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      log_io: log_io,
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "zone_api_token" => "zone-token",
+        "tunnel" => {
+          "id" => "tunnel-123",
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => nil,
+          "hostname_viewer" => nil,
+        },
+      ),
+    )
+
+    api = lambda do |token:, method:, path:, query: {}, body: nil|
+      calls << { token: token, method: method, path: path, query: query, body: body }
+      return [{ "id" => "zone-123", "name" => "example.com" }] if path == "/zones"
+      if method == :get && path.end_with?("/dns_records")
+        return [{ "id" => "record-123", "content" => "tunnel-123.cfargotunnel.com", "proxied" => true }]
+      end
+      raise "unexpected API call"
+    end
+
+    mod.stub(:cloudflare_api, api) do
+      mod.send(:create_dns_routes)
+    end
+
+    assert_empty calls.select { |call| [:put, :post].include?(call[:method]) }
+    assert_includes log_io.string, "DNS route already configured: dev.example.com"
+    refute_includes log_io.string, "DNS route updated: dev.example.com"
+    refute_includes log_io.string, "DNS route created: dev.example.com"
+  end
+
+  def test_existing_dns_route_requires_confirmation_before_update
+    calls = []
+    log_io = StringIO.new
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      log_io: log_io,
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "zone_api_token" => "zone-token",
+        "tunnel" => {
+          "id" => "tunnel-123",
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => nil,
+          "hostname_viewer" => nil,
+        },
+      ),
+    )
+
+    api = lambda do |token:, method:, path:, query: {}, body: nil|
+      calls << { token: token, method: method, path: path, query: query, body: body }
+      return [{ "id" => "zone-123", "name" => "example.com" }] if path == "/zones"
+      if method == :get && path.end_with?("/dns_records")
+        return [{ "id" => "record-123", "content" => "old.example.com", "proxied" => true }]
+      end
+      { "id" => "record-123" }
+    end
+
+    mod.stub(:cloudflare_api, api) do
+      mod.stub(:confirm_dns_record_update, false) do
+        mod.send(:create_dns_routes)
+      end
+    end
+
+    assert_empty calls.select { |call| call[:method] == :put }
+    assert_includes log_io.string, "Skipped DNS route update for dev.example.com"
+    refute_includes log_io.string, "DNS route updated: dev.example.com"
+
+    calls.clear
+    mod.stub(:cloudflare_api, api) do
+      mod.stub(:confirm_dns_record_update, true) do
+        mod.send(:create_dns_routes)
+      end
+    end
+
+    update = calls.find { |call| call[:method] == :put }
+    assert_equal "/zones/zone-123/dns_records/record-123", update[:path]
+    assert_equal "tunnel-123.cfargotunnel.com", update[:body]["content"]
+    assert_includes log_io.string, "DNS route updated: dev.example.com"
+  end
+
   def test_manual_dns_prints_required_cname_records
     log_io = StringIO.new
     mod = DevBoxer::Modules::Cloudflare.new(
@@ -203,10 +292,10 @@ class CloudflareModuleTest < Minitest::Test
 
   private
 
-  def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } })
+  def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } }, log_io: StringIO.new)
     DevBoxer::Modules::Cloudflare.new(
       config: DevBoxer::Config.from_hash(config_hash),
-      log: DevBoxer::Log.new(io: StringIO.new, color: false),
+      log: DevBoxer::Log.new(io: log_io, color: false),
       shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
       templates_dir: File.expand_path("../templates", __dir__),
       config_path: config_path,

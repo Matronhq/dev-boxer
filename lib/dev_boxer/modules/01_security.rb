@@ -21,7 +21,7 @@ module DevBoxer
 
       def configure_sshd
         info "Configuring SSH (sshd restart deferred until users have keys)"
-        render_template("sshd_config", "/etc/ssh/sshd_config", "SSH_PORT" => ssh_port)
+        render_template("sshd_config", "/etc/ssh/sshd_config", { "SSH_PORT" => ssh_port })
         ok "SSH config deployed (port #{ssh_port}, key-only, no root login)"
       end
 
@@ -49,7 +49,7 @@ module DevBoxer
       def configure_fail2ban
         info "Configuring fail2ban"
         shell.apt_install("fail2ban")
-        render_template("jail.local", "/etc/fail2ban/jail.local", "SSH_PORT" => ssh_port)
+        render_template("jail.local", "/etc/fail2ban/jail.local", { "SSH_PORT" => ssh_port })
         shell.systemctl(:enable, "fail2ban")
         shell.systemctl(:restart, "fail2ban")
         ok "fail2ban configured (SSH on #{ssh_port}, 6 retries, 5-min ban)"

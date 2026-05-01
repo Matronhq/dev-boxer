@@ -56,4 +56,12 @@ class ModulesShapeTest < Minitest::Test
     names = @modules.map(&:module_name).sort
     assert_equal %w[browsers claude cloudflare desktop desktop-apps dev-tools docker hello-world matrix-bridge security users], names
   end
+
+  def test_template_vars_are_passed_as_explicit_hashes
+    Dir.glob(File.join(MODULES_DIR, "*.rb")).each do |path|
+      source = File.read(path)
+      refute_match(/render_template\([^\n]*,\s*["'][^"']+["']\s*=>/, source,
+        "#{File.basename(path)} passes template vars as keywords instead of a positional hash")
+    end
+  end
 end

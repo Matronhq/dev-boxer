@@ -199,10 +199,36 @@ module DevBoxer
         }
 
         if existing
+          if dns_record_matches?(existing, target)
+            skip "DNS route already configured: #{hostname}"
+            return
+          end
+          unless confirm_dns_record_update(hostname, existing, target)
+            warn "Skipped DNS route update for #{hostname}"
+            return
+          end
           cloudflare_api(token: zone_token, method: :put, path: "/zones/#{zone_id}/dns_records/#{existing["id"]}", body: body)
         else
           cloudflare_api(token: zone_token, method: :post, path: "/zones/#{zone_id}/dns_records", body: body)
         end
+      end
+
+      def dns_record_matches?(record, target)
+        record["content"] == target && record["proxied"] == true
+      end
+
+      def confirm_dns_record_update(hostname, record, target)
+        current = record["content"].to_s
+        proxied = record.key?("proxied") ? record["proxied"] : "unknown"
+        message = "Existing DNS record for #{hostname} points to #{current} (proxied: #{proxied}). Update it to #{target}?"
+
+        unless $stdin.tty?
+          raise "#{message} Re-run interactively to confirm, or choose manual DNS setup."
+        end
+
+        print "#{message} [y/N]: "
+        answer = $stdin.gets.to_s.strip.downcase
+        %w[y yes].include?(answer)
       end
 
       def configure_cloudflare_access

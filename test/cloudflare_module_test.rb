@@ -98,6 +98,85 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_existing_dns_route_is_not_updated_when_already_correct
+    calls = []
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "zone_api_token" => "zone-token",
+        "tunnel" => {
+          "id" => "tunnel-123",
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => nil,
+          "hostname_viewer" => nil,
+        },
+      ),
+    )
+
+    api = lambda do |token:, method:, path:, query: {}, body: nil|
+      calls << { token: token, method: method, path: path, query: query, body: body }
+      return [{ "id" => "zone-123", "name" => "example.com" }] if path == "/zones"
+      if method == :get && path.end_with?("/dns_records")
+        return [{ "id" => "record-123", "content" => "tunnel-123.cfargotunnel.com", "proxied" => true }]
+      end
+      raise "unexpected API call"
+    end
+
+    mod.stub(:cloudflare_api, api) do
+      mod.send(:create_dns_routes)
+    end
+
+    assert_empty calls.select { |call| [:put, :post].include?(call[:method]) }
+  end
+
+  def test_existing_dns_route_requires_confirmation_before_update
+    calls = []
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "zone_api_token" => "zone-token",
+        "tunnel" => {
+          "id" => "tunnel-123",
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => nil,
+          "hostname_viewer" => nil,
+        },
+      ),
+    )
+
+    api = lambda do |token:, method:, path:, query: {}, body: nil|
+      calls << { token: token, method: method, path: path, query: query, body: body }
+      return [{ "id" => "zone-123", "name" => "example.com" }] if path == "/zones"
+      if method == :get && path.end_with?("/dns_records")
+        return [{ "id" => "record-123", "content" => "old.example.com", "proxied" => true }]
+      end
+      { "id" => "record-123" }
+    end
+
+    mod.stub(:cloudflare_api, api) do
+      mod.stub(:confirm_dns_record_update, false) do
+        mod.send(:create_dns_routes)
+      end
+    end
+
+    assert_empty calls.select { |call| call[:method] == :put }
+
+    calls.clear
+    mod.stub(:cloudflare_api, api) do
+      mod.stub(:confirm_dns_record_update, true) do
+        mod.send(:create_dns_routes)
+      end
+    end
+
+    update = calls.find { |call| call[:method] == :put }
+    assert_equal "/zones/zone-123/dns_records/record-123", update[:path]
+    assert_equal "tunnel-123.cfargotunnel.com", update[:body]["content"]
+  end
+
   def test_manual_dns_prints_required_cname_records
     log_io = StringIO.new
     mod = DevBoxer::Modules::Cloudflare.new(

@@ -133,8 +133,16 @@ module DevBoxer
         zone_id = cloudflare_zone_id
         target = "#{current_tunnel_id}.cfargotunnel.com"
         configured_hostnames.each do |host|
-          upsert_tunnel_dns_record(zone_id, host, target)
-          ok "DNS route: #{host} → tunnel"
+          case upsert_tunnel_dns_record(zone_id, host, target)
+          when :created
+            ok "DNS route created: #{host} → tunnel"
+          when :updated
+            ok "DNS route updated: #{host} → tunnel"
+          when :unchanged
+            skip "DNS route already configured: #{host}"
+          when :skipped
+            warn "Skipped DNS route update for #{host}"
+          end
         end
       end
 
@@ -199,17 +207,14 @@ module DevBoxer
         }
 
         if existing
-          if dns_record_matches?(existing, target)
-            skip "DNS route already configured: #{hostname}"
-            return
-          end
-          unless confirm_dns_record_update(hostname, existing, target)
-            warn "Skipped DNS route update for #{hostname}"
-            return
-          end
+          return :unchanged if dns_record_matches?(existing, target)
+          return :skipped unless confirm_dns_record_update(hostname, existing, target)
+
           cloudflare_api(token: zone_token, method: :put, path: "/zones/#{zone_id}/dns_records/#{existing["id"]}", body: body)
+          :updated
         else
           cloudflare_api(token: zone_token, method: :post, path: "/zones/#{zone_id}/dns_records", body: body)
+          :created
         end
       end
 

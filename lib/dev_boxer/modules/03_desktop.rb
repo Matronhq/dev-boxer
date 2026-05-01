@@ -127,7 +127,14 @@ module DevBoxer
       end
 
       def first_error_line(error)
-        error.message.lines.map(&:strip).find { |line| !line.empty? } || error.class.name
+        lines = error.message.lines.map(&:strip)
+        stderr_index = lines.index("--- stderr ---")
+        if stderr_index
+          stderr_line = lines[(stderr_index + 1)..]&.find { |line| !line.empty? }
+          return stderr_line if stderr_line
+        end
+
+        lines.find { |line| !line.empty? && !line.start_with?("command failed:") } || error.class.name
       end
 
       def write_desktop_shortcuts

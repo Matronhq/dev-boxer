@@ -49,6 +49,8 @@ class DesktopModuleTest < Minitest::Test
     mod.send(:install_github_desktop)
 
     assert_includes output.string, "GitHub Desktop install skipped"
+    assert_includes output.string, "curl: (60) SSL certificate problem"
+    refute_includes output.string, "command failed:"
   end
 
   private

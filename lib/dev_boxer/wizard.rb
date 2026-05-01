@@ -188,16 +188,10 @@ module DevBoxer
     end
 
     def print_welcome
-      banner = <<~'BANNER'
-         __  __       _                   ____
-        |  \/  | __ _| |_ _ __ ___  _ __ | __ )  _____  __
-        | |\/| |/ _` | __| '__/ _ \| '_ \|  _ \ / _ \ \/ /
-        | |  | | (_| | |_| | | (_) | | | | |_) | (_) >  <
-        |_|  |_|\__,_|\__|_|  \___/|_| |_|____/ \___/_/\_\
-                         Dev Boxer
-      BANNER
-      output.puts color(banner, "36")
-      output.puts color("Remote Claude Code dev box setup", "35")
+      output.puts color("  +------------------------------------------------+", "36")
+      output.puts color("  |                  DEV BOXER                     |", "35")
+      output.puts color("  |       Remote Claude Code dev box setup         |", "36")
+      output.puts color("  +------------------------------------------------+", "36")
       output.puts "Press Enter to accept the default shown in brackets."
       output.puts
     end
@@ -240,8 +234,8 @@ module DevBoxer
       output.puts
       output.puts "Base domain:"
       output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
-      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, and viewer.<domain>."
-      output.puts "  Recommendation: Give the box its own domain so project subdomains stay isolated from your main sites."
+      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, viewer.<domain>, and can create new subdomains for projects you make."
+      output.puts "  Tip: We recommend giving the box its own domain."
       output.puts "  Cost: Low-cost domains such as .uk or .us often start around $5-6/year, depending on current registrar pricing."
       output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
       output.puts "  Link: https://www.cloudflare.com/products/registrar/"
@@ -252,7 +246,7 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare zone DNS API token:"
       output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
-      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, and future project subdomains."
+      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, and new subdomains for projects you make."
       output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
       output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
       output.puts

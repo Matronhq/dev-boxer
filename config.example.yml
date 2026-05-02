@@ -37,6 +37,26 @@ matrix:
   # — gitignored, mode 0600 — NOT here. The recovery key is written to
   # ~/recovery-key.txt with a "delete after copying" header.
 
+  # When mode == external and you used `dev-boxer add-bot` on another
+  # box, the wizard places the imported bot creds here. The bridge's
+  # first-start bootstrap consumes them, then writes back bot_access_token.
+  # bot_user_id:      "@box4:matrix.example.com"
+  # bot_password:     "..."
+  # bot_recovery_key: "..."
+  # bridge_room_id:   "!abc:matrix.example.com"
+
+  # On a homeserver-host box, `dev-boxer add-bot <name>` records each
+  # issued bot here so `--reprint` can regenerate the blob without
+  # touching the homeserver. No bot_access_token is stored — the receiving
+  # box mints its own.
+  # bots:
+  #   box4:
+  #     bot_user_id:      "@box4:matrix.example.com"
+  #     bot_password:     "..."
+  #     bot_recovery_key: "..."
+  #     bridge_room_id:   "!abc:matrix.example.com"
+  #     created_at:       2026-05-02T12:34:56Z
+
 hello_world:
   port: 9810             # deploys a localhost:port "hello world" smoke-test service
 

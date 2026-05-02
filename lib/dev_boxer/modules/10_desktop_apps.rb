@@ -170,11 +170,12 @@ module DevBoxer
       end
 
       def print_summary
+        ip = server_ip
         info ""
         info "=== Connection details ==="
-        info "SSH:  ssh #{username}@<server-ip> -p #{ssh_port}"
+        info "SSH:  ssh #{username}@#{ip} -p #{ssh_port}"
         if desktop_environment_installed?
-          info "RDP:  ssh -L 3389:localhost:3389 #{username}@<server-ip> -p #{ssh_port}"
+          info "RDP:  ssh -L 3389:localhost:3389 #{username}@#{ip} -p #{ssh_port}"
         else
           info "Desktop: optional; run ~/setup-desktop after SSH login"
         end
@@ -192,6 +193,15 @@ module DevBoxer
         else
           info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
         end
+      end
+
+      # Best-effort: take the first non-loopback IPv4/v6 from `hostname -I`.
+      # Falls back to the placeholder `<server-ip>` if detection fails (e.g.
+      # the binary is missing or returns no addresses) — better an obvious
+      # placeholder than misleading output.
+      def server_ip
+        out = shell.sh!("hostname -I").strip rescue ""
+        out.split(/\s+/).reject(&:empty?).first || "<server-ip>"
       end
     end
   end

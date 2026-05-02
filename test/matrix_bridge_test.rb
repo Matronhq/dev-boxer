@@ -35,6 +35,58 @@ class MatrixBridgeTest < Minitest::Test
     end
   end
 
+  def test_matrix_registration_helper_returns_memoised_service_with_module_dependencies
+    Dir.mktmpdir do |dir|
+      mod = build_module(secrets_path: File.join(dir, "secrets.yml"))
+
+      reg = mod.send(:matrix_registration)
+      assert_kind_of DevBoxer::MatrixRegistration, reg
+      assert_same reg, mod.send(:matrix_registration), "matrix_registration should be memoised"
+    end
+  end
+
+  def test_bridge_env_vars_in_external_mode_include_imported_creds
+    Dir.mktmpdir do |dir|
+      config = DevBoxer::Config.from_hash(
+        "user" => { "name" => "dev" },
+        "matrix" => {
+          "mode" => "external",
+          "homeserver_url" => "https://matrix.example.com",
+          "server_domain" => "matrix.example.com",
+          "user_username" => "dev",
+          "bot_username" => "box4",
+          "bot_user_id" => "@box4:matrix.example.com",
+          "bot_password" => "pw",
+          "bot_recovery_key" => "EsTm 4uK4",
+          "bridge_room_id" => "!abc:matrix.example.com",
+        },
+      )
+      mod = DevBoxer::Modules::MatrixBridge.new(
+        config: config,
+        log: DevBoxer::Log.new(io: StringIO.new, color: false),
+        shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
+        templates_dir: File.expand_path("../templates", __dir__),
+        secrets_path: File.join(dir, "secrets.yml"),
+      )
+
+      vars = mod.send(:bridge_env_vars)
+
+      assert_equal "@box4:matrix.example.com", vars["MATRIX_BOT_USER_ID"]
+      assert_equal "pw", vars["MATRIX_BOT_PASSWORD"]
+      assert_equal "EsTm 4uK4", vars["MATRIX_BOT_RECOVERY_KEY"]
+      assert_equal "!abc:matrix.example.com", vars["MATRIX_BRIDGE_ROOM_ID"]
+    end
+  end
+
+  def test_bridge_env_vars_in_bundled_mode_does_not_include_password_or_recovery
+    Dir.mktmpdir do |dir|
+      mod = build_module(secrets_path: File.join(dir, "secrets.yml"))
+      vars = mod.send(:bridge_env_vars)
+      assert_nil vars["MATRIX_BOT_PASSWORD"]
+      assert_nil vars["MATRIX_BOT_RECOVERY_KEY"]
+    end
+  end
+
   private
 
   def build_module(secrets_path:)

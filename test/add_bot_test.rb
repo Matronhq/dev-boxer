@@ -170,6 +170,47 @@ class AddBotTest < Minitest::Test
     end
   end
 
+  def test_partial_record_does_not_block_re_run
+    Dir.mktmpdir do |dir|
+      secrets_path = File.join(dir, "secrets.yml")
+      # Simulate a partial-persist crash: bot_user_id + bot_password present,
+      # bot_recovery_key + bridge_room_id absent.
+      File.write(secrets_path, {
+        "matrix" => {
+          "bots" => {
+            "box4" => {
+              "bot_user_id"  => "@box4:matrix.example.com",
+              "bot_password" => "old-pw",
+              "created_at"   => "2026-05-02T12:34:56Z",
+            },
+          },
+        },
+      }.to_yaml)
+      File.chmod(0o600, secrets_path)
+
+      events = []
+      registration = Minitest::Mock.new
+      registration.expect(:open, nil) { |_token| events << :open; true }
+      registration.expect(:register_bot, true) { |**_| events << :register; true }
+      registration.expect(:close, nil) { events << :close; true }
+
+      run_mjs = ->(args) { File.write(args[:credentials_file], "bot_recovery_key='r'\nbridge_room_id='!a:m'\n") }
+
+      blob = DevBoxer::AddBot.new(
+        name: "box4",
+        **build_deps(secrets_path: secrets_path,
+                     registration: registration,
+                     run_mjs: run_mjs)
+      ).run
+
+      decoded = DevBoxer::CredentialsBlob.decode(blob)
+      assert_equal "r", decoded["bot_recovery_key"]
+      assert_equal "!a:m", decoded["bridge_room_id"]
+      assert_equal [:open, :register, :close], events
+      registration.verify
+    end
+  end
+
   private
 
   def build_deps(secrets_path: nil, matrix_mode: "bundled", registration: nil, run_mjs: nil)

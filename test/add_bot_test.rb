@@ -142,6 +142,34 @@ class AddBotTest < Minitest::Test
     end
   end
 
+  def test_persist_full_record_preserves_created_at_from_partial_persist
+    Dir.mktmpdir do |dir|
+      secrets_path = File.join(dir, "secrets.yml")
+      captured_partial_created_at = nil
+      registration = Minitest::Mock.new
+      registration.expect(:open, nil) do |_token|
+        secrets = YAML.safe_load_file(secrets_path)
+        captured_partial_created_at = secrets.dig("matrix", "bots", "box4", "created_at")
+        true
+      end
+      registration.expect(:register_bot, true) { |**_| true }
+      registration.expect(:close, nil) { true }
+
+      run_mjs = ->(args) { File.write(args[:credentials_file], "bot_recovery_key='r'\nbridge_room_id='!a:m'\n") }
+
+      DevBoxer::AddBot.new(
+        name: "box4",
+        **build_deps(secrets_path: secrets_path,
+                     registration: registration,
+                     run_mjs: run_mjs)
+      ).run
+
+      final = YAML.safe_load_file(secrets_path)
+      assert_equal captured_partial_created_at, final.dig("matrix", "bots", "box4", "created_at")
+      registration.verify
+    end
+  end
+
   private
 
   def build_deps(secrets_path: nil, matrix_mode: "bundled", registration: nil, run_mjs: nil)

@@ -114,12 +114,13 @@ module DevBoxer
     end
 
     def persist_full_bot_record(bot_password, mjs_output)
+      existing = existing_bot_record || {}
       record = {
         "bot_user_id"      => bot_user_id,
         "bot_password"     => bot_password,
         "bot_recovery_key" => mjs_output.fetch("bot_recovery_key"),
         "bridge_room_id"   => mjs_output.fetch("bridge_room_id"),
-        "created_at"       => Time.now.utc.iso8601,
+        "created_at"       => existing["created_at"] || Time.now.utc.iso8601,
       }
       Config.merge_into_file(@secrets_path, {
         "matrix" => { "bots" => { @name.to_s => record } },
@@ -156,16 +157,19 @@ module DevBoxer
 
     def default_run_mjs(args)
       bridge_dir = @bridge_dir || BRIDGE_DIR_DEFAULT.call(config.user.name)
-      Shell.new.run_as_user(config.user.name, [
+      env_prefix = [
         "MATRIX_HOMESERVER_URL=#{Shellwords.escape(args[:homeserver_url])}",
         "REG_TOKEN=#{Shellwords.escape(args[:reg_token])}",
+      ].join(" ")
+      cmd_parts = [
         "node",
         Shellwords.escape("#{bridge_dir}/add-bot.mjs"),
         Shellwords.escape(args[:bot_username]),
         "--password", Shellwords.escape(args[:bot_password]),
-        "--user", Shellwords.escape(args[:user_id]),
+        "--user",     Shellwords.escape(args[:user_id]),
         "--credentials-file", Shellwords.escape(args[:credentials_file]),
-      ].join(" "))
+      ]
+      Shell.new.run_as_user(config.user.name, "#{env_prefix} #{cmd_parts.join(' ')}")
     end
   end
 end

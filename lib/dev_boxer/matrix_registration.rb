@@ -1,7 +1,5 @@
-require "fileutils"
 require "json"
 require "net/http"
-require "shellwords"
 require "uri"
 
 module DevBoxer

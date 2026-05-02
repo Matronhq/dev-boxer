@@ -35,6 +35,16 @@ class MatrixBridgeTest < Minitest::Test
     end
   end
 
+  def test_matrix_registration_helper_returns_memoised_service_with_module_dependencies
+    Dir.mktmpdir do |dir|
+      mod = build_module(secrets_path: File.join(dir, "secrets.yml"))
+
+      reg = mod.send(:matrix_registration)
+      assert_kind_of DevBoxer::MatrixRegistration, reg
+      assert_same reg, mod.send(:matrix_registration), "matrix_registration should be memoised"
+    end
+  end
+
   private
 
   def build_module(secrets_path:)

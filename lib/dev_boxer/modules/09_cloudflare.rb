@@ -44,9 +44,7 @@ module DevBoxer
       def tunnel_hostname = config.cloudflare&.tunnel&.hostname
       def hostname_matrix = config.cloudflare&.tunnel&.hostname_matrix
       def hostname_viewer = config.cloudflare&.tunnel&.hostname_viewer
-      def hostname_hello
-        config.cloudflare&.tunnel&.hostname_hello || (zone_name.to_s.empty? ? nil : "hello.#{zone_name}")
-      end
+      def hostname_hello = cloudflare_hello_hostname
       def config_managed_locally? = config.cloudflare&.tunnel&.config_managed_locally
       def access_config = config.cloudflare&.access
       def access_enabled? = access_config&.enabled == true

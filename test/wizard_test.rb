@@ -42,6 +42,7 @@ class WizardTest < Minitest::Test
       assert_equal "dev.example.com", config.dig("cloudflare", "tunnel", "hostname")
       assert_equal "matrix.example.com", config.dig("cloudflare", "tunnel", "hostname_matrix")
       assert_equal "viewer.example.com", config.dig("cloudflare", "tunnel", "hostname_viewer")
+      assert_equal "hello.example.com", config.dig("cloudflare", "tunnel", "hostname_hello")
       assert_equal false, config.dig("cloudflare", "dns", "create_manually")
       assert_equal false, config.dig("cloudflare", "tunnel", "create_manually")
       assert_equal true, config.dig("cloudflare", "access", "enabled")
@@ -67,6 +68,7 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "Beginner: explain more"
       assert_includes wizard_output, "Intermediate: concise explanations"
       assert_includes wizard_output, "Advanced: terse summaries"
+      assert_includes wizard_output, "hello.<domain>"
       assert_includes wizard_output, "can create new subdomains for projects you make"
       assert_includes wizard_output, "Tip: We recommend giving the box its own domain."
       assert_includes wizard_output, "Cost: Low-cost domains such as .uk or .us often start around $5-6/year"
@@ -138,6 +140,7 @@ class WizardTest < Minitest::Test
       assert_nil secrets.dig("cloudflare", "zone_api_token")
       assert_includes output.string, "Manual DNS selected."
       assert_includes output.string, "Dev Boxer will not store a DNS API token."
+      assert_includes output.string, "hello.example.com"
       assert_includes output.string, "create any future project subdomains yourself"
       assert_includes output.string, "Cloudflare Access will be manual because DNS is manual."
       assert_includes output.string, "Let Dev Boxer create the Cloudflare tunnel now?"
@@ -169,6 +172,7 @@ class WizardTest < Minitest::Test
           "hostname" => "dev.example.com",
           "hostname_matrix" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => "hello.example.com",
           "create_manually" => false,
         },
       },

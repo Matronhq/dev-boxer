@@ -35,7 +35,7 @@ Fill in:
 |-------|-------|
 | **Application name** | `dev-box` (or anything descriptive) |
 | **Session duration** | `24 hours` |
-| **Domain** | Add the browser-facing tunnel hostnames, e.g. `dev.yourdomain.com` and `viewer.yourdomain.com` |
+| **Domain** | Add the browser-facing tunnel hostnames, e.g. `dev.yourdomain.com`, `viewer.yourdomain.com`, and `hello.yourdomain.com` |
 
 For each additional hostname, click **Add domain** and add the next one. All protected hostnames can share one application. Leave `matrix.yourdomain.com` out of the application so Matrix clients can connect normally.
 

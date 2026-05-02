@@ -268,6 +268,7 @@ class ConfigTest < Minitest::Test
           "hostname" => "dev.example.com",
           "hostname_matrix" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => "hello.example.com",
           "create_manually" => false,
         },
       },

@@ -206,6 +206,10 @@ class AddBotTest < Minitest::Test
       decoded = DevBoxer::CredentialsBlob.decode(blob)
       assert_equal "r", decoded["bot_recovery_key"]
       assert_equal "!a:m", decoded["bridge_room_id"]
+      # Critical: re-run must reuse the original password, not mint a new one.
+      final = YAML.safe_load_file(secrets_path)
+      assert_equal "old-pw", final.dig("matrix", "bots", "box4", "bot_password"),
+        "re-run with partial record must reuse the persisted password (the bot is already registered with it)"
       assert_equal [:open, :register, :close], events
       registration.verify
     end

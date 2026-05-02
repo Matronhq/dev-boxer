@@ -2,6 +2,7 @@ require "fileutils"
 require "securerandom"
 require "shellwords"
 require "time"
+require "tmpdir"
 require "yaml"
 require_relative "credentials_blob"
 require_relative "matrix_registration"
@@ -45,7 +46,7 @@ module DevBoxer
       persist_partial_bot_record(bot_password) unless partial
 
       reg_token = SecureRandom.hex(16)
-      mjs_creds_path = "/dev/shm/dev-boxer-add-bot-#{SecureRandom.hex(8)}"
+      mjs_creds_path = mjs_credentials_path
 
       begin
         registration.open(reg_token)
@@ -96,6 +97,11 @@ module DevBoxer
         shell: Shell.new,
         log: log,
       )
+    end
+
+    def mjs_credentials_path
+      dir = Dir.exist?("/dev/shm") ? "/dev/shm" : Dir.tmpdir
+      File.join(dir, "dev-boxer-add-bot-#{SecureRandom.hex(8)}")
     end
 
     def existing_bot_record

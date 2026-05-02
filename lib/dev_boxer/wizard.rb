@@ -146,6 +146,7 @@ module DevBoxer
             "hostname" => "dev.#{base_domain}",
             "hostname_matrix" => "matrix.#{base_domain}",
             "hostname_viewer" => "viewer.#{base_domain}",
+            "hostname_hello" => "hello.#{base_domain}",
             "create_manually" => manual_tunnel,
             "config_managed_locally" => false,
           }.compact,
@@ -344,7 +345,7 @@ module DevBoxer
       output.puts
       output.puts "Base domain:"
       output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
-      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, viewer.<domain>, and can create new subdomains for projects you make."
+      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, viewer.<domain>, hello.<domain>, and can create new subdomains for projects you make."
       output.puts "  Tip: We recommend giving the box its own domain."
       output.puts "  Cost: Low-cost domains such as .uk or .us often start around $5-6/year, depending on current registrar pricing."
       output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
@@ -356,7 +357,7 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare zone DNS API token:"
       output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
-      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, and new subdomains for projects you make."
+      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, hello, and new subdomains for projects you make."
       output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
       output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
       output.puts "  Alternative: Choose no below if you prefer to create each required subdomain manually."
@@ -371,6 +372,7 @@ module DevBoxer
       output.puts "    - dev.#{base_domain}"
       output.puts "    - matrix.#{base_domain}"
       output.puts "    - viewer.#{base_domain}"
+      output.puts "    - hello.#{base_domain}"
       output.puts "  Point each record at the tunnel target Dev Boxer prints, usually <TunnelID>.cfargotunnel.com."
       output.puts "  You will also need to create any future project subdomains yourself."
       output.puts
@@ -380,7 +382,7 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare Access will be manual because DNS is manual."
       output.puts "  Dev Boxer normally derives the Cloudflare account from the zone DNS token."
-      output.puts "  Without that token, create the Access app manually later if you want browser SSO for dev/viewer."
+      output.puts "  Without that token, create the Access app manually later if you want browser SSO for dev/viewer/hello."
       output.puts
     end
 
@@ -388,8 +390,8 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare automation:"
       output.puts "  What: Dev Boxer can create one Cloudflare Tunnel and one Zero Trust Access app."
-      output.puts "  Why: The tunnel exposes dev.<domain>, matrix.<domain>, and viewer.<domain> without opening inbound ports."
-      output.puts "       Access protects dev/viewer in the browser, while matrix stays outside Access so Matrix clients work normally."
+      output.puts "  Why: The tunnel exposes dev.<domain>, matrix.<domain>, viewer.<domain>, and hello.<domain> without opening inbound ports."
+      output.puts "       Access protects dev/viewer/hello in the browser, while matrix stays outside Access so Matrix clients work normally."
       output.puts "  Manual option: If you prefer, choose no. Dev Boxer will pause later with the exact cloudflared tunnel command, then ask for the TunnelID."
       output.puts "                 You can create the Access app manually after setup using docs/cloudflare-access.md."
       output.puts
@@ -400,7 +402,7 @@ module DevBoxer
       output.puts "Manual Cloudflare setup selected."
       output.puts "  Tunnel: Dev Boxer will install cloudflared, print a one-time tunnel creation command, and ask you to paste the resulting TunnelID."
       output.puts "  Login: The manual tunnel command starts with cloudflared tunnel login, which opens a Cloudflare authorization URL."
-      output.puts "  Access: Dev Boxer will not create a Zero Trust Access app. Protect dev/viewer manually later if you want browser SSO."
+      output.puts "  Access: Dev Boxer will not create a Zero Trust Access app. Protect dev/viewer/hello manually later if you want browser SSO."
       output.puts
     end
 

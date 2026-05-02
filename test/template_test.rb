@@ -44,13 +44,32 @@ class TemplateTest < Minitest::Test
       "CF_HOSTNAME_MAIN" => "dev.example.com",
       "CF_HOSTNAME_MATRIX" => "matrix.example.com",
       "CF_HOSTNAME_VIEWER" => "viewer.example.com",
+      "CF_HOSTNAME_HELLO" => "hello.example.com",
       "CF_ZONE_NAME" => "example.com",
       "USER_EXPERIENCE_GUIDANCE" => "The user selected intermediate mode.",
     })
 
-    assert_includes rendered, "This file is for Claude Code, not a human connection guide."
+    assert_includes rendered, "Use this file as local context for coding sessions on this machine."
     assert_includes rendered, "Make new projects under `/home/dev/projects`"
+    assert_includes rendered, "create a private GitHub repository with `gh` as early as practical"
+    assert_includes rendered, "When the user asks for a new web-based project"
+    assert_includes rendered, "Share the live URL with the user as soon as there is a minimal working page"
+    assert_includes rendered, "When the user asks you to clone or work on an existing project"
+    assert_includes rendered, "If it runs a local web server, start it on a stable local port"
+    assert_includes rendered, "Commit changes on a branch, push that branch when useful, and open a pull request"
+    assert_includes rendered, "For new GitHub projects, set up lightweight CI with GitHub Actions"
+    assert_includes rendered, "Run the relevant test and lint commands before reporting work as complete"
+    assert_includes rendered, "On the first prompt in a fresh session outside an existing project directory"
+    assert_includes rendered, "create a new web project with a live private URL or work on an existing repository"
+    assert_includes rendered, "If the session starts inside a project/repo, skip this opener"
+    assert_includes rendered, "Hello-world smoke test hostname: `hello.example.com`"
     assert_includes rendered, "Cloudflare zone: `example.com`"
+    assert_includes rendered, "create a proxied CNAME to the existing Cloudflare Tunnel target"
+    assert_includes rendered, "confirmation from the user during a Matrix bridge session"
+    assert_includes rendered, "## Dev Boxer Services"
+    assert_includes rendered, "dev-boxer-hello-world.service"
+    assert_includes rendered, "Check service status:"
+    assert_includes rendered, "Follow service logs:"
     refute_includes rendered, "Bridge Commands"
     refute_includes rendered, "`!start"
   end

@@ -15,7 +15,7 @@ module DevBoxer
       bridge_room_id
     ].freeze
 
-    USER_ID_RE = /\A@(?<localpart>[^:]+):(?<domain>.+)\z/
+    USER_ID_RE = /\A@[^:]+:(?<domain>.+)\z/
 
     def self.encode(hash)
       missing = REQUIRED_KEYS - hash.keys

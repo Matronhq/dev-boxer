@@ -57,8 +57,8 @@ class AddBotTest < Minitest::Test
       events = []
       registration = Minitest::Mock.new
       registration.expect(:open, nil) { |_token| events << :open; true }
-      registration.expect(:register_bot, true) { |username:, password:, reg_token:|
-        events << [:register, username]
+      registration.expect(:register_bot, true) { |args|
+        events << [:register, args[:username]]
         true
       }
       registration.expect(:close, nil) { events << :close; true }
@@ -94,7 +94,7 @@ class AddBotTest < Minitest::Test
       events = []
       registration = Minitest::Mock.new
       registration.expect(:open, nil) { |_token| events << :open; true }
-      registration.expect(:register_bot, true) { |username:, password:, reg_token:|
+      registration.expect(:register_bot, true) { |_args|
         events << :register; true
       }
       registration.expect(:close, nil) { events << :close; true }

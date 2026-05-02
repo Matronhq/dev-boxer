@@ -349,6 +349,35 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_create_tunnel_honors_manual_tunnel_flag_even_with_setup_token
+    Dir.mktmpdir do |dir|
+      mod = build_cloudflare_module(
+        config_path: File.join(dir, "config.yml"),
+        secrets_path: File.join(dir, "secrets.yml"),
+        config_hash: cloudflare_config(
+          "api_token" => "setup-token",
+          "tunnel" => {
+            "id" => nil,
+            "hostname" => "dev.example.com",
+            "create_manually" => true,
+          },
+        ),
+      )
+      prompted = false
+      api = ->(**_args) { raise "Cloudflare API should not be called for manual tunnel setup" }
+
+      mod.stub(:credentials_path, File.join(dir, "cloudflared", "credentials.json")) do
+        mod.stub(:cloudflare_api, api) do
+          mod.stub(:prompt_for_manual_tunnel_setup, -> { prompted = true }) do
+            mod.send(:create_tunnel)
+          end
+        end
+      end
+
+      assert prompted
+    end
+  end
+
   private
 
   def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } }, log_io: StringIO.new, shell: nil)

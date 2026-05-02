@@ -40,6 +40,7 @@ module DevBoxer
       def zone_token = config.cloudflare&.zone_api_token
       def zone_name = config.cloudflare&.zone_name
       def dns_managed_manually? = config.cloudflare&.dns&.create_manually == true
+      def tunnel_managed_manually? = config.cloudflare&.tunnel&.create_manually == true
       def tunnel_id = config.cloudflare&.tunnel&.id
       def tunnel_hostname = config.cloudflare&.tunnel&.hostname
       def hostname_matrix = config.cloudflare&.tunnel&.hostname_matrix
@@ -78,6 +79,11 @@ module DevBoxer
 
         if tunnel_id
           skip "Tunnel already exists (id: #{tunnel_id})"
+          return
+        end
+
+        if tunnel_managed_manually?
+          prompt_for_manual_tunnel_setup
           return
         end
 
@@ -121,7 +127,12 @@ module DevBoxer
 
       def write_tunnel_credentials(credentials)
         FileUtils.mkdir_p(File.dirname(credentials_path))
-        File.write(credentials_path, JSON.pretty_generate(credentials) + "\n")
+        old_umask = File.umask(0o077)
+        begin
+          File.write(credentials_path, JSON.pretty_generate(credentials) + "\n")
+        ensure
+          File.umask(old_umask)
+        end
         File.chmod(0o600, credentials_path)
       end
 

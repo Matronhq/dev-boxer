@@ -27,7 +27,8 @@ class CredentialsBlobTest < Minitest::Test
 
   def test_decode_rejects_missing_prefix
     body = DevBoxer::CredentialsBlob.encode(REQUIRED).split(":", 2)[1]
-    assert_raises(DevBoxer::CredentialsBlob::Invalid) { DevBoxer::CredentialsBlob.decode(body) }
+    err = assert_raises(DevBoxer::CredentialsBlob::Invalid) { DevBoxer::CredentialsBlob.decode(body) }
+    assert_match(/prefix/i, err.message)
   end
 
   def test_decode_rejects_malformed_base64
@@ -35,9 +36,7 @@ class CredentialsBlobTest < Minitest::Test
   end
 
   def test_decode_rejects_missing_required_key
-    require "base64"
-    require "json"
-    partial = CredentialsBlobTest::REQUIRED.reject { |k, _| k == "bot_password" }
+    partial = REQUIRED.reject { |k, _| k == "bot_password" }
     encoded = "db1:" + Base64.strict_encode64(JSON.dump(partial))
     err = assert_raises(DevBoxer::CredentialsBlob::Invalid) { DevBoxer::CredentialsBlob.decode(encoded) }
     assert_match(/bot_password/, err.message)

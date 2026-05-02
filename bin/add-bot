@@ -1,0 +1,58 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+
+ROOT = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift(File.join(ROOT, "lib"))
+
+require "dev_boxer"
+require "dev_boxer/add_bot"
+
+DEFAULT_CONFIG = File.join(ROOT, "config.yml")
+
+options = { config: DEFAULT_CONFIG, reprint: false }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: bin/add-bot <name> [options]"
+  opts.on("--config PATH", "Path to config.yml (default: ./config.yml)") { |v| options[:config] = v }
+  opts.on("--reprint", "Re-print the credentials blob for an existing bot") { options[:reprint] = true }
+  opts.on("-h", "--help", "Show this help") { puts opts; exit 0 }
+end
+
+begin
+  parser.parse!
+rescue OptionParser::InvalidOption, OptionParser::MissingArgument => e
+  warn e.message
+  warn parser
+  exit 2
+end
+
+name = ARGV.shift
+if name.nil? || name.empty?
+  warn "name is required (e.g. `bin/add-bot box4`)"
+  warn parser
+  exit 2
+end
+
+config = DevBoxer::Config.load(options[:config])
+log = DevBoxer::Log.new
+
+begin
+  blob = DevBoxer::AddBot.new(
+    name: name,
+    config: config,
+    log: log,
+    secrets_path: DevBoxer::Config.secrets_path_for(options[:config]),
+    reprint: options[:reprint],
+  ).run
+
+  puts
+  puts "=" * 60
+  puts "  Paste this blob into the installer on #{name}:"
+  puts "=" * 60
+  puts blob
+  puts "=" * 60
+rescue DevBoxer::AddBot::UsageError, DevBoxer::AddBot::AlreadyExists => e
+  warn e.message
+  exit 2
+end

@@ -87,6 +87,16 @@ class MatrixBridgeTest < Minitest::Test
     end
   end
 
+  def test_matrix_credentials_path_uses_available_temp_location
+    Dir.mktmpdir do |dir|
+      mod = build_module(secrets_path: File.join(dir, "secrets.yml"))
+      path = mod.send(:matrix_credentials_path)
+
+      assert_match(/dev-boxer-matrix-/, File.basename(path))
+      assert_equal Dir.exist?("/dev/shm") ? "/dev/shm" : Dir.tmpdir, File.dirname(path)
+    end
+  end
+
   private
 
   def build_module(secrets_path:)

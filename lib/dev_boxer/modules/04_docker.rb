@@ -40,12 +40,13 @@ module DevBoxer
         end
       end
 
-      # Coerce to string: YAML parses bare numbers as Integer (`interval: 2`)
-      # and Integer#sub doesn't exist. Defensive .to_s on both lets users write
-      # either `interval: 2h` (a String) or `interval: 2` (an Integer that
-      # becomes "2" → still no unit, but at least we don't crash).
-      def prune_interval = (config.docker&.prune&.interval || "2h").to_s
-      def prune_until    = (config.docker&.prune&.keep_until || "4h").to_s
+      def prune_interval = duration_with_default_hours(config.docker&.prune&.interval, "2h")
+      def prune_until    = duration_with_default_hours(config.docker&.prune&.keep_until, "4h")
+
+      def duration_with_default_hours(value, default)
+        duration = (value || default).to_s
+        duration.match?(/\A\d+\z/) ? "#{duration}h" : duration
+      end
 
       def install_docker
         if shell.command_exists?("docker")

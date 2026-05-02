@@ -16,6 +16,7 @@ class WizardTest < Minitest::Test
         "yes",
         "alice@example.com, example.com",
         "setup-token",
+        "here",
         "alice-matrix",
         "intermediate",
       ].join("\n") + "\n")
@@ -61,7 +62,7 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "== 1. Server login =="
       assert_includes wizard_output, "== 2. Domain and DNS =="
       assert_includes wizard_output, "== 3. Cloudflare tunnel and Access =="
-      assert_includes wizard_output, "== 4. Matrix user =="
+      assert_includes wizard_output, "== 4. Matrix =="
       assert_includes wizard_output, "== 5. Claude behavior =="
       assert_includes wizard_output, "Claude behavior:"
       assert_includes wizard_output, "Beginner: explain more"
@@ -119,6 +120,7 @@ class WizardTest < Minitest::Test
         "example.com",
         "no",
         "no",
+        "here",
         "alice-matrix",
         "advanced",
       ].join("\n") + "\n")
@@ -148,7 +150,86 @@ class WizardTest < Minitest::Test
     end
   end
 
+  def test_wizard_there_branch_decodes_blob_and_writes_creds_to_secrets
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = DevBoxer::Config.secrets_path_for(config_path)
+
+      blob_hash = {
+        "homeserver_url"   => "https://matrix.example.com",
+        "server_domain"    => "matrix.example.com",
+        "bot_user_id"      => "@box4:matrix.example.com",
+        "bot_password"     => "pw",
+        "bot_recovery_key" => "EsTm 4uK4",
+        "bridge_room_id"   => "!abc:matrix.example.com",
+      }
+      blob = DevBoxer::CredentialsBlob.encode(blob_hash)
+
+      input = StringIO.new(answers_for_there_branch(blob: blob))
+      output = StringIO.new
+      DevBoxer::Wizard.run(config_path: config_path, input: input, output: output)
+
+      config = YAML.safe_load_file(config_path)
+      secrets = YAML.safe_load_file(secrets_path)
+
+      assert_equal "external", config.dig("matrix", "mode")
+      assert_equal "https://matrix.example.com", config.dig("matrix", "homeserver_url")
+      assert_equal "matrix.example.com", config.dig("matrix", "server_domain")
+      assert_equal "box4", config.dig("matrix", "bot_username")
+
+      assert_equal "@box4:matrix.example.com", secrets.dig("matrix", "bot_user_id")
+      assert_equal "pw", secrets.dig("matrix", "bot_password")
+      assert_equal "EsTm 4uK4", secrets.dig("matrix", "bot_recovery_key")
+      assert_equal "!abc:matrix.example.com", secrets.dig("matrix", "bridge_room_id")
+    end
+  end
+
+  def test_wizard_there_branch_re_prompts_on_malformed_blob
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+
+      blob_hash = {
+        "homeserver_url"   => "https://matrix.example.com",
+        "server_domain"    => "matrix.example.com",
+        "bot_user_id"      => "@box4:matrix.example.com",
+        "bot_password"     => "pw",
+        "bot_recovery_key" => "EsTm 4uK4",
+        "bridge_room_id"   => "!abc:matrix.example.com",
+      }
+      valid_blob = DevBoxer::CredentialsBlob.encode(blob_hash)
+
+      # First answer for the blob is garbage; second is valid.
+      input = StringIO.new(answers_for_there_branch(blob: "garbage", trailing_blob_retries: [valid_blob]))
+      output = StringIO.new
+      DevBoxer::Wizard.run(config_path: config_path, input: input, output: output)
+
+      assert_match(/blob/i, output.string, "expected output to mention 'blob' in the re-prompt error")
+      assert File.exist?(File.join(dir, "secrets.yml"))
+    end
+  end
+
   private
+
+  # Answers feeding the wizard's STDIN for the "there" matrix branch.
+  # Matches the prompt order in `lib/dev_boxer/wizard.rb#build_config`.
+  # If a new prompt is added later, update this fixture too.
+  def answers_for_there_branch(blob:, trailing_blob_retries: [])
+    ([
+      "alice",                                    # 1. Linux username
+      "ssh-ed25519 AAAATEST alice@example.com",   # 2. SSH public key
+      "2223",                                     # 3. SSH port
+      "example.com",                              # 4. Base domain
+      "yes",                                      # 5. Let Dev Boxer manage DNS
+      "zone-token",                               # 6. Zone DNS API token
+      "yes",                                      # 7. Let Dev Boxer create tunnel + Access
+      "alice@example.com, example.com",           # 8. Allowed emails for Access
+      "setup-token",                              # 9. One-time CF setup token
+      "there",                                    # 10. Matrix homeserver location
+      blob,                                       # 11. Add-bot blob (first attempt)
+    ] + trailing_blob_retries + [
+      "intermediate",                             # 12. Claude experience level
+    ]).join("\n") + "\n"
+  end
 
   def complete_config(overrides = {})
     DevBoxer::Config.deep_merge({

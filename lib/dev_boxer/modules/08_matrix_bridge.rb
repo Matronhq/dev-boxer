@@ -268,8 +268,8 @@ module DevBoxer
 
       def create_bridge_room(bot_token)
         body = {
-          name: "Claude Code Bridge",
-          topic: "Messages in this room are forwarded to Claude Code",
+          name: bridge_room_name,
+          topic: "Messages in this room are forwarded to Claude Code on #{bridge_room_label}",
           visibility: "private",
           preset: "private_chat",
           invite: [user_id],
@@ -281,6 +281,14 @@ module DevBoxer
         }
         resp = http_post("/_matrix/client/v3/createRoom", body, bearer: bot_token)
         resp["room_id"]
+      end
+
+      def bridge_room_label
+        bot_username.sub(/\Aclaude[-_]?bot[-_]?/i, "").sub(/\A[-_]+/, "").then { |label| label.empty? ? bot_username : label }
+      end
+
+      def bridge_room_name
+        "#{bridge_room_label}: Claude Code Bridge"
       end
 
       def http_post(path, body, bearer: nil)

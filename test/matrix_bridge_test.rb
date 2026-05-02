@@ -97,9 +97,20 @@ class MatrixBridgeTest < Minitest::Test
     end
   end
 
+  def test_bridge_room_name_uses_bot_specific_label
+    Dir.mktmpdir do |dir|
+      mod = build_module(
+        secrets_path: File.join(dir, "secrets.yml"),
+        matrix: { "bot_username" => "claude-bot-dev-4" },
+      )
+
+      assert_equal "dev-4: Claude Code Bridge", mod.send(:bridge_room_name)
+    end
+  end
+
   private
 
-  def build_module(secrets_path:)
+  def build_module(secrets_path:, matrix: {})
     DevBoxer::Modules::MatrixBridge.new(
       config: DevBoxer::Config.from_hash(
         "user" => { "name" => "dev" },
@@ -107,7 +118,7 @@ class MatrixBridgeTest < Minitest::Test
           "mode" => "bundled",
           "server_domain" => "matrix.example.com",
           "user_username" => "dev",
-        },
+        }.merge(matrix),
       ),
       log: DevBoxer::Log.new(io: StringIO.new, color: false),
       shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),

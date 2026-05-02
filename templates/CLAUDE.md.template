@@ -1,6 +1,6 @@
 # Dev Boxer Claude Instructions
 
-You are running on a Dev Boxer remote development server. This file is for Claude Code, not a human connection guide.
+You are running on a Dev Boxer remote development server. Use this file as local context for coding sessions on this machine.
 
 ## Machine Context
 
@@ -12,17 +12,51 @@ You are running on a Dev Boxer remote development server. This file is for Claud
 - Main tunnel hostname: `{{CF_HOSTNAME_MAIN}}`
 - Matrix homeserver hostname: `{{CF_HOSTNAME_MATRIX}}`
 - File viewer hostname: `{{CF_HOSTNAME_VIEWER}}`
+- Hello-world smoke test hostname: `{{CF_HOSTNAME_HELLO}}`
 
 ## How To Work Here
 
 - Make new projects under `/home/{{USERNAME}}/projects` unless the user gives a different location.
 - Create the project directory if it does not exist.
+- For new projects, initialize a git repository and create a private GitHub repository with `gh` as early as practical.
 - Prefer the toolchain already installed on this box before adding new tools.
 - For GitHub work, use the GitHub CLI (`gh`) when possible.
 - Before changing a repo, inspect its existing README, package files, task runner, tests, and local conventions.
 - Run the smallest useful verification after changes. If you cannot verify something, tell the user what remains unverified.
 - Do not expose secrets in chat, logs, commits, screenshots, or generated files.
 - Ask the user before destructive actions, force pushes, deleting data, changing billing/account settings, or widening public access.
+
+## New Web Projects
+
+When the user asks for a new web-based project, aim to get a live private preview online quickly:
+
+- Create the project under `/home/{{USERNAME}}/projects` unless the user gives a different location.
+- Initialize git immediately, make an early first commit once the scaffold runs, and keep committing meaningful progress.
+- Create a private GitHub repository with `gh`, add it as the remote, and push the branch as soon as practical.
+- Create a project subdomain in the configured Cloudflare zone, route it through the existing tunnel, and add the matching cloudflared ingress rule for the local app port.
+- Share the live URL with the user as soon as there is a minimal working page, then continue iterating from their feedback.
+
+## Existing Web Projects
+
+When the user asks you to clone or work on an existing project:
+
+- Clone it under `/home/{{USERNAME}}/projects` unless the user gives a different location.
+- Inspect the README, package files, scripts, and framework conventions before choosing commands.
+- If it runs a local web server, start it on a stable local port, create a project subdomain in the configured Cloudflare zone, route it through the existing tunnel, and add the matching cloudflared ingress rule.
+- Share the live URL with the user once the project is running so they can review it in a browser.
+- Commit changes on a branch, push that branch when useful, and open a pull request for review. Check with the user before pushing directly to shared or default branches.
+
+## Testing And CI
+
+- Add or update tests for meaningful behavior changes, especially user-facing web flows, data handling, authentication, and deployment logic.
+- Run the relevant test and lint commands before reporting work as complete. If no commands exist, inspect the project and add sensible ones where practical.
+- For new GitHub projects, set up lightweight CI with GitHub Actions to run tests and linting on pull requests and pushes.
+- For existing projects, preserve the current test stack and CI conventions. Extend them when useful, but avoid replacing working project tooling without a clear reason.
+- If a project has no test coverage yet, start with a small smoke test or component/unit test that proves the main path works.
+
+## First Prompt
+
+On the first prompt in a fresh session outside an existing project directory, briefly explain that you can help create a new web project with a live private URL or work on an existing repository. Ask the user which they want to do, unless they have already made that clear. If the session starts inside a project/repo, skip this opener and focus on that project.
 
 ## User Collaboration
 
@@ -36,7 +70,7 @@ This box may have a zone-scoped Cloudflare DNS API token at `/home/{{USERNAME}}/
 - Cloudflare zone: `{{CF_ZONE_NAME}}`
 - It is intended for creating and updating DNS records for project subdomains.
 - Do not print, commit, or transmit the token.
-- Prefer proxied CNAME records to the existing Cloudflare Tunnel target when exposing local web projects.
+- When exposing a local web project, create a proxied CNAME to the existing Cloudflare Tunnel target and add a matching cloudflared ingress rule for the local port.
 - If the token file is missing, ask the user whether DNS is manual before trying to create records.
 
 The main tunnel hostnames are:
@@ -44,6 +78,7 @@ The main tunnel hostnames are:
 - `{{CF_HOSTNAME_MAIN}}`
 - `{{CF_HOSTNAME_MATRIX}}`
 - `{{CF_HOSTNAME_VIEWER}}`
+- `{{CF_HOSTNAME_HELLO}}`
 
 ## Installed Tools
 
@@ -83,20 +118,33 @@ Configured in `~/.claude/mcp-config.json`. Use it for UI testing, screenshots, b
 
 ### ask-user MCP
 
-Use this when you need clarification, secrets, or confirmation during an unattended Matrix bridge session.
+Use this when you need clarification, secrets, or confirmation from the user during a Matrix bridge session.
 
-## Useful Services
+## Dev Boxer Services
+
+Core services installed by Dev Boxer:
+
+- `claude-matrix-bridge.service`: Matrix-to-Claude bridge
+- `claude-matrix-file-viewer.service`: file viewer for shared Matrix artifacts
+- `cloudflared-tunnel.service`: Cloudflare Tunnel for public hostnames
+- `dev-boxer-hello-world.service`: hello-world smoke-test page
+
+Check service status:
 
 ```bash
 sudo systemctl status claude-matrix-bridge.service
 sudo systemctl status claude-matrix-file-viewer.service
 sudo systemctl status cloudflared-tunnel.service
+sudo systemctl status dev-boxer-hello-world.service
 ```
+
+Follow service logs:
 
 ```bash
 sudo journalctl -u claude-matrix-bridge.service -f
 sudo journalctl -u claude-matrix-file-viewer.service -f
 sudo journalctl -u cloudflared-tunnel.service -f
+sudo journalctl -u dev-boxer-hello-world.service -f
 ```
 
 ## Security Notes

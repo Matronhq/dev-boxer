@@ -44,6 +44,9 @@ module DevBoxer
       def tunnel_hostname = config.cloudflare&.tunnel&.hostname
       def hostname_matrix = config.cloudflare&.tunnel&.hostname_matrix
       def hostname_viewer = config.cloudflare&.tunnel&.hostname_viewer
+      def hostname_hello
+        config.cloudflare&.tunnel&.hostname_hello || (zone_name.to_s.empty? ? nil : "hello.#{zone_name}")
+      end
       def config_managed_locally? = config.cloudflare&.tunnel&.config_managed_locally
       def access_config = config.cloudflare&.access
       def access_enabled? = access_config&.enabled == true
@@ -175,7 +178,7 @@ module DevBoxer
       # the cloudflared-config.yml template doesn't render `hostname: `
       # (literal empty value) — which is invalid YAML and breaks tunnel boot.
       def configured_hostnames
-        [tunnel_hostname, hostname_matrix, hostname_viewer].compact.reject { |h| h.to_s.empty? }
+        [tunnel_hostname, hostname_matrix, hostname_viewer, hostname_hello].compact.reject { |h| h.to_s.empty? }
       end
 
       def cloudflare_zone_id
@@ -282,7 +285,7 @@ module DevBoxer
       end
 
       def access_hostnames
-        [tunnel_hostname, hostname_viewer]
+        [tunnel_hostname, hostname_viewer, hostname_hello]
           .compact
           .reject { |host| host.to_s.empty? || host == hostname_matrix }
           .uniq
@@ -396,12 +399,17 @@ module DevBoxer
         if !hostname_viewer.to_s.empty?
           rules << "  - hostname: #{hostname_viewer}\n    service: http://localhost:9801"
         end
+        if !hostname_hello.to_s.empty?
+          rules << "  - hostname: #{hostname_hello}\n    service: http://localhost:#{hello_world_port}"
+        end
         if !tunnel_hostname.to_s.empty?
           rules << "  - hostname: #{tunnel_hostname}\n    service: https://localhost\n    originRequest:\n      noTLSVerify: true"
         end
         rules << "  - service: http_status:404"
         rules.join("\n")
       end
+
+      def hello_world_port = config.hello_world&.port || 9810
 
       def install_systemd_unit
         FileUtils.cp(template_path("cloudflared-tunnel.service"), "/etc/systemd/system/cloudflared-tunnel.service")
@@ -513,6 +521,7 @@ module DevBoxer
         info "Main:    https://#{tunnel_hostname}"        if tunnel_hostname
         info "Matrix:  https://#{hostname_matrix}"        if hostname_matrix
         info "Viewer:  https://#{hostname_viewer}"        if hostname_viewer
+        info "Hello:   https://#{hostname_hello}"         if hostname_hello
         if access_enabled?
           info "Cloudflare Access: protects #{access_hostnames.join(", ")}; Matrix is excluded."
         else

@@ -33,6 +33,12 @@ module DevBoxer
       def home_dir = "/home/#{username}"
       def ssh_port = config.ssh&.port || 2222
       def setup_path = File.expand_path("../../../setup.rb", __dir__)
+      def hostname_hello = config.cloudflare&.tunnel&.hostname_hello || fallback_hello_hostname
+      def access_enabled? = config.cloudflare&.access&.enabled == true
+      def fallback_hello_hostname
+        zone_name = config.cloudflare&.zone_name
+        zone_name.to_s.empty? ? nil : "hello.#{zone_name}"
+      end
 
       def install_lazydocker
         if shell.command_exists?("lazydocker")
@@ -98,6 +104,7 @@ module DevBoxer
           "CF_HOSTNAME_MAIN"        => config.cloudflare&.tunnel&.hostname,
           "CF_HOSTNAME_MATRIX"      => config.cloudflare&.tunnel&.hostname_matrix,
           "CF_HOSTNAME_VIEWER"      => config.cloudflare&.tunnel&.hostname_viewer,
+          "CF_HOSTNAME_HELLO"       => hostname_hello,
           "CF_ZONE_NAME"            => config.cloudflare&.zone_name,
           "USER_EXPERIENCE_GUIDANCE" => user_experience_guidance,
         }
@@ -177,9 +184,14 @@ module DevBoxer
           info "  Main:    https://#{config.cloudflare.tunnel.hostname}"
           info "  Matrix:  https://#{config.cloudflare.tunnel.hostname_matrix}" if config.cloudflare.tunnel.hostname_matrix
           info "  Viewer:  https://#{config.cloudflare.tunnel.hostname_viewer}" if config.cloudflare.tunnel.hostname_viewer
+          info "  Hello:   https://#{hostname_hello}" if hostname_hello
           info ""
         end
-        info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
+        if access_enabled?
+          info "Cloudflare Access: configured for browser tunnel URLs; Matrix is excluded."
+        else
+          info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
+        end
       end
     end
   end

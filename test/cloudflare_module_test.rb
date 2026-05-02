@@ -55,6 +55,7 @@ class CloudflareModuleTest < Minitest::Test
             "hostname" => "dev.example.com",
             "hostname_matrix" => "matrix.example.com",
             "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
           },
         ),
       )
@@ -134,6 +135,7 @@ class CloudflareModuleTest < Minitest::Test
             "hostname" => "dev.example.com",
             "hostname_matrix" => "matrix.example.com",
             "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
           },
         ),
       )
@@ -152,9 +154,28 @@ class CloudflareModuleTest < Minitest::Test
       created_names = calls
         .select { |call| call[:method] == :post && call[:path] == "/zones/zone-123/dns_records" }
         .map { |call| call[:body]["name"] }
-      assert_equal ["dev.example.com", "matrix.example.com", "viewer.example.com"], created_names
+      assert_equal ["dev.example.com", "matrix.example.com", "viewer.example.com", "hello.example.com"], created_names
       assert calls.all? { |call| call[:token] == "zone-token" }
     end
+  end
+
+  def test_hello_hostname_defaults_from_zone_name_for_existing_configs
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "tunnel" => {
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => "matrix.example.com",
+          "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => nil,
+        },
+      ),
+    )
+
+    assert_includes mod.send(:configured_hostnames), "hello.example.com"
+    assert_includes mod.send(:render_ingress), "hostname: hello.example.com"
   end
 
   def test_existing_dns_route_is_not_updated_when_already_correct
@@ -257,6 +278,7 @@ class CloudflareModuleTest < Minitest::Test
           "hostname" => "dev.example.com",
           "hostname_matrix" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => "hello.example.com",
         },
       )),
       log: DevBoxer::Log.new(io: log_io, color: false),
@@ -273,6 +295,7 @@ class CloudflareModuleTest < Minitest::Test
     assert_includes output, "Create proxied CNAME: dev.example.com -> tunnel-123.cfargotunnel.com"
     assert_includes output, "Create proxied CNAME: matrix.example.com -> tunnel-123.cfargotunnel.com"
     assert_includes output, "Create proxied CNAME: viewer.example.com -> tunnel-123.cfargotunnel.com"
+    assert_includes output, "Create proxied CNAME: hello.example.com -> tunnel-123.cfargotunnel.com"
   end
 
   def test_cloudflare_access_excludes_matrix_hostname
@@ -284,11 +307,12 @@ class CloudflareModuleTest < Minitest::Test
           "hostname" => "dev.example.com",
           "hostname_matrix" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => "hello.example.com",
         },
       ),
     )
 
-    assert_equal ["dev.example.com", "viewer.example.com"], mod.send(:access_hostnames)
+    assert_equal ["dev.example.com", "viewer.example.com", "hello.example.com"], mod.send(:access_hostnames)
   end
 
   def test_cloudflare_access_payload_allows_email_and_domain
@@ -305,14 +329,34 @@ class CloudflareModuleTest < Minitest::Test
       ),
     )
 
-    payload = mod.send(:cloudflare_access_app_payload, ["dev.example.com", "viewer.example.com"])
+    payload = mod.send(:cloudflare_access_app_payload, ["dev.example.com", "viewer.example.com", "hello.example.com"])
 
     assert_equal "self_hosted", payload["type"]
-    assert_equal ["dev.example.com", "viewer.example.com"], payload["destinations"].map { |dest| dest["uri"] }
+    assert_equal ["dev.example.com", "viewer.example.com", "hello.example.com"], payload["destinations"].map { |dest| dest["uri"] }
     assert_equal [
       { "email" => { "email" => "alice@example.com" } },
       { "email_domain" => { "domain" => "example.com" } },
     ], payload.dig("policies", 0, "include")
+  end
+
+  def test_ingress_routes_hello_hostname_to_smoke_test_service
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "tunnel" => {
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => "matrix.example.com",
+          "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => "hello.example.com",
+        },
+      ).merge("hello_world" => { "port" => 9822 }),
+    )
+
+    ingress = mod.send(:render_ingress)
+
+    assert_includes ingress, "hostname: hello.example.com"
+    assert_includes ingress, "service: http://localhost:9822"
   end
 
   def test_configure_access_uses_top_level_setup_token
@@ -374,6 +418,7 @@ class CloudflareModuleTest < Minitest::Test
           "hostname" => "dev.example.com",
           "hostname_matrix" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
+          "hostname_hello" => "hello.example.com",
         },
       },
     }, { "cloudflare" => overrides })

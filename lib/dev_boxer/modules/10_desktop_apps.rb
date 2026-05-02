@@ -33,12 +33,8 @@ module DevBoxer
       def home_dir = "/home/#{username}"
       def ssh_port = config.ssh&.port || 2222
       def setup_path = File.expand_path("../../../setup.rb", __dir__)
-      def hostname_hello = config.cloudflare&.tunnel&.hostname_hello || fallback_hello_hostname
+      def hostname_hello = cloudflare_hello_hostname
       def access_enabled? = config.cloudflare&.access&.enabled == true
-      def fallback_hello_hostname
-        zone_name = config.cloudflare&.zone_name
-        zone_name.to_s.empty? ? nil : "hello.#{zone_name}"
-      end
 
       def install_lazydocker
         if shell.command_exists?("lazydocker")

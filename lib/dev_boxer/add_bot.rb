@@ -36,8 +36,13 @@ module DevBoxer
         raise AlreadyExists, "Bot '#{@name}' already exists in #{@secrets_path}. Use --reprint to regenerate the blob."
       end
 
-      bot_password = SecureRandom.hex(16)
-      persist_partial_bot_record(bot_password)
+      # On a fresh run, mint a new password. On a re-run after a crashed
+      # partial-persist, reuse the persisted password — the bot is already
+      # registered on the homeserver with it, so a fresh password would
+      # cause add-bot.mjs's login attempt to fail.
+      partial = partial_bot_record
+      bot_password = partial&.dig("bot_password") || SecureRandom.hex(16)
+      persist_partial_bot_record(bot_password) unless partial
 
       reg_token = SecureRandom.hex(16)
       mjs_creds_path = "/dev/shm/dev-boxer-add-bot-#{SecureRandom.hex(8)}"
@@ -94,12 +99,17 @@ module DevBoxer
     end
 
     def existing_bot_record
+      record = partial_bot_record
+      return nil unless record
+      return nil if record["bot_recovery_key"].to_s.empty? || record["bridge_room_id"].to_s.empty?
+      record
+    end
+
+    def partial_bot_record
       return nil unless File.exist?(@secrets_path)
       data = YAML.safe_load_file(@secrets_path) || {}
       record = data.dig("matrix", "bots", @name.to_s)
-      return nil unless record.is_a?(Hash)
-      return nil if record["bot_recovery_key"].to_s.empty? || record["bridge_room_id"].to_s.empty?
-      record
+      record.is_a?(Hash) ? record : nil
     end
 
     def persist_partial_bot_record(bot_password)

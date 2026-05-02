@@ -2,6 +2,7 @@ require "io/console"
 require "fileutils"
 require "securerandom"
 require "yaml"
+require "dev_boxer/credentials_blob"
 
 module DevBoxer
   class Wizard
@@ -72,8 +73,35 @@ module DevBoxer
         )
       end
 
-      section_header("4. Matrix user")
-      matrix_user = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
+      section_header("4. Matrix")
+      matrix_choice = ask_choice(
+        "Matrix homeserver location",
+        choices: %w[here there],
+        default: existing.dig("matrix", "mode") == "external" ? "there" : "here",
+      )
+
+      matrix_user, matrix_overrides, matrix_secret_fields =
+        case matrix_choice
+        when "here"
+          name = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
+          [name, { "mode" => "bundled" }, {}]
+        when "there"
+          decoded = ask_blob_until_valid
+          bot_localpart = decoded["bot_user_id"].split(":", 2).first.delete_prefix("@")
+          overrides = {
+            "mode"           => "external",
+            "homeserver_url" => decoded["homeserver_url"],
+            "server_domain"  => decoded["server_domain"],
+            "bot_username"   => bot_localpart,
+          }
+          secrets_block = decoded.slice("bot_user_id", "bot_password", "bot_recovery_key", "bridge_room_id")
+          [
+            existing.dig("matrix", "user_username") || username,
+            overrides,
+            secrets_block,
+          ]
+        end
+
       section_header("5. Claude behavior")
       claude_config = build_claude_config(existing)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
@@ -97,12 +125,12 @@ module DevBoxer
             "keep_until" => "4h",
           },
         },
-        "matrix" => {
+        "matrix" => DevBoxer::Config.deep_merge({
           "mode" => "bundled",
           "server_domain" => "matrix.#{base_domain}",
           "user_username" => matrix_user,
           "bot_username" => nil,
-        },
+        }, matrix_overrides),
         "claude" => claude_config,
         "hello_world" => {
           "port" => DEFAULT_HELLO_WORLD_PORT,
@@ -134,6 +162,7 @@ module DevBoxer
           "zone_api_token" => zone_token,
         }.compact,
       }
+      secrets["matrix"] = matrix_secret_fields unless matrix_secret_fields.empty?
 
       [config, secrets]
     end
@@ -161,6 +190,26 @@ module DevBoxer
         return level if EXPERIENCE_LEVELS.include?(level)
 
         output.puts "Choose one of: #{EXPERIENCE_LEVELS.join(", ")}."
+      end
+    end
+
+    def ask_choice(prompt, choices:, default:)
+      loop do
+        raw = ask("#{prompt} (#{choices.join(' / ')})", default: default).to_s.downcase
+        return raw if choices.include?(raw)
+
+        output.puts "Choose one of: #{choices.join(', ')}."
+      end
+    end
+
+    def ask_blob_until_valid
+      loop do
+        raw = ask("Paste add-bot blob from your homeserver box", secret: true)
+        begin
+          return DevBoxer::CredentialsBlob.decode(raw)
+        rescue DevBoxer::CredentialsBlob::Invalid => e
+          output.puts "  ✗ blob invalid: #{e.message}"
+        end
       end
     end
 

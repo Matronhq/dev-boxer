@@ -2,6 +2,7 @@ require "json"
 require "net/http"
 require "securerandom"
 require "shellwords"
+require "tmpdir"
 require "uri"
 require "yaml"
 require_relative "../matrix_registration"
@@ -197,7 +198,9 @@ module DevBoxer
         )
       end
 
-      # Use a tmpfs path so the recovery_key + password never hit a real disk.
+      # Prefer tmpfs so the recovery_key + password never hit a real disk.
+      # Fall back to the platform temp dir for local/test environments that do
+      # not have Linux's /dev/shm.
       #
       # Shell-escape every interpolated value: `user_password` is auto-
       # generated entropy that may contain shell-significant characters
@@ -206,7 +209,7 @@ module DevBoxer
       # we still want to fail the command rather than execute unintended
       # shell on bad input.
       def run_setup_user_mjs(user_password, reg_token)
-        creds_path = "/dev/shm/dev-boxer-matrix-#{SecureRandom.hex(8)}"
+        creds_path = matrix_credentials_path
         shell.run_as_user(username, "touch #{Shellwords.escape(creds_path)} && chmod 600 #{Shellwords.escape(creds_path)}")
         cmd = [
           "MATRIX_HOMESERVER_URL=#{Shellwords.escape(HOMESERVER_LOCAL)}",
@@ -227,6 +230,11 @@ module DevBoxer
         recovery_key
       ensure
         shell.run_as_user(username, "rm -f #{creds_path}") if creds_path
+      end
+
+      def matrix_credentials_path
+        dir = Dir.exist?("/dev/shm") ? "/dev/shm" : Dir.tmpdir
+        File.join(dir, "dev-boxer-matrix-#{SecureRandom.hex(8)}")
       end
 
       def persist_partial_onboarding_passwords(bot_password, user_password)

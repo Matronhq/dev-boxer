@@ -55,4 +55,10 @@ begin
 rescue DevBoxer::AddBot::UsageError, DevBoxer::AddBot::AlreadyExists => e
   warn e.message
   exit 2
+rescue DevBoxer::Shell::Error, DevBoxer::MatrixRegistration::Error => e
+  warn "Error: #{e.message}"
+  exit 1
+rescue => e
+  warn "Unexpected error: #{e.class}: #{e.message}"
+  exit 1
 end

@@ -96,7 +96,10 @@ module DevBoxer
     def existing_bot_record
       return nil unless File.exist?(@secrets_path)
       data = YAML.safe_load_file(@secrets_path) || {}
-      data.dig("matrix", "bots", @name.to_s)
+      record = data.dig("matrix", "bots", @name.to_s)
+      return nil unless record.is_a?(Hash)
+      return nil if record["bot_recovery_key"].to_s.empty? || record["bridge_room_id"].to_s.empty?
+      record
     end
 
     def persist_partial_bot_record(bot_password)

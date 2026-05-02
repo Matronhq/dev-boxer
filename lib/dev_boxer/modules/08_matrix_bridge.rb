@@ -412,14 +412,25 @@ module DevBoxer
       # bundled run the in-memory `config` object pre-dates onboarding.
       def bridge_env_vars
         creds = @generated_credentials || {}
-        @bridge_env_vars ||= {
-          "MATRIX_HOMESERVER_URL" => homeserver_url,
-          "MATRIX_BOT_ACCESS_TOKEN_BUNDLED" => creds[:bot_access_token] || config.matrix&.bot_access_token,
-          "MATRIX_ALLOWED_USER_IDS" => user_id,
-          "USERNAME" => username,
-          "HMAC_SECRET" => creds[:hmac_secret] || config.matrix&.hmac_secret || SecureRandom.hex(32),
-          "CF_HOSTNAME_VIEWER" => config.cloudflare&.tunnel&.hostname_viewer || "localhost",
-        }
+        @bridge_env_vars ||= begin
+          base = {
+            "MATRIX_HOMESERVER_URL" => homeserver_url,
+            "MATRIX_BOT_ACCESS_TOKEN_BUNDLED" => creds[:bot_access_token] || config.matrix&.bot_access_token,
+            "MATRIX_ALLOWED_USER_IDS" => user_id,
+            "USERNAME" => username,
+            "HMAC_SECRET" => creds[:hmac_secret] || config.matrix&.hmac_secret || SecureRandom.hex(32),
+            "CF_HOSTNAME_VIEWER" => config.cloudflare&.tunnel&.hostname_viewer || "localhost",
+          }
+
+          if mode == "external"
+            base["MATRIX_BOT_USER_ID"]      = config.matrix&.bot_user_id
+            base["MATRIX_BOT_PASSWORD"]     = config.matrix&.bot_password
+            base["MATRIX_BOT_RECOVERY_KEY"] = config.matrix&.bot_recovery_key
+            base["MATRIX_BRIDGE_ROOM_ID"]   = config.matrix&.bridge_room_id
+          end
+
+          base
+        end
       end
 
       def write_mcp_config

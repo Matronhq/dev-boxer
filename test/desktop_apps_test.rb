@@ -83,6 +83,41 @@ class DesktopAppsTest < Minitest::Test
     assert_includes log_io.string, "IMPORTANT: set up Cloudflare Access"
   end
 
+  def test_print_summary_uses_detected_ip_in_ssh_line
+    log_io = StringIO.new
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      cmd.include?("hostname -I") ? [true, "203.0.113.7 fe80::1\n", ""] : [true, "", ""]
+    })
+    mod = DevBoxer::Modules::DesktopApps.new(
+      config: config("intermediate"),
+      log: DevBoxer::Log.new(io: log_io, color: false),
+      shell: shell,
+      templates_dir: File.expand_path("../templates", __dir__),
+    )
+
+    mod.send(:print_summary)
+
+    assert_includes log_io.string, "SSH:  ssh dev@203.0.113.7 -p 2222"
+    refute_includes log_io.string, "<server-ip>"
+  end
+
+  def test_print_summary_falls_back_to_placeholder_when_ip_detection_fails
+    log_io = StringIO.new
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      cmd.include?("hostname -I") ? [false, "", "no such command"] : [true, "", ""]
+    })
+    mod = DevBoxer::Modules::DesktopApps.new(
+      config: config("intermediate"),
+      log: DevBoxer::Log.new(io: log_io, color: false),
+      shell: shell,
+      templates_dir: File.expand_path("../templates", __dir__),
+    )
+
+    mod.send(:print_summary)
+
+    assert_includes log_io.string, "SSH:  ssh dev@<server-ip> -p 2222"
+  end
+
   private
 
   def build_module(experience_level, log_io: StringIO.new, access_enabled: nil)

@@ -338,6 +338,9 @@ module DevBoxer
 
       def prompt_for_manual_tunnel_setup
         unless $stdin.tty?
+          if tunnel_managed_manually?
+            raise "cloudflare.tunnel.create_manually is true; run interactively for manual tunnel setup or set cloudflare.tunnel.id"
+          end
           raise "No cloudflare.tunnel.id and no one-time cloudflare.api_token; run interactively for manual tunnel setup"
         end
 

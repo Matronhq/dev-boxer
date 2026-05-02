@@ -378,6 +378,28 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_manual_tunnel_non_tty_error_mentions_manual_flag
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "api_token" => "setup-token",
+        "tunnel" => {
+          "id" => nil,
+          "hostname" => "dev.example.com",
+          "create_manually" => true,
+        },
+      ),
+    )
+
+    error = assert_raises(RuntimeError) do
+      mod.send(:prompt_for_manual_tunnel_setup)
+    end
+
+    assert_includes error.message, "cloudflare.tunnel.create_manually is true"
+    refute_includes error.message, "no one-time cloudflare.api_token"
+  end
+
   private
 
   def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } }, log_io: StringIO.new, shell: nil)

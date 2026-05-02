@@ -132,6 +132,14 @@ sudo ./setup.rb --from matrix-bridge
 sudo ./setup.rb --skip desktop --dry-run
 ```
 
+## Multiple boxes, one Element session
+
+If you already have one Dev Boxer running and want to bring up another
+box that uses the same Element identity, see [docs/adding-bots.md](docs/adding-bots.md).
+The `dev-boxer add-bot <name>` command registers a new bot, has you
+sign it via SAS in Element, and prints a blob you paste into the new
+box's installer.
+
 ## Development
 
 ```bash

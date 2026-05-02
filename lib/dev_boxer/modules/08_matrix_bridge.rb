@@ -4,6 +4,7 @@ require "securerandom"
 require "shellwords"
 require "uri"
 require "yaml"
+require_relative "../matrix_registration"
 
 module DevBoxer
   module Modules
@@ -176,54 +177,24 @@ module DevBoxer
       end
 
       def open_registration(reg_token)
-        path = "#{matrix_server_dir}/docker-compose.override.yml"
-        File.write(path, <<~YML)
-          services:
-            matron-server:
-              environment:
-                TUWUNEL_ALLOW_REGISTRATION: "true"
-                TUWUNEL_REGISTRATION_TOKEN: "#{reg_token}"
-        YML
-        shell.sh!("chown #{username}:#{username} #{path}")
-        shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose down && docker compose up -d")
-        shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30) or
-          raise "Matron Server failed to restart with registration enabled"
+        matrix_registration.open(reg_token)
       end
 
       def close_registration
-        path = "#{matrix_server_dir}/docker-compose.override.yml"
-        # Guard the delete: TOCTOU between exist? and delete is theoretically
-        # possible (concurrent run, manual cleanup), and a permission error
-        # raised here from inside an `ensure` block would mask the original
-        # exception. We've already done our best — log and continue.
-        begin
-          File.delete(path) if File.exist?(path)
-        rescue Errno::ENOENT
-          # already gone — fine
-        rescue => e
-          warn "Could not remove #{path}: #{e.class}: #{e.message}"
-        end
-        shell.run_as_user(username, "cd #{matrix_server_dir} && docker compose down && docker compose up -d") rescue nil
-        shell.wait_for_url("#{HOMESERVER_LOCAL}/_matrix/client/versions", timeout: 30) rescue nil
+        matrix_registration.close
       end
 
       def register_bot_via_api(password, reg_token)
-        body = {
-          username: bot_username, password: password,
-          auth: { type: "m.login.registration_token", token: reg_token },
-          inhibit_login: true,
-        }
-        resp = http_post("/_matrix/client/v3/register", body)
-        return if resp["user_id"]
+        matrix_registration.register_bot(username: bot_username, password: password, reg_token: reg_token)
+      end
 
-        if (session = resp["session"])
-          body[:auth][:session] = session
-          resp = http_post("/_matrix/client/v3/register", body)
-          return if resp["user_id"]
-        end
-
-        return if resp.dig("errcode") == "M_USER_IN_USE"
-        raise "Bot registration failed: #{resp.inspect}"
+      def matrix_registration
+        @matrix_registration ||= MatrixRegistration.new(
+          matrix_server_dir: matrix_server_dir,
+          username: username,
+          shell: shell,
+          log: log,
+        )
       end
 
       # Use a tmpfs path so the recovery_key + password never hit a real disk.
@@ -441,14 +412,25 @@ module DevBoxer
       # bundled run the in-memory `config` object pre-dates onboarding.
       def bridge_env_vars
         creds = @generated_credentials || {}
-        @bridge_env_vars ||= {
-          "MATRIX_HOMESERVER_URL" => homeserver_url,
-          "MATRIX_BOT_ACCESS_TOKEN_BUNDLED" => creds[:bot_access_token] || config.matrix&.bot_access_token,
-          "MATRIX_ALLOWED_USER_IDS" => user_id,
-          "USERNAME" => username,
-          "HMAC_SECRET" => creds[:hmac_secret] || config.matrix&.hmac_secret || SecureRandom.hex(32),
-          "CF_HOSTNAME_VIEWER" => config.cloudflare&.tunnel&.hostname_viewer || "localhost",
-        }
+        @bridge_env_vars ||= begin
+          base = {
+            "MATRIX_HOMESERVER_URL" => homeserver_url,
+            "MATRIX_BOT_ACCESS_TOKEN_BUNDLED" => creds[:bot_access_token] || config.matrix&.bot_access_token,
+            "MATRIX_ALLOWED_USER_IDS" => user_id,
+            "USERNAME" => username,
+            "HMAC_SECRET" => creds[:hmac_secret] || config.matrix&.hmac_secret || SecureRandom.hex(32),
+            "CF_HOSTNAME_VIEWER" => config.cloudflare&.tunnel&.hostname_viewer || "localhost",
+          }
+
+          if mode == "external"
+            base["MATRIX_BOT_USER_ID"]      = config.matrix&.bot_user_id
+            base["MATRIX_BOT_PASSWORD"]     = config.matrix&.bot_password
+            base["MATRIX_BOT_RECOVERY_KEY"] = config.matrix&.bot_recovery_key
+            base["MATRIX_BRIDGE_ROOM_ID"]   = config.matrix&.bridge_room_id
+          end
+
+          base
+        end
       end
 
       def write_mcp_config

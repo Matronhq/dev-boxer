@@ -244,6 +244,35 @@ class ConfigTest < Minitest::Test
     assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
   end
 
+  def test_validation_accepts_external_mode_with_imported_bot_creds
+    hash = valid_public_config("matrix" => {
+      "mode" => "external",
+      "homeserver_url" => "https://matrix.example.com",
+      "bot_user_id" => "@box4:matrix.example.com",
+      "bot_password" => "pw",
+      "bot_recovery_key" => "EsTm 4uK4",
+      "bridge_room_id" => "!abc:matrix.example.com",
+    })
+
+    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
+  def test_validation_accepts_bots_map_under_matrix
+    hash = valid_public_config("matrix" => {
+      "bots" => {
+        "box4" => {
+          "bot_user_id" => "@box4:matrix.example.com",
+          "bot_password" => "pw",
+          "bot_recovery_key" => "EsTm 4uK4",
+          "bridge_room_id" => "!abc:matrix.example.com",
+          "created_at" => "2026-05-02T12:34:56Z",
+        },
+      },
+    })
+
+    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
   private
 
   def valid_public_config(overrides = {})

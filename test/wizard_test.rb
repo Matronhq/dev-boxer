@@ -176,6 +176,7 @@ class WizardTest < Minitest::Test
       assert_equal "https://matrix.example.com", config.dig("matrix", "homeserver_url")
       assert_equal "matrix.example.com", config.dig("matrix", "server_domain")
       assert_equal "box4", config.dig("matrix", "bot_username")
+      assert_equal "alice", config.dig("matrix", "user_username")
 
       assert_equal "@box4:matrix.example.com", secrets.dig("matrix", "bot_user_id")
       assert_equal "pw", secrets.dig("matrix", "bot_password")

@@ -86,8 +86,7 @@ module DevBoxer
           name = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
           [name, { "mode" => "bundled" }, {}]
         when "there"
-          blob = ask_blob_until_valid
-          decoded = DevBoxer::CredentialsBlob.decode(blob)
+          decoded = ask_blob_until_valid
           bot_localpart = decoded["bot_user_id"].split(":", 2).first.delete_prefix("@")
           overrides = {
             "mode"           => "external",
@@ -207,10 +206,9 @@ module DevBoxer
       loop do
         raw = ask("Paste add-bot blob from your homeserver box", secret: true)
         begin
-          DevBoxer::CredentialsBlob.decode(raw)
-          return raw
+          return DevBoxer::CredentialsBlob.decode(raw)
         rescue DevBoxer::CredentialsBlob::Invalid => e
-          output.puts "  x blob invalid: #{e.message}"
+          output.puts "  ✗ blob invalid: #{e.message}"
         end
       end
     end

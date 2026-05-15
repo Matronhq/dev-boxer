@@ -174,7 +174,11 @@ class WizardTest < Minitest::Test
       }
       blob = DevBoxer::CredentialsBlob.encode(blob_hash)
 
-      input = StringIO.new(answers_for_there_branch(blob: blob))
+      # Operator's Matrix username on the external homeserver is intentionally
+      # different from their Linux username here ("dbarker" vs "alice"), to
+      # cover the regression where the wizard silently used the Linux name
+      # for ALLOWED_USER_IDS and the bridge dropped every message.
+      input = StringIO.new(answers_for_there_branch(blob: blob, matrix_username: "dbarker"))
       output = StringIO.new
       DevBoxer::Wizard.run(config_path: config_path, input: input, output: output)
 
@@ -185,7 +189,9 @@ class WizardTest < Minitest::Test
       assert_equal "https://matrix.example.com", config.dig("matrix", "homeserver_url")
       assert_equal "matrix.example.com", config.dig("matrix", "server_domain")
       assert_equal "box4", config.dig("matrix", "bot_username")
-      assert_equal "alice", config.dig("matrix", "user_username")
+      assert_equal "dbarker", config.dig("matrix", "user_username")
+      assert_includes output.string, "Your Matrix username:"
+      assert_includes output.string, "MATRIX username, NOT your Linux username"
 
       assert_equal "@box4:matrix.example.com", secrets.dig("matrix", "bot_user_id")
       assert_equal "pw", secrets.dig("matrix", "bot_password")
@@ -223,7 +229,7 @@ class WizardTest < Minitest::Test
   # Answers feeding the wizard's STDIN for the "there" matrix branch.
   # Matches the prompt order in `lib/dev_boxer/wizard.rb#build_config`.
   # If a new prompt is added later, update this fixture too.
-  def answers_for_there_branch(blob:, trailing_blob_retries: [])
+  def answers_for_there_branch(blob:, trailing_blob_retries: [], matrix_username: "alice")
     ([
       "alice",                                    # 1. Linux username
       "ssh-ed25519 AAAATEST alice@example.com",   # 2. SSH public key
@@ -238,7 +244,8 @@ class WizardTest < Minitest::Test
       "there",                                    # 11. Matrix homeserver location
       blob,                                       # 12. Add-bot blob (first attempt)
     ] + trailing_blob_retries + [
-      "intermediate",                             # 13. Claude experience level
+      matrix_username,                            # 13. Your Matrix username on the external homeserver
+      "intermediate",                             # 14. Claude experience level
     ]).join("\n") + "\n"
   end
 

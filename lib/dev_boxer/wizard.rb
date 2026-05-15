@@ -98,6 +98,15 @@ module DevBoxer
         when "there"
           decoded = ask_blob_until_valid
           bot_localpart = decoded["bot_user_id"].split(":", 2).first.delete_prefix("@")
+          # Ask explicitly: the Matrix localpart on the external homeserver is
+          # often NOT the Linux username (e.g. dbarker on Matrix vs danbarker
+          # in Linux). Falling back silently produced the wrong ALLOWED_USER_IDS
+          # in the bridge .env, which made cbox2 silently drop every message.
+          explain_external_matrix_username(decoded["server_domain"])
+          name = ask(
+            "Your Matrix username on #{decoded['server_domain']}",
+            default: existing.dig("matrix", "user_username") || username,
+          )
           overrides = {
             "mode"           => "external",
             "homeserver_url" => decoded["homeserver_url"],
@@ -105,11 +114,7 @@ module DevBoxer
             "bot_username"   => bot_localpart,
           }
           secrets_block = decoded.slice("bot_user_id", "bot_password", "bot_recovery_key", "bridge_room_id")
-          [
-            existing.dig("matrix", "user_username") || username,
-            overrides,
-            secrets_block,
-          ]
+          [name, overrides, secrets_block]
         end
 
       section_header("6. Claude behavior")
@@ -392,6 +397,19 @@ module DevBoxer
       output.puts "       reuse the same token."
       output.puts "  Skip: Leave blank to fall back to the interactive `gh auth login --web` flow"
       output.puts "       during the matrix-bridge module."
+      output.puts
+    end
+
+    def explain_external_matrix_username(server_domain)
+      output.puts
+      output.puts "Your Matrix username:"
+      output.puts "  What: The localpart of YOUR existing Matrix account on #{server_domain}"
+      output.puts "        (the part between @ and :, e.g. for @dbarker:#{server_domain} it's dbarker)."
+      output.puts "  Why: This becomes ALLOWED_USER_IDS in the bridge .env. Messages from any other"
+      output.puts "       account are silently dropped, so getting this wrong means the bridge looks"
+      output.puts "       dead even though it's actually receiving and decrypting your messages."
+      output.puts "  Tip: This is your MATRIX username, NOT your Linux username on this VPS — they"
+      output.puts "       are often different."
       output.puts
     end
 

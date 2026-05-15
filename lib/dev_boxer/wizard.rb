@@ -381,8 +381,17 @@ module DevBoxer
       output.puts "Cloudflare zone DNS API token:"
       output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
       output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, hello, and new subdomains for projects you make."
-      output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
+      output.puts "  Recommended: an account-owned token (owned by the account rather than your individual dashboard user, so it survives if you ever leave the account or rotate users)."
+      output.puts "  How (pre-filled, opens at the account-level token page):"
+      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
+      output.puts "      Open in your browser. Cloudflare resolves :account to your account (or asks you to pick if you have several)."
+      output.puts "      The form will be pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS'."
+      output.puts "      Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then 'Continue to summary' and 'Create Token'."
       output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
+      output.puts "  Manual route (account-level token page, no pre-fill):"
+      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens"
+      output.puts "      Click 'Create Token' > 'Get started' (custom token). Add Zone:Read and Zone:DNS:Edit, restrict to #{base_domain}."
+      output.puts "  Note: The account token page requires Super Administrator or Administrator on the account. The user-level page (https://dash.cloudflare.com/profile/api-tokens) also works, but creates a token tied to your individual dashboard user, which is harder to hand off."
       output.puts "  Alternative: Choose no below if you prefer to create each required subdomain manually."
       output.puts
     end

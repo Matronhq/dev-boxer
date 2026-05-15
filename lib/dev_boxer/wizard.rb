@@ -441,12 +441,17 @@ module DevBoxer
     def explain_cloudflare_setup_token
       output.puts
       output.puts "One-time Cloudflare account setup token:"
-      output.puts "  What: A temporary account-level Cloudflare API token."
+      output.puts "  What: A temporary account-owned Cloudflare API token."
       output.puts "  Why: Dev Boxer uses it once to create the Cloudflare Tunnel and optional Zero Trust Access app."
-      output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with these account permissions:"
-      output.puts "       - Cloudflare One Connector: cloudflared: Edit"
-      output.puts "       - Access: Apps: Edit"
-      output.puts "       - Access: Policies: Edit"
+      output.puts "  How: Open the account-level token page (Cloudflare resolves :account to your account, or asks you to pick if you have several):"
+      output.puts "       https://dash.cloudflare.com/?to=/:account/api-tokens"
+      output.puts "       Click 'Create Token' > 'Get started' next to 'Create Custom Token'."
+      output.puts "       Add these account permissions:"
+      output.puts "         - Cloudflare One Connector: cloudflared: Edit"
+      output.puts "         - Access: Apps: Edit"
+      output.puts "         - Access: Policies: Edit"
+      output.puts "       Leave 'Account Resources' as 'Include - All accounts' (or restrict to the specific account you're setting up)."
+      output.puts "  Note: Creating account-owned tokens needs Super Administrator or Administrator on the account. If you don't have that, the user-level page works too: https://dash.cloudflare.com/profile/api-tokens"
       output.puts "  Cleanup: Dev Boxer deletes this token from secrets.yml after setup succeeds."
       output.puts
     end

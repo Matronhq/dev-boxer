@@ -76,7 +76,7 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "Cloudflare zone DNS API token:"
       assert_includes wizard_output, "What: A zone-scoped Cloudflare API token for example.com."
       assert_includes wizard_output, "new subdomains for projects you make"
-      assert_includes wizard_output, "How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens"
+      assert_includes wizard_output, "https://dash.cloudflare.com/?to=/:account/api-tokens"
       assert_includes wizard_output, "Scope: Limit the token to the example.com zone only. Do not grant access to all zones."
       assert_includes wizard_output, "Alternative: Choose no below if you prefer to create each required subdomain manually."
       assert_includes wizard_output, "Let Dev Boxer manage DNS records for this domain?"

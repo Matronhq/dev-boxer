@@ -56,12 +56,21 @@ module DevBoxer
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
 
-      section_header("2. Domain and DNS")
+      section_header("2. GitHub access")
+      explain_github_token
+      github_token = ask(
+        "GitHub personal access token",
+        default: existing.dig("github", "token"),
+        required: false,
+        secret: true,
+      )
+
+      section_header("3. Domain and DNS")
       explain_base_domain
       base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
       manual_dns, zone_token = choose_dns_setup(existing, base_domain)
 
-      section_header("3. Cloudflare tunnel and Access")
+      section_header("4. Cloudflare tunnel and Access")
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
       manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id, manual_dns: manual_dns)
       setup_token = nil
@@ -74,7 +83,7 @@ module DevBoxer
         )
       end
 
-      section_header("4. Matrix")
+      section_header("5. Matrix")
       matrix_choice = ask_choice(
         "Matrix homeserver location",
         choices: %w[here there],
@@ -103,7 +112,7 @@ module DevBoxer
           ]
         end
 
-      section_header("5. Claude behavior")
+      section_header("6. Claude behavior")
       claude_config = build_claude_config(existing)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
@@ -165,6 +174,7 @@ module DevBoxer
         }.compact,
       }
       secrets["matrix"] = matrix_secret_fields unless matrix_secret_fields.empty?
+      secrets["github"] = { "token" => github_token } unless github_token.to_s.empty?
 
       [config, secrets]
     end
@@ -361,6 +371,27 @@ module DevBoxer
       output.puts "      keys live at C:\\Users\\you\\.ssh\\id_ed25519.pub."
       output.puts "  Already have a key? Reuse it: cat ~/.ssh/id_ed25519.pub (or ~/.ssh/id_rsa.pub)."
       output.puts "  Paste the entire single line below."
+      output.puts
+    end
+
+    def explain_github_token
+      output.puts
+      output.puts "GitHub personal access token (optional):"
+      output.puts "  What: A fine-grained PAT with read access to the private repos Dev Boxer needs"
+      output.puts "        to clone (claude-matrix-bridge today, possibly more in future)."
+      output.puts "  Why: Without it, Dev Boxer pauses mid-setup and runs `gh auth login --web` as the"
+      output.puts "       new dev user so it can clone those repos. With a PAT here we configure git"
+      output.puts "       up-front and the rest of setup runs unattended."
+      output.puts "  How: Open https://github.com/settings/personal-access-tokens/new"
+      output.puts "       Resource owner: Matronhq (or whichever org owns the private repos)"
+      output.puts "       Repository access: Only select repositories → claude-matrix-bridge"
+      output.puts "       Permissions → Repository permissions → Contents: Read-only"
+      output.puts "       Expiration: pick something sensible (e.g. 1 year)."
+      output.puts "  Storage: Saved to secrets.yml (mode 0600). Re-used by `gh auth login --with-token`"
+      output.puts "       for the dev user. Stash a copy in your password manager so future boxes can"
+      output.puts "       reuse the same token."
+      output.puts "  Skip: Leave blank to fall back to the interactive `gh auth login --web` flow"
+      output.puts "       during the matrix-bridge module."
       output.puts
     end
 

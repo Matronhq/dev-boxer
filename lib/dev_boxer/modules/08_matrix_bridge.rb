@@ -378,10 +378,39 @@ module DevBoxer
           skip "Bridge repo already cloned"
           shell.sh("su - #{username} -c 'cd #{bridge_dir} && git pull --ff-only'")
         else
+          ensure_dev_user_can_clone_bridge
           info "Cloning claude-matrix-bridge"
           shell.run_as_user(username, "git clone #{BRIDGE_REPO} #{bridge_dir}")
           ok "Bridge repo cloned"
         end
+      end
+
+      # The bridge lives in a private GitHub org, so the dev user needs git
+      # credentials before the clone. `gh auth login` was almost certainly
+      # done as root during install, but git-as-the-dev-user has no helper
+      # configured. Probe with GIT_TERMINAL_PROMPT=0 so the check returns
+      # cleanly instead of hanging on a credential prompt, then run the
+      # interactive `gh auth login --web` device-code flow when needed.
+      def ensure_dev_user_can_clone_bridge
+        probe = "GIT_TERMINAL_PROMPT=0 git ls-remote #{Shellwords.escape(BRIDGE_REPO)} HEAD >/dev/null 2>&1"
+        if shell.sh("su - #{Shellwords.escape(username)} -c #{Shellwords.escape(probe)}")
+          skip "GitHub auth already configured for #{username}"
+          return
+        end
+
+        unless $stdin.tty?
+          raise "#{username} cannot clone #{BRIDGE_REPO}; re-run interactively so we can run `gh auth login --web` as #{username}"
+        end
+
+        info "GitHub auth required for #{username} to clone the private bridge repo"
+        info "About to run: gh auth login --web --git-protocol https --hostname github.com (as #{username})"
+        info "You'll see a one-time code and a URL — open the URL in any browser, paste the code, and authorize."
+        shell.run_as_user_interactive(
+          username,
+          "gh auth login --web --git-protocol https --hostname github.com",
+        )
+        shell.run_as_user_interactive(username, "gh auth setup-git")
+        ok "GitHub CLI authenticated for #{username}"
       end
 
       def npm_install

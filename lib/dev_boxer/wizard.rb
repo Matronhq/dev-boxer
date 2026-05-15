@@ -52,6 +52,7 @@ module DevBoxer
     def build_config(existing)
       section_header("1. Server login")
       username = ask("Linux username", default: existing.dig("user", "name") || default_username)
+      explain_ssh_public_key
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
 
@@ -339,6 +340,28 @@ module DevBoxer
       rescue ArgumentError, TypeError
         output.puts "#{label} must be a number."
       end
+    end
+
+    def explain_ssh_public_key
+      output.puts
+      output.puts "SSH public key:"
+      output.puts "  What: The public half of an SSH key pair from your laptop. A single line that"
+      output.puts "        starts with ssh-ed25519, ssh-rsa, or sk-ssh-... and ends with a comment."
+      output.puts "  Why: Dev Boxer puts it in the new Linux user's ~/.ssh/authorized_keys so you can"
+      output.puts "       log in over SSH from your laptop without a password (and password auth is"
+      output.puts "       disabled by the security module)."
+      output.puts "  How (macOS/Linux): if you don't already have one, run on your laptop:"
+      output.puts "      ssh-keygen -t ed25519 -C \"you@laptop\""
+      output.puts "      # press Enter to accept the default path (~/.ssh/id_ed25519)"
+      output.puts "      # set a passphrase if you like (recommended)"
+      output.puts "    Then print and copy the public key:"
+      output.puts "      cat ~/.ssh/id_ed25519.pub        # macOS/Linux"
+      output.puts "      cat ~/.ssh/id_ed25519.pub | pbcopy   # macOS, copies to clipboard"
+      output.puts "  How (Windows): run the same `ssh-keygen` command in PowerShell or Git Bash;"
+      output.puts "      keys live at C:\\Users\\you\\.ssh\\id_ed25519.pub."
+      output.puts "  Already have a key? Reuse it: cat ~/.ssh/id_ed25519.pub (or ~/.ssh/id_rsa.pub)."
+      output.puts "  Paste the entire single line below."
+      output.puts
     end
 
     def explain_base_domain

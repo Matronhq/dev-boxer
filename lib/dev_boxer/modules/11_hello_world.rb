@@ -61,13 +61,21 @@ module DevBoxer
 
         info ""
         info "=========================================="
-        info "  Matrix bridge — Matron first login"
+        info "  Matrix bridge — first login"
         info "=========================================="
-        info "Open Matron:"
-        info "  URL: #{details[:homeserver_url]}"
-        info "  User ID: #{details[:user_id]}"
-        info "  Password: #{details[:password] || '(missing from secrets.yml)'}"
-        info "  Secure Backup recovery key: #{details[:recovery_key] || '(not found; check ~/recovery-key.txt if still present)'}"
+        if details[:mode] == "external"
+          info "Open Element (web/desktop) and sign in to your existing account:"
+          info "  Homeserver URL: #{details[:homeserver_url]}"
+          info "  User ID: #{details[:user_id]}"
+          info "  Password: (use your existing #{details[:server_domain]} account password)"
+          info "  Secure Backup recovery key: (use your existing recovery key)"
+        else
+          info "Open Matron:"
+          info "  URL: #{details[:homeserver_url]}"
+          info "  User ID: #{details[:user_id]}"
+          info "  Password: #{details[:password] || '(missing from secrets.yml)'}"
+          info "  Secure Backup recovery key: #{details[:recovery_key] || '(not found; check ~/recovery-key.txt if still present)'}"
+        end
         info ""
         info "After login, open the 'Claude Code Bridge' room and send !start."
       end
@@ -77,12 +85,25 @@ module DevBoxer
         matrix = hash["matrix"] || {}
         return nil if matrix["mode"] == "disabled"
 
+        mode = matrix["mode"] || "bundled"
         server_domain = matrix["server_domain"] || "your-domain"
         user_username = matrix["user_username"] || username
-        matrix_hostname = hash.dig("cloudflare", "tunnel", "hostname_matrix") || server_domain
+
+        homeserver_url =
+          if mode == "external"
+            # In external mode the homeserver lives elsewhere; matrix.homeserver_url
+            # is the only correct URL. cloudflare.tunnel.hostname_matrix points at
+            # a local Matron container that doesn't exist in this mode.
+            matrix["homeserver_url"] || "https://#{server_domain}"
+          else
+            matrix_hostname = hash.dig("cloudflare", "tunnel", "hostname_matrix") || server_domain
+            public_url(matrix_hostname)
+          end
 
         {
-          homeserver_url: public_url(matrix_hostname),
+          mode: mode,
+          server_domain: server_domain,
+          homeserver_url: homeserver_url,
           user_id: "@#{user_username}:#{server_domain}",
           password: matrix["user_password"],
           recovery_key: matrix_recovery_key,

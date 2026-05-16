@@ -444,38 +444,29 @@ module DevBoxer
     def explain_cloudflare_automation
       output.puts
       output.puts "Cloudflare automation:"
-      output.puts "  What: Dev Boxer can create one Cloudflare Tunnel and one Zero Trust Access app."
-      output.puts "  Why: The tunnel exposes dev.<domain>, matrix.<domain>, viewer.<domain>, and hello.<domain> without opening inbound ports."
-      output.puts "       Access protects dev/viewer/hello in the browser, while matrix stays outside Access so Matrix clients work normally."
-      output.puts "  Manual option: If you prefer, choose no. Dev Boxer will pause later with the exact cloudflared tunnel command, then ask for the TunnelID."
-      output.puts "                 You can create the Access app manually after setup using docs/cloudflare-access.md."
+      output.puts "Dev Boxer can create the Cloudflare Tunnel (which exposes your hostnames without opening any inbound ports) and a Zero Trust Access app (browser SSO) in one go."
+      output.puts "Matrix stays outside Access so Matrix clients keep working normally."
+      output.puts "Say no if you'd rather run the cloudflared tunnel login and cloudflared tunnel create commands by hand — Dev Boxer will pause and tell you exactly what to run, then ask for the resulting TunnelID."
       output.puts
     end
 
     def explain_manual_cloudflare_setup
       output.puts
-      output.puts "Manual Cloudflare setup selected."
-      output.puts "  Tunnel: Dev Boxer will install cloudflared, print a one-time tunnel creation command, and ask you to paste the resulting TunnelID."
-      output.puts "  Login: The manual tunnel command starts with cloudflared tunnel login, which opens a Cloudflare authorization URL."
-      output.puts "  Access: Dev Boxer will not create a Zero Trust Access app. Protect dev/viewer/hello manually later if you want browser SSO."
+      output.puts "Manual Cloudflare setup selected:"
+      output.puts "Dev Boxer will install cloudflared, print the exact `cloudflared tunnel login` and `cloudflared tunnel create` commands to run in another root shell, then ask you to paste the resulting TunnelID."
+      output.puts "It won't create the Access app either — set that up later from the dashboard if you want SSO; see docs/cloudflare-access.md."
       output.puts
     end
 
     def explain_cloudflare_setup_token
       output.puts
       output.puts "One-time Cloudflare account setup token:"
-      output.puts "  What: A temporary account-owned Cloudflare API token."
-      output.puts "  Why: Dev Boxer uses it once to create the Cloudflare Tunnel and optional Zero Trust Access app."
-      output.puts "  How: Open the account-level token page (Cloudflare resolves :account to your account, or asks you to pick if you have several):"
-      output.puts "       https://dash.cloudflare.com/?to=/:account/api-tokens"
-      output.puts "       Click 'Create Token' > 'Get started' next to 'Create Custom Token'."
-      output.puts "       Add these account permissions:"
-      output.puts "         - Cloudflare One Connector: cloudflared: Edit"
-      output.puts "         - Access: Apps: Edit"
-      output.puts "         - Access: Policies: Edit"
-      output.puts "       Leave 'Account Resources' as 'Include - All accounts' (or restrict to the specific account you're setting up)."
-      output.puts "  Note: Creating account-owned tokens needs Super Administrator or Administrator on the account. If you don't have that, the user-level page works too: https://dash.cloudflare.com/profile/api-tokens"
-      output.puts "  Cleanup: Dev Boxer deletes this token from secrets.yml after setup succeeds."
+      output.puts "A one-time account-level Cloudflare API token used only to create the tunnel and the Access app."
+      output.puts "Create a custom token at https://dash.cloudflare.com/?to=/:account/api-tokens with these account permissions:"
+      output.puts "  - Cloudflare One Connector: cloudflared: Edit"
+      output.puts "  - Access: Apps: Edit"
+      output.puts "  - Access: Policies: Edit"
+      output.puts "Dev Boxer wipes it from secrets.yml as soon as setup finishes."
       output.puts
     end
 

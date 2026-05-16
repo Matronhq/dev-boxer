@@ -34,6 +34,7 @@ When the user asks for a new web-based project, aim to get a live private previe
 - Initialize git immediately, make an early first commit once the scaffold runs, and keep committing meaningful progress.
 - Create a private GitHub repository with `gh`, add it as the remote, and push the branch as soon as practical.
 - Create a project subdomain in the configured Cloudflare zone, route it through the existing tunnel, and add the matching cloudflared ingress rule for the local app port.
+- Subdomain naming controls access: a plain name (e.g. `myapp.{{CF_ZONE_NAME}}`) is caught by the `*.{{CF_ZONE_NAME}}` Cloudflare Access wildcard and requires login; a `public-<name>.{{CF_ZONE_NAME}}` is matched by the bypass app and is openly reachable. Default to the protected name. Only use `public-` after explicit user confirmation, and tell them the URL will be world-readable.
 - Share the live URL with the user as soon as there is a minimal working page, then continue iterating from their feedback.
 
 ## Existing Web Projects
@@ -70,7 +71,8 @@ This box may have a zone-scoped Cloudflare DNS API token at `/home/{{USERNAME}}/
 - Cloudflare zone: `{{CF_ZONE_NAME}}`
 - It is intended for creating and updating DNS records for project subdomains.
 - Do not print, commit, or transmit the token.
-- When exposing a local web project, create a proxied CNAME to the existing Cloudflare Tunnel target and add a matching cloudflared ingress rule for the local port.
+- When exposing a local web project, create a proxied CNAME to the existing Cloudflare Tunnel target and add a matching cloudflared ingress rule for the local port. Prefix the subdomain with `public-` only when the user explicitly wants it openly reachable; otherwise the `*.{{CF_ZONE_NAME}}` Access wildcard will gate it behind login.
+- Before relying on Access for a new subdomain, verify it actually challenges: `curl -I https://<host>/` should redirect to `cloudflareaccess.com/cdn-cgi/access/login`. If it returns 200 directly, the wildcard app isn't in place — flag it to the user before continuing.
 - If the token file is missing, ask the user whether DNS is manual before trying to create records.
 
 The main tunnel hostnames are:

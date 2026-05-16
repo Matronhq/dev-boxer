@@ -298,11 +298,12 @@ class CloudflareModuleTest < Minitest::Test
     assert_includes output, "Create proxied CNAME: hello.example.com -> tunnel-123.cfargotunnel.com"
   end
 
-  def test_cloudflare_access_excludes_matrix_hostname
+  def test_access_protected_destinations_is_zone_wildcard
     mod = build_cloudflare_module(
       config_path: "/tmp/config.yml",
       secrets_path: "/tmp/secrets.yml",
       config_hash: cloudflare_config(
+        "zone_name" => "example.com",
         "tunnel" => {
           "hostname" => "dev.example.com",
           "hostname_matrix" => "matrix.example.com",
@@ -312,14 +313,76 @@ class CloudflareModuleTest < Minitest::Test
       ),
     )
 
-    assert_equal ["dev.example.com", "viewer.example.com", "hello.example.com"], mod.send(:access_hostnames)
+    assert_equal ["*.example.com"], mod.send(:access_protected_destinations)
   end
 
-  def test_cloudflare_access_payload_allows_email_and_domain
+  def test_access_bypass_destinations_defaults_to_matrix_and_public_wildcard
     mod = build_cloudflare_module(
       config_path: "/tmp/config.yml",
       secrets_path: "/tmp/secrets.yml",
       config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "tunnel" => {
+          "hostname" => "dev.example.com",
+          "hostname_matrix" => "matrix.example.com",
+        },
+      ),
+    )
+
+    assert_equal ["matrix.example.com", "public-*.example.com"], mod.send(:access_bypass_destinations)
+  end
+
+  def test_access_bypass_destinations_respects_configured_overrides
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "tunnel" => { "hostname_matrix" => "matrix.example.com" },
+        "access" => {
+          "bypass_hostnames" => ["status.example.com", "public-*.example.com"],
+        },
+      ),
+    )
+
+    assert_equal ["matrix.example.com", "status.example.com", "public-*.example.com"],
+                 mod.send(:access_bypass_destinations)
+  end
+
+  def test_access_bypass_destinations_omits_matrix_when_unset
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "tunnel" => { "hostname_matrix" => nil },
+      ),
+    )
+
+    assert_equal ["public-*.example.com"], mod.send(:access_bypass_destinations)
+  end
+
+  def test_access_bypass_destinations_treats_empty_list_as_explicit_opt_out
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "tunnel" => { "hostname_matrix" => "matrix.example.com" },
+        "access" => { "bypass_hostnames" => [] },
+      ),
+    )
+
+    # An explicit empty list means "no extras" — just matrix, no public-* default.
+    assert_equal ["matrix.example.com"], mod.send(:access_bypass_destinations)
+  end
+
+  def test_protected_access_app_payload_uses_zone_wildcard_and_allow_policy
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
         "access" => {
           "enabled" => true,
           "account_id" => "account-123",
@@ -329,14 +392,43 @@ class CloudflareModuleTest < Minitest::Test
       ),
     )
 
-    payload = mod.send(:cloudflare_access_app_payload, ["dev.example.com", "viewer.example.com", "hello.example.com"])
+    payload = mod.send(:protected_access_app_payload)
 
+    assert_equal "Dev Boxer", payload["name"]
     assert_equal "self_hosted", payload["type"]
-    assert_equal ["dev.example.com", "viewer.example.com", "hello.example.com"], payload["destinations"].map { |dest| dest["uri"] }
+    assert_equal ["*.example.com"], payload["destinations"].map { |dest| dest["uri"] }
+    assert_equal "*.example.com", payload["domain"]
+    assert_equal "allow", payload.dig("policies", 0, "decision")
     assert_equal [
       { "email" => { "email" => "alice@example.com" } },
       { "email_domain" => { "domain" => "example.com" } },
     ], payload.dig("policies", 0, "include")
+  end
+
+  def test_bypass_access_app_payload_bypasses_for_everyone
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config(
+        "zone_name" => "example.com",
+        "tunnel" => { "hostname_matrix" => "matrix.example.com" },
+        "access" => {
+          "enabled" => true,
+          "account_id" => "account-123",
+          "allowed_email_domains" => ["example.com"],
+        },
+      ),
+    )
+
+    payload = mod.send(:bypass_access_app_payload)
+
+    assert_equal "Dev Boxer Public", payload["name"]
+    assert_equal "self_hosted", payload["type"]
+    assert_equal ["matrix.example.com", "public-*.example.com"],
+                 payload["destinations"].map { |dest| dest["uri"] }
+    assert_equal "matrix.example.com", payload["domain"]
+    assert_equal "bypass", payload.dig("policies", 0, "decision")
+    assert_equal [{ "everyone" => {} }], payload.dig("policies", 0, "include")
   end
 
   def test_ingress_routes_hello_hostname_to_smoke_test_service
@@ -359,7 +451,117 @@ class CloudflareModuleTest < Minitest::Test
     assert_includes ingress, "service: http://localhost:9822"
   end
 
-  def test_configure_access_uses_top_level_setup_token
+  def test_configure_access_updates_existing_apps_in_place
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      calls = []
+      mod = build_cloudflare_module(
+        config_path: config_path,
+        secrets_path: secrets_path,
+        config_hash: cloudflare_config(
+          "api_token" => "setup-token",
+          "access" => {
+            "enabled" => true,
+            "app_id" => "existing-protected-app",
+            "bypass_app_id" => "existing-bypass-app",
+            "allowed_email_domains" => ["example.com"],
+          },
+        ),
+      )
+
+      api = lambda do |token:, method:, path:, query: {}, body: nil|
+        calls << { token: token, method: method, path: path, query: query, body: body }
+        return [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }] if path == "/zones"
+        { "id" => path.split("/").last }
+      end
+
+      mod.stub(:cloudflare_api, api) do
+        mod.send(:configure_cloudflare_access)
+      end
+
+      access_calls = calls.select { |c| c[:path].include?("/access/apps") }
+      assert_equal 2, access_calls.length
+      assert access_calls.all? { |c| c[:method] == :put }, "expected all access calls to be PUT, got #{access_calls.map { |c| c[:method] }.inspect}"
+      assert_equal "/accounts/account-123/access/apps/existing-protected-app", access_calls[0][:path]
+      assert_equal "/accounts/account-123/access/apps/existing-bypass-app", access_calls[1][:path]
+    end
+  end
+
+  def test_configure_access_does_not_need_bypass_app_when_no_bypass_destinations_configured
+    # Edge case: operator explicitly disabled the bypass app (bypass_hostnames: []
+    # AND no matrix hostname). The bypass app shouldn't be required and the
+    # absence of bypass_app_id mustn't force a permanent setup-token requirement.
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+      log_io = StringIO.new
+      mod = build_cloudflare_module(
+        config_path: config_path,
+        secrets_path: secrets_path,
+        log_io: log_io,
+        config_hash: cloudflare_config(
+          "api_token" => nil,
+          "tunnel" => {
+            "id" => "tunnel-123",
+            "hostname" => "dev.example.com",
+            "hostname_matrix" => nil,
+            "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
+          },
+          "access" => {
+            "enabled" => true,
+            "app_id" => "existing-protected-app",
+            "account_id" => "account-123",
+            "bypass_hostnames" => [],
+            "allowed_email_domains" => ["example.com"],
+          },
+        ),
+      )
+
+      api = ->(**_args) { raise "API should not be called: bypass is intentionally empty" }
+
+      mod.stub(:cloudflare_api, api) do
+        mod.send(:configure_cloudflare_access)
+      end
+
+      assert_includes log_io.string, "Cloudflare Access apps already configured"
+    end
+  end
+
+  def test_configure_access_skips_when_both_apps_exist_and_no_setup_token
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+      log_io = StringIO.new
+      mod = build_cloudflare_module(
+        config_path: config_path,
+        secrets_path: secrets_path,
+        log_io: log_io,
+        config_hash: cloudflare_config(
+          "api_token" => nil,
+          "access" => {
+            "enabled" => true,
+            "app_id" => "existing-protected-app",
+            "bypass_app_id" => "existing-bypass-app",
+            "account_id" => "account-123",
+            "allowed_email_domains" => ["example.com"],
+          },
+        ),
+      )
+
+      api = ->(**_args) { raise "API should not be called when both apps already configured" }
+
+      mod.stub(:cloudflare_api, api) do
+        mod.send(:configure_cloudflare_access)
+      end
+
+      assert_includes log_io.string, "Cloudflare Access apps already configured"
+    end
+  end
+
+  def test_configure_access_creates_protected_and_bypass_apps_and_persists_both_ids
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
@@ -377,19 +579,33 @@ class CloudflareModuleTest < Minitest::Test
         ),
       )
 
+      app_ids = ["protected-app-123", "bypass-app-456"]
       api = lambda do |token:, method:, path:, query: {}, body: nil|
         calls << { token: token, method: method, path: path, query: query, body: body }
         return [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }] if path == "/zones"
-        { "id" => "access-app-123" }
+        { "id" => app_ids.shift }
       end
 
       mod.stub(:cloudflare_api, api) do
         mod.send(:configure_cloudflare_access)
       end
 
-      access_call = calls.find { |call| call[:path] == "/accounts/account-123/access/apps" }
-      assert_equal "setup-token", access_call[:token]
-      assert_equal "access-app-123", YAML.safe_load_file(config_path).dig("cloudflare", "access", "app_id")
+      app_posts = calls.select { |c| c[:method] == :post && c[:path] == "/accounts/account-123/access/apps" }
+      assert_equal 2, app_posts.length, "expected two POSTs (protected + bypass), saw #{app_posts.length}"
+
+      protected_post, bypass_post = app_posts
+      assert_equal "setup-token", protected_post[:token]
+      assert_equal ["*.example.com"], protected_post[:body]["destinations"].map { |d| d["uri"] }
+      assert_equal "allow", protected_post[:body].dig("policies", 0, "decision")
+
+      assert_equal ["matrix.example.com", "public-*.example.com"],
+                   bypass_post[:body]["destinations"].map { |d| d["uri"] }
+      assert_equal "bypass", bypass_post[:body].dig("policies", 0, "decision")
+      assert_equal [{ "everyone" => {} }], bypass_post[:body].dig("policies", 0, "include")
+
+      persisted = YAML.safe_load_file(config_path).dig("cloudflare", "access")
+      assert_equal "protected-app-123", persisted["app_id"]
+      assert_equal "bypass-app-456", persisted["bypass_app_id"]
     end
   end
 

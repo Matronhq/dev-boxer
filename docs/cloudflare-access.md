@@ -2,7 +2,7 @@
 
 Cloudflare Access sits in front of your browser-facing tunnel hostnames and requires authentication before anyone can reach your dev box. Dev Boxer can create this application automatically, but this guide is useful if you prefer to configure it manually.
 
-Do not put `matrix.<yourdomain>` behind browser-based Access. Matrix clients need direct access to the homeserver API and often cannot complete or persist the Access browser session.
+`matrix.<yourdomain>` must not require a browser login — Matrix clients can't complete or persist an interactive Access session and federation needs to reach the homeserver directly. The **Dev Boxer Public** app's Bypass policy handles this; just leave `matrix.<yourdomain>` out of the protected app.
 
 ## 1. Enable Cloudflare Zero Trust
 
@@ -23,27 +23,49 @@ Choose one of:
 
 After saving, click **Test** next to the provider to confirm it works before continuing.
 
-## 3. Create an Access Application
+## 3. Create the Access Applications
 
-The first-run wizard can perform this step automatically using the same one-time account setup token used for tunnel creation. For Access, that token needs account permissions `Access: Apps: Edit` and `Access: Policies: Edit`. Dev Boxer derives the Cloudflare account from the DNS zone.
+Dev Boxer manages **two** self-hosted Access applications so that adding new project subdomains doesn't require touching the Access config every time.
+
+| Application | Destinations | Policy |
+|-------------|--------------|--------|
+| **Dev Boxer** | `*.yourdomain.com` | Allow — your team |
+| **Dev Boxer Public** | `matrix.yourdomain.com`, `public-*.yourdomain.com`, plus anything in `cloudflare.access.bypass_hostnames` | Bypass — Everyone |
+
+Cloudflare evaluates the most-specific matching destination first, so requests to `matrix.*` and `public-*.*` hit the **Bypass** app and skip the login wall. Everything else under your zone lands on the **Dev Boxer** app and gets the login wall.
+
+> **Heads up — wildcard support**
+> The protected app uses the leftmost full-label wildcard `*.yourdomain.com`, which Cloudflare Access supports without question.
+> The bypass app uses a prefix wildcard like `public-*.yourdomain.com`. If your Cloudflare account rejects that pattern, replace it with one or more explicit hostnames in `cloudflare.access.bypass_hostnames` — the two-app pattern still works.
+
+The first-run wizard can create both apps automatically using the same one-time account setup token used for tunnel creation. For Access, that token needs account permissions `Access: Apps: Edit` and `Access: Policies: Edit`. Dev Boxer derives the Cloudflare account from the DNS zone.
+
+### Manual setup in the dashboard
 
 Go to **Access → Applications** and click **Add an application**. Choose **Self-hosted**.
 
-Fill in:
+For the **Dev Boxer** application:
 
 | Field | Value |
 |-------|-------|
-| **Application name** | `dev-box` (or anything descriptive) |
+| **Application name** | `Dev Boxer` |
 | **Session duration** | `24 hours` |
-| **Domain** | Add the browser-facing tunnel hostnames, e.g. `dev.yourdomain.com`, `viewer.yourdomain.com`, and `hello.yourdomain.com` |
+| **Domain** | `*.yourdomain.com` |
 
-For each additional hostname, click **Add domain** and add the next one. All protected hostnames can share one application. Leave `matrix.yourdomain.com` out of the application so Matrix clients can connect normally.
+For the **Dev Boxer Public** application (create a second self-hosted app):
+
+| Field | Value |
+|-------|-------|
+| **Application name** | `Dev Boxer Public` |
+| **Session duration** | `24 hours` |
+| **Domain** | `matrix.yourdomain.com` |
+| **Additional domains** | `public-*.yourdomain.com` (plus any other hostnames you want to leave open) |
 
 Leave all other settings at their defaults and click **Next**.
 
-## 4. Create an Access Policy
+## 4. Create the Access Policies
 
-On the **Policies** step, click **Add a policy**.
+On the **Dev Boxer** app's **Policies** step, click **Add a policy**.
 
 | Field | Value |
 |-------|-------|
@@ -58,20 +80,33 @@ Common rule types:
 - **Login method** — allow anyone who authenticates via a specific IdP
 - **GitHub organisation** — allow members of a specific GitHub org
 
+On the **Dev Boxer Public** app, add a single policy:
+
+| Field | Value |
+|-------|-------|
+| **Policy name** | `Bypass public hostnames` |
+| **Action** | Bypass |
+| **Include** | Everyone |
+
 Click **Save policy**, then **Add application**.
 
 ## 5. Verify
 
-Open an incognito/private browser window and navigate to one of your tunnel hostnames. You should be redirected to the Cloudflare Access login page. After authenticating, you should land on your app.
+Open an incognito/private browser window and navigate to one of your protected tunnel hostnames (e.g. `https://dev.yourdomain.com`). You should be redirected to the Cloudflare Access login page. After authenticating, you should land on your app.
+
+In a second incognito window navigate to `https://matrix.yourdomain.com` (or any `public-*` subdomain). You should reach the service directly **without** a login prompt — the Bypass policy is doing its job.
 
 If you see an error, check:
-- The hostname in the Access application matches your tunnel DNS record exactly.
+- The destinations in each Access application match your tunnel DNS records exactly.
+- More-specific hostnames (e.g. `matrix.*`, `public-*`) live on the bypass app, not the protected app.
 - The identity provider test passes (Settings → Authentication → Login methods → Test).
 - Your Cloudflare tunnel is running: `sudo systemctl status cloudflared-tunnel`
 
-## 6. Matrix Client Note
+## 6. Project subdomains and the `public-` prefix
 
-Element and other Matrix clients need to call homeserver endpoints such as client sync, federation discovery, media downloads, and login directly. Keep `matrix.yourdomain.com` outside Cloudflare Access. Dev Boxer still creates the Cloudflare DNS record for this hostname and routes it through the tunnel.
+When you spin up a new project subdomain on the tunnel (e.g. `myapp.yourdomain.com`) you get login-walled by default — the protected app's `*.yourdomain.com` wildcard covers it for free.
+
+If you want a subdomain to be world-readable (a public demo, a status page, a service that needs unauthenticated callbacks), prefix it with `public-` (e.g. `public-status.yourdomain.com`). The default bypass app's `public-*.yourdomain.com` destination matches it and skips Access. For any other always-public hostname, add it explicitly to `cloudflare.access.bypass_hostnames` in your config and re-run `dev-boxer`.
 
 ## Tips
 

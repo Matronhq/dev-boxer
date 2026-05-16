@@ -76,9 +76,18 @@ cloudflare:
     config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml
   access:
     enabled: true
-    account_id: null        # optional override; otherwise derived from zone_name
-    app_id: null            # persisted after the Access app is created
+    account_id: null              # optional override; otherwise derived from zone_name
+    app_id: null                  # persisted after the protected Access app is created
     app_name: Dev Boxer
+    # Dev Boxer manages two Cloudflare Access apps:
+    #   "Dev Boxer"        protects *.<zone_name>            (allow policy)
+    #   "Dev Boxer Public" bypasses matrix + bypass_hostnames (bypass policy)
+    # Cloudflare matches more-specific destinations first, so requests to
+    # matrix.* and public-* hit the bypass app and skip the login wall.
+    bypass_app_id: null           # persisted after the bypass Access app is created
+    bypass_app_name: Dev Boxer Public
+    bypass_hostnames:             # extra destinations to bypass; matrix is added automatically
+      - public-*.example.com      # any project subdomain prefixed `public-` is public
     session_duration: 24h
     allowed_emails: []
     allowed_email_domains:

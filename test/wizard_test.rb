@@ -212,6 +212,33 @@ class WizardTest < Minitest::Test
     end
   end
 
+  def test_build_access_config_preserves_bypass_app_id_and_name_from_existing_config
+    wizard = DevBoxer::Wizard.new(
+      config_path: "/tmp/x.yml",
+      input: StringIO.new("\n"),
+      output: StringIO.new,
+    )
+    existing = {
+      "cloudflare" => {
+        "access" => {
+          "app_id" => "old-protected",
+          "bypass_app_id" => "old-bypass",
+          "bypass_app_name" => "Custom Public",
+          "bypass_hostnames" => ["status.example.com"],
+          "allowed_emails" => ["alice@example.com"],
+          "allowed_email_domains" => ["example.com"],
+        },
+      },
+    }
+
+    result = wizard.send(:build_access_config, existing, enabled: true)
+
+    assert_equal "old-protected", result["app_id"]
+    assert_equal "old-bypass", result["bypass_app_id"]
+    assert_equal "Custom Public", result["bypass_app_name"]
+    assert_equal ["status.example.com"], result["bypass_hostnames"]
+  end
+
   private
 
   # Answers feeding the wizard's STDIN for the "there" matrix branch.

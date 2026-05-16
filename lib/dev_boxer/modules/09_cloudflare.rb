@@ -53,6 +53,8 @@ module DevBoxer
       def access_account_id = cloudflare_account_id
       def access_app_id = access_config&.app_id
       def access_app_name = access_config&.app_name || "Dev Boxer"
+      def access_bypass_app_id = access_config&.bypass_app_id
+      def access_bypass_app_name = access_config&.bypass_app_name || "Dev Boxer Public"
       def access_session_duration = access_config&.session_duration || "24h"
       def credentials_path = CREDENTIALS_PATH
 
@@ -265,53 +267,93 @@ module DevBoxer
       def configure_cloudflare_access
         return unless access_enabled?
 
-        if access_app_id && setup_token.to_s.empty?
-          skip "Cloudflare Access app already configured"
+        protected_destinations = access_protected_destinations
+        if protected_destinations.empty?
+          skip "Skipping Cloudflare Access (cloudflare.zone_name not configured)"
           return
         end
 
-        protected = access_hostnames
-        if protected.empty?
-          skip "Skipping Cloudflare Access app (no non-Matrix hostnames configured)"
+        needs_create = access_app_id.to_s.empty? || access_bypass_app_id.to_s.empty?
+        if !needs_create && setup_token.to_s.empty?
+          skip "Cloudflare Access apps already configured"
           return
         end
 
         raise "cloudflare.access.account_id is required when Access setup is enabled" if access_account_id.to_s.empty?
-        raise "cloudflare.api_token is required until cloudflare.access.app_id exists" if setup_token.to_s.empty?
+        raise "cloudflare.api_token is required until cloudflare.access apps exist" if setup_token.to_s.empty?
 
-        info "Configuring Cloudflare Access for #{protected.join(", ")}"
-        body = cloudflare_access_app_payload(protected)
-        result =
-          if access_app_id
-            cloudflare_api(token: setup_token, method: :put, path: "/accounts/#{access_account_id}/access/apps/#{access_app_id}", body: body)
-          else
-            cloudflare_api(token: setup_token, method: :post, path: "/accounts/#{access_account_id}/access/apps", body: body)
-          end
-
+        info "Configuring Cloudflare Access protected app for #{protected_destinations.join(", ")}"
+        result = upsert_access_app(app_id: access_app_id, body: protected_access_app_payload)
         persist_access_app_id(result["id"]) if result["id"]
-        ok "Cloudflare Access protects #{protected.join(", ")}"
-        info "Matrix hostname left outside Access: #{hostname_matrix}" if hostname_matrix
+        ok "Cloudflare Access protects #{protected_destinations.join(", ")}"
+
+        bypass = access_bypass_destinations
+        if bypass.empty?
+          skip "Skipping Cloudflare Access bypass app (no bypass destinations)"
+        else
+          info "Configuring Cloudflare Access bypass app for #{bypass.join(", ")}"
+          result = upsert_access_app(app_id: access_bypass_app_id, body: bypass_access_app_payload)
+          persist_access_bypass_app_id(result["id"]) if result["id"]
+          ok "Cloudflare Access bypasses #{bypass.join(", ")}"
+        end
       end
 
-      def access_hostnames
-        [tunnel_hostname, hostname_viewer, hostname_hello]
-          .compact
-          .reject { |host| host.to_s.empty? || host == hostname_matrix }
-          .uniq
+      def upsert_access_app(app_id:, body:)
+        if app_id.to_s.empty?
+          cloudflare_api(token: setup_token, method: :post, path: "/accounts/#{access_account_id}/access/apps", body: body)
+        else
+          cloudflare_api(token: setup_token, method: :put, path: "/accounts/#{access_account_id}/access/apps/#{app_id}", body: body)
+        end
       end
 
-      def cloudflare_access_app_payload(hostnames)
+      def access_protected_destinations
+        return [] if zone_name.to_s.empty?
+        ["*.#{zone_name}"]
+      end
+
+      def access_bypass_destinations
+        if access_config&.to_h&.key?("bypass_hostnames")
+          configured = Array(access_config.bypass_hostnames).reject { |h| h.to_s.empty? }
+        elsif !zone_name.to_s.empty?
+          configured = ["public-*.#{zone_name}"]
+        else
+          configured = []
+        end
+        [hostname_matrix, *configured].compact.reject { |h| h.to_s.empty? }.uniq
+      end
+
+      def protected_access_app_payload
+        build_access_app_payload(
+          name: access_app_name,
+          destinations: access_protected_destinations,
+          policy_name: "Allow configured users",
+          decision: "allow",
+          include_rules: access_policy_rules,
+        )
+      end
+
+      def bypass_access_app_payload
+        build_access_app_payload(
+          name: access_bypass_app_name,
+          destinations: access_bypass_destinations,
+          policy_name: "Bypass public hostnames",
+          decision: "bypass",
+          include_rules: [{ "everyone" => {} }],
+        )
+      end
+
+      def build_access_app_payload(name:, destinations:, policy_name:, decision:, include_rules:)
         {
-          "name"             => access_app_name,
+          "name"             => name,
           "type"             => "self_hosted",
-          "domain"           => hostnames.first,
-          "destinations"     => hostnames.map { |host| { "type" => "public", "uri" => host } },
+          "domain"           => destinations.first,
+          "destinations"     => destinations.map { |host| { "type" => "public", "uri" => host } },
           "session_duration" => access_session_duration,
           "policies"         => [
             {
-              "name"     => "Allow configured users",
-              "decision" => "allow",
-              "include"  => access_policy_rules,
+              "name"     => policy_name,
+              "decision" => decision,
+              "include"  => include_rules,
             },
           ],
         }
@@ -335,6 +377,11 @@ module DevBoxer
       def persist_access_app_id(id)
         return unless config_path && File.exist?(config_path)
         Config.merge_into_file(config_path, { "cloudflare" => { "access" => { "app_id" => id } } })
+      end
+
+      def persist_access_bypass_app_id(id)
+        return unless config_path && File.exist?(config_path)
+        Config.merge_into_file(config_path, { "cloudflare" => { "access" => { "bypass_app_id" => id } } })
       end
 
       def prompt_for_manual_tunnel_setup
@@ -535,7 +582,9 @@ module DevBoxer
         info "Viewer:  https://#{hostname_viewer}"        if hostname_viewer
         info "Hello:   https://#{hostname_hello}"         if hostname_hello
         if access_enabled?
-          info "Cloudflare Access: protects #{access_hostnames.join(", ")}; Matrix is excluded."
+          info "Cloudflare Access protects: #{access_protected_destinations.join(", ")}"
+          bypass = access_bypass_destinations
+          info "Cloudflare Access bypasses: #{bypass.join(", ")}" unless bypass.empty?
         else
           info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
         end

@@ -503,15 +503,14 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare Access will be manual too:"
       output.puts "Dev Boxer normally derives your Cloudflare account from the zone DNS token, and without that token it can't reach the Access API."
-      output.puts "Create the Access app yourself later from the dashboard if you want browser SSO on dev, viewer, and hello — see docs/cloudflare-access.md."
+      output.puts "Create the two Access apps yourself later from the dashboard — a protected app for `*.<your zone>` and a bypass app for matrix and `public-*` (so Matrix clients and any public subdomains skip the login wall). See docs/cloudflare-access.md."
       output.puts
     end
 
     def explain_cloudflare_automation
       output.puts
       output.puts "Cloudflare automation:"
-      output.puts "Dev Boxer can create the Cloudflare Tunnel (which exposes your hostnames without opening any inbound ports) and a Zero Trust Access app (browser SSO) in one go."
-      output.puts "Matrix stays outside Access so Matrix clients keep working normally."
+      output.puts "Dev Boxer can create the Cloudflare Tunnel (which exposes your hostnames without opening any inbound ports) and the two Zero Trust Access apps in one go: a protected app that puts `*.<your zone>` behind browser SSO, and a bypass app that lets matrix and any `public-`-prefixed subdomain through without a login."
       output.puts "Say no if you'd rather run the cloudflared tunnel login and cloudflared tunnel create commands by hand — Dev Boxer will pause and tell you exactly what to run, then ask for the resulting TunnelID."
       output.puts
     end
@@ -520,7 +519,7 @@ module DevBoxer
       output.puts
       output.puts "Manual Cloudflare setup selected:"
       output.puts "Dev Boxer will install cloudflared, print the exact `cloudflared tunnel login` and `cloudflared tunnel create` commands to run in another root shell, then ask you to paste the resulting TunnelID."
-      output.puts "It won't create the Access app either — set that up later from the dashboard if you want SSO; see docs/cloudflare-access.md."
+      output.puts "It won't create the Access apps either — set up both (a protected app for `*.<your zone>` and a bypass app for matrix and `public-*`) later from the dashboard if you want SSO; see docs/cloudflare-access.md."
       output.puts
     end
 

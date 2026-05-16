@@ -72,6 +72,16 @@ module DevBoxer
       sh!("su - #{Shellwords.escape(user)} -c #{Shellwords.escape(cmd)}")
     end
 
+    # Like run_as_user, but inherits the operator's stdin/stdout/stderr instead
+    # of capturing them. Required for subprocesses the operator must interact
+    # with (e.g. `gh auth login --web`, which prints a one-time code and waits
+    # for the operator to authorize via a browser).
+    def run_as_user_interactive(user, cmd)
+      ok = system("su", "-", user, "-c", cmd)
+      return if ok
+      raise Error, "interactive command failed: su - #{user} -c #{cmd}"
+    end
+
     def write_file(path, content, mode: nil, owner: nil)
       FileUtils.mkdir_p(File.dirname(path))
       File.write(path, content)

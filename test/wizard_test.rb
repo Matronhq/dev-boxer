@@ -62,14 +62,20 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "DEV BOXER"
       assert_includes wizard_output, "Remote Claude Code dev box setup"
       assert_includes wizard_output, "== 1. Server login =="
+      assert_includes wizard_output, "Linux username:"
+      assert_includes wizard_output, "The Linux account you'll ssh into"
+      assert_includes wizard_output, "SSH public key:"
+      assert_includes wizard_output, "Paste the public half of your SSH key"
+      assert_includes wizard_output, "SSH port:"
+      assert_includes wizard_output, "non-standard port to cut down on the noise"
       assert_includes wizard_output, "== 2. GitHub access =="
+      assert_includes wizard_output, "GitHub personal access token (optional):"
+      assert_includes wizard_output, "https://github.com/settings/personal-access-tokens/new"
+      assert_equal "ghp_test_pat", secrets.dig("github", "token")
       assert_includes wizard_output, "== 3. Domain and DNS =="
       assert_includes wizard_output, "== 4. Cloudflare tunnel and Access =="
       assert_includes wizard_output, "== 5. Matrix =="
       assert_includes wizard_output, "== 6. Claude behavior =="
-      assert_includes wizard_output, "GitHub personal access token (optional):"
-      assert_includes wizard_output, "https://github.com/settings/personal-access-tokens/new"
-      assert_equal "ghp_test_pat", secrets.dig("github", "token")
       assert_includes wizard_output, "Claude behavior:"
       assert_includes wizard_output, "Beginner: explain more"
       assert_includes wizard_output, "Intermediate: concise explanations"
@@ -191,7 +197,7 @@ class WizardTest < Minitest::Test
       assert_equal "box4", config.dig("matrix", "bot_username")
       assert_equal "juser", config.dig("matrix", "user_username")
       assert_includes output.string, "Your Matrix username:"
-      assert_includes output.string, "MATRIX username, NOT your Linux username"
+      assert_includes output.string, "your MATRIX username, not your Linux username"
 
       assert_equal "@box4:matrix.example.com", secrets.dig("matrix", "bot_user_id")
       assert_equal "pw", secrets.dig("matrix", "bot_password")

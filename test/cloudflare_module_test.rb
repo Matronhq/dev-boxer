@@ -489,6 +489,47 @@ class CloudflareModuleTest < Minitest::Test
     end
   end
 
+  def test_configure_access_does_not_need_bypass_app_when_no_bypass_destinations_configured
+    # Edge case: operator explicitly disabled the bypass app (bypass_hostnames: []
+    # AND no matrix hostname). The bypass app shouldn't be required and the
+    # absence of bypass_app_id mustn't force a permanent setup-token requirement.
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+      log_io = StringIO.new
+      mod = build_cloudflare_module(
+        config_path: config_path,
+        secrets_path: secrets_path,
+        log_io: log_io,
+        config_hash: cloudflare_config(
+          "api_token" => nil,
+          "tunnel" => {
+            "id" => "tunnel-123",
+            "hostname" => "dev.example.com",
+            "hostname_matrix" => nil,
+            "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
+          },
+          "access" => {
+            "enabled" => true,
+            "app_id" => "existing-protected-app",
+            "account_id" => "account-123",
+            "bypass_hostnames" => [],
+            "allowed_email_domains" => ["example.com"],
+          },
+        ),
+      )
+
+      api = ->(**_args) { raise "API should not be called: bypass is intentionally empty" }
+
+      mod.stub(:cloudflare_api, api) do
+        mod.send(:configure_cloudflare_access)
+      end
+
+      assert_includes log_io.string, "Cloudflare Access apps already configured"
+    end
+  end
+
   def test_configure_access_skips_when_both_apps_exist_and_no_setup_token
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")

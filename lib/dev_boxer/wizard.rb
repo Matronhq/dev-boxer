@@ -51,9 +51,11 @@ module DevBoxer
 
     def build_config(existing)
       section_header("1. Server login")
+      explain_linux_username
       username = ask("Linux username", default: existing.dig("user", "name") || default_username)
       explain_ssh_public_key
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
+      explain_ssh_port
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
 
       section_header("2. GitHub access")
@@ -357,59 +359,47 @@ module DevBoxer
       end
     end
 
+    def explain_linux_username
+      output.puts
+      output.puts "Linux username:"
+      output.puts "The Linux account you'll ssh into and do your work as."
+      output.puts "`dev` is fine if you don't have a preference; just avoid `root` — Dev Boxer disables root login regardless."
+      output.puts
+    end
+
     def explain_ssh_public_key
       output.puts
       output.puts "SSH public key:"
-      output.puts "  What: The public half of an SSH key pair from your laptop. A single line that"
-      output.puts "        starts with ssh-ed25519, ssh-rsa, or sk-ssh-... and ends with a comment."
-      output.puts "  Why: Dev Boxer puts it in the new Linux user's ~/.ssh/authorized_keys so you can"
-      output.puts "       log in over SSH from your laptop without a password (and password auth is"
-      output.puts "       disabled by the security module)."
-      output.puts "  How (macOS/Linux): if you don't already have one, run on your laptop:"
-      output.puts "      ssh-keygen -t ed25519 -C \"you@laptop\""
-      output.puts "      # press Enter to accept the default path (~/.ssh/id_ed25519)"
-      output.puts "      # set a passphrase if you like (recommended)"
-      output.puts "    Then print and copy the public key:"
-      output.puts "      cat ~/.ssh/id_ed25519.pub        # macOS/Linux"
-      output.puts "      cat ~/.ssh/id_ed25519.pub | pbcopy   # macOS, copies to clipboard"
-      output.puts "  How (Windows): run the same `ssh-keygen` command in PowerShell or Git Bash;"
-      output.puts "      keys live at C:\\Users\\you\\.ssh\\id_ed25519.pub."
-      output.puts "  Already have a key? Reuse it: cat ~/.ssh/id_ed25519.pub (or ~/.ssh/id_rsa.pub)."
-      output.puts "  Paste the entire single line below."
+      output.puts "Paste the public half of your SSH key — a single line starting with `ssh-ed25519`, `ssh-rsa`, or `sk-ssh-...`."
+      output.puts "Dev Boxer drops it into the new account's authorized_keys and disables password auth, so this key is your only way in."
+      output.puts "If you don't already have one, run `ssh-keygen -t ed25519` on your laptop and paste `~/.ssh/id_ed25519.pub` (on macOS, `pbcopy < ~/.ssh/id_ed25519.pub` puts it on your clipboard)."
+      output.puts
+    end
+
+    def explain_ssh_port
+      output.puts
+      output.puts "SSH port:"
+      output.puts "Dev Boxer puts ssh on a non-standard port to cut down on the noise from automated scanners hammering port 22."
+      output.puts "2222 is the default; pick whatever you like between 1024 and 65535."
       output.puts
     end
 
     def explain_github_token
       output.puts
       output.puts "GitHub personal access token (optional):"
-      output.puts "  What: A fine-grained PAT with read access to the private repos Dev Boxer needs"
-      output.puts "        to clone (claude-matrix-bridge today, possibly more in future)."
-      output.puts "  Why: Without it, Dev Boxer pauses mid-setup and runs `gh auth login --web` as the"
-      output.puts "       new dev user so it can clone those repos. With a PAT here we configure git"
-      output.puts "       up-front and the rest of setup runs unattended."
-      output.puts "  How: Open https://github.com/settings/personal-access-tokens/new"
-      output.puts "       Resource owner: Matronhq (or whichever org owns the private repos)"
-      output.puts "       Repository access: Only select repositories → claude-matrix-bridge"
-      output.puts "       Permissions → Repository permissions → Contents: Read-only"
-      output.puts "       Expiration: pick something sensible (e.g. 1 year)."
-      output.puts "  Storage: Saved to secrets.yml (mode 0600). Re-used by `gh auth login --with-token`"
-      output.puts "       for the dev user. Stash a copy in your password manager so future boxes can"
-      output.puts "       reuse the same token."
-      output.puts "  Skip: Leave blank to fall back to the interactive `gh auth login --web` flow"
-      output.puts "       during the matrix-bridge module."
+      output.puts "A fine-grained PAT for the private repos Dev Boxer needs to clone — today that's just claude-matrix-bridge, possibly more later."
+      output.puts "Without it, setup pauses partway through and runs `gh auth login --web` as the new dev user; with it, the rest of setup runs unattended."
+      output.puts "Create one at https://github.com/settings/personal-access-tokens/new — resource owner Matronhq, repository access \"Only select repositories\" → claude-matrix-bridge, Contents: Read-only, sensible expiration (e.g. 1 year)."
+      output.puts "Saved to secrets.yml (mode 0600). Leave blank to fall back to the interactive web flow during the matrix-bridge module."
       output.puts
     end
 
     def explain_external_matrix_username(server_domain)
       output.puts
       output.puts "Your Matrix username:"
-      output.puts "  What: The localpart of YOUR existing Matrix account on #{server_domain}"
-      output.puts "        (the part between @ and :, e.g. for @dbarker:#{server_domain} it's dbarker)."
-      output.puts "  Why: This becomes ALLOWED_USER_IDS in the bridge .env. Messages from any other"
-      output.puts "       account are silently dropped, so getting this wrong means the bridge looks"
-      output.puts "       dead even though it's actually receiving and decrypting your messages."
-      output.puts "  Tip: This is your MATRIX username, NOT your Linux username on this VPS — they"
-      output.puts "       are often different."
+      output.puts "The local part of your existing Matrix account on #{server_domain} — the bit between `@` and `:`, e.g. `dbarker` in `@dbarker:#{server_domain}`."
+      output.puts "This becomes ALLOWED_USER_IDS in the bridge .env. Anything else gets silently dropped, so getting this wrong leaves the bridge looking dead while it's actually receiving and decrypting your messages."
+      output.puts "This is your MATRIX username, not your Linux username on this VPS — they're often different."
       output.puts
     end
 

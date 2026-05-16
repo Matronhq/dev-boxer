@@ -189,18 +189,22 @@ module DevBoxer
     end
 
     def build_claude_config(existing)
-      output.puts
-      output.puts "Claude behavior:"
-      output.puts "  Beginner: explain more, ask before meaningful technical choices, summarize next steps."
-      output.puts "  Intermediate: concise explanations, proceed on routine choices, ask on tradeoffs."
-      output.puts "  Advanced: terse summaries, proceed with reasonable assumptions, focus on diffs/tests/blockers."
-      output.puts
-
+      explain_claude_experience_level
       level = ask_experience_level(existing)
       config = { "experience_level" => level }
       plugins = existing.dig("claude", "plugins")
       config["plugins"] = plugins unless plugins.nil?
       config
+    end
+
+    def explain_claude_experience_level
+      output.puts
+      output.puts "Claude experience level:"
+      output.puts "How should Claude collaborate with you on this box?"
+      output.puts "Beginner means more explanation, and Claude asks before meaningful technical choices and summarises next steps."
+      output.puts "Intermediate (the default) is concise — Claude proceeds on routine choices and asks on real tradeoffs."
+      output.puts "Advanced is terse: Claude makes reasonable assumptions and focuses on diffs, tests, and blockers."
+      output.puts
     end
 
     def ask_experience_level(existing)

@@ -283,7 +283,17 @@ module DevBoxer
 
     def needs_setup_token?(tunnel_id:, manual_tunnel:, access_config:)
       tunnel_needs_token = tunnel_id.to_s.empty? && manual_tunnel != true
-      access_needs_token = access_config["enabled"] == true && access_config["app_id"].to_s.empty?
+      # The Cloudflare module creates two Access apps (protected wildcard +
+      # public bypass). Either app's id missing means the module will need
+      # the setup token to POST it, so the wizard has to prompt for one. The
+      # earlier single-app version only checked app_id, which broke the
+      # upgrade path from old installs that already have app_id but no
+      # bypass_app_id (the module crashed asking for a token nobody collected).
+      access_enabled = access_config["enabled"] == true
+      access_needs_token = access_enabled && (
+        access_config["app_id"].to_s.empty? ||
+        access_config["bypass_app_id"].to_s.empty?
+      )
       tunnel_needs_token || access_needs_token
     end
 

@@ -273,7 +273,16 @@ module DevBoxer
           return
         end
 
-        needs_create = access_app_id.to_s.empty? || access_bypass_app_id.to_s.empty?
+        bypass = access_bypass_destinations
+        # "Needs create" must NOT flag the bypass app when there are no
+        # destinations to put in it (operator's chosen state, not a TODO).
+        # Otherwise an install with bypass_hostnames: [] and no matrix
+        # hostname can never settle — bypass_app_id stays empty forever,
+        # which used to permanently flag needs_create and demand a token
+        # the operator no longer has.
+        needs_protected = access_app_id.to_s.empty?
+        needs_bypass = !bypass.empty? && access_bypass_app_id.to_s.empty?
+        needs_create = needs_protected || needs_bypass
         if !needs_create && setup_token.to_s.empty?
           skip "Cloudflare Access apps already configured"
           return
@@ -287,7 +296,6 @@ module DevBoxer
         persist_access_app_id(result["id"]) if result["id"]
         ok "Cloudflare Access protects #{protected_destinations.join(", ")}"
 
-        bypass = access_bypass_destinations
         if bypass.empty?
           skip "Skipping Cloudflare Access bypass app (no bypass destinations)"
         else

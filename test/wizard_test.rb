@@ -239,6 +239,29 @@ class WizardTest < Minitest::Test
     assert_equal ["status.example.com"], result["bypass_hostnames"]
   end
 
+  def test_needs_setup_token_when_only_protected_app_id_exists
+    # Upgrade scenario: old install has app_id from the single-app era but no
+    # bypass_app_id. The module will need a setup token to POST the bypass app,
+    # so the wizard must prompt for one.
+    wizard = DevBoxer::Wizard.new(
+      config_path: "/tmp/x.yml",
+      input: StringIO.new("\n"),
+      output: StringIO.new,
+    )
+    access_config = {
+      "enabled" => true,
+      "app_id" => "existing-protected-app",
+      "bypass_app_id" => nil,
+    }
+
+    assert wizard.send(
+      :needs_setup_token?,
+      tunnel_id: "existing-tunnel",
+      manual_tunnel: false,
+      access_config: access_config,
+    ), "wizard must prompt for a setup token when bypass_app_id is missing"
+  end
+
   private
 
   # Answers feeding the wizard's STDIN for the "there" matrix branch.

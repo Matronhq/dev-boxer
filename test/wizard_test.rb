@@ -75,6 +75,10 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "== 3. Domain and DNS =="
       assert_includes wizard_output, "== 4. Cloudflare tunnel and Access =="
       assert_includes wizard_output, "== 5. Matrix =="
+      assert_includes wizard_output, "Matrix homeserver location:"
+      assert_includes wizard_output, "Choose `here` for the standard setup"
+      assert_includes wizard_output, "Matrix username:"
+      assert_includes wizard_output, "local part of your Matrix user"
       assert_includes wizard_output, "== 6. Claude behavior =="
       assert_includes wizard_output, "Claude behavior:"
       assert_includes wizard_output, "Beginner: explain more"
@@ -206,6 +210,7 @@ class WizardTest < Minitest::Test
       assert_equal "pw", secrets.dig("matrix", "bot_password")
       assert_equal "EsTm 4uK4", secrets.dig("matrix", "bot_recovery_key")
       assert_equal "!abc:matrix.example.com", secrets.dig("matrix", "bridge_room_id")
+      assert_includes output.string, "Paste the blob from running `dev-boxer add-bot"
     end
   end
 

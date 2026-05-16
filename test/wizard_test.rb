@@ -268,8 +268,9 @@ class WizardTest < Minitest::Test
 
   def test_needs_setup_token_when_only_protected_app_id_exists
     # Upgrade scenario: old install has app_id from the single-app era but no
-    # bypass_app_id. The module will need a setup token to POST the bypass app,
-    # so the wizard must prompt for one.
+    # bypass_app_id. The module will need a setup token to POST the bypass app
+    # (matrix.example.com gives at least one bypass destination), so the
+    # wizard must prompt for one.
     wizard = DevBoxer::Wizard.new(
       config_path: "/tmp/x.yml",
       input: StringIO.new("\n"),
@@ -286,7 +287,34 @@ class WizardTest < Minitest::Test
       tunnel_id: "existing-tunnel",
       manual_tunnel: false,
       access_config: access_config,
+      base_domain: "example.com",
     ), "wizard must prompt for a setup token when bypass_app_id is missing"
+  end
+
+  def test_needs_setup_token_skips_bypass_check_when_bypass_destinations_intentionally_empty
+    # Defensive: operator has bypass_hostnames: [] in config AND base_domain
+    # is somehow empty (so no matrix.<zone> hostname implied either). The
+    # module would correctly skip creating the bypass app, so prompting the
+    # operator for a token they don't need is pointless.
+    wizard = DevBoxer::Wizard.new(
+      config_path: "/tmp/x.yml",
+      input: StringIO.new("\n"),
+      output: StringIO.new,
+    )
+    access_config = {
+      "enabled" => true,
+      "app_id" => "existing-protected-app",
+      "bypass_app_id" => nil,
+      "bypass_hostnames" => [],
+    }
+
+    refute wizard.send(
+      :needs_setup_token?,
+      tunnel_id: "existing-tunnel",
+      manual_tunnel: false,
+      access_config: access_config,
+      base_domain: "",
+    ), "wizard should not demand a token when no bypass destinations would be created"
   end
 
   private

@@ -10,6 +10,7 @@ class WizardTest < Minitest::Test
         "alice",
         "ssh-ed25519 AAAATEST alice@example.com",
         "2223",
+        "ghp_test_pat",
         "example.com",
         "yes",
         "zone-token",
@@ -61,10 +62,14 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "DEV BOXER"
       assert_includes wizard_output, "Remote Claude Code dev box setup"
       assert_includes wizard_output, "== 1. Server login =="
-      assert_includes wizard_output, "== 2. Domain and DNS =="
-      assert_includes wizard_output, "== 3. Cloudflare tunnel and Access =="
-      assert_includes wizard_output, "== 4. Matrix =="
-      assert_includes wizard_output, "== 5. Claude behavior =="
+      assert_includes wizard_output, "== 2. GitHub access =="
+      assert_includes wizard_output, "== 3. Domain and DNS =="
+      assert_includes wizard_output, "== 4. Cloudflare tunnel and Access =="
+      assert_includes wizard_output, "== 5. Matrix =="
+      assert_includes wizard_output, "== 6. Claude behavior =="
+      assert_includes wizard_output, "GitHub personal access token (optional):"
+      assert_includes wizard_output, "https://github.com/settings/personal-access-tokens/new"
+      assert_equal "ghp_test_pat", secrets.dig("github", "token")
       assert_includes wizard_output, "Claude behavior:"
       assert_includes wizard_output, "Beginner: explain more"
       assert_includes wizard_output, "Intermediate: concise explanations"
@@ -76,7 +81,7 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "Cloudflare zone DNS API token:"
       assert_includes wizard_output, "What: A zone-scoped Cloudflare API token for example.com."
       assert_includes wizard_output, "new subdomains for projects you make"
-      assert_includes wizard_output, "How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens"
+      assert_includes wizard_output, "https://dash.cloudflare.com/?to=/:account/api-tokens"
       assert_includes wizard_output, "Scope: Limit the token to the example.com zone only. Do not grant access to all zones."
       assert_includes wizard_output, "Alternative: Choose no below if you prefer to create each required subdomain manually."
       assert_includes wizard_output, "Let Dev Boxer manage DNS records for this domain?"
@@ -119,6 +124,7 @@ class WizardTest < Minitest::Test
         "alice",
         "ssh-ed25519 AAAATEST alice@example.com",
         "2223",
+        "",                                         # GitHub PAT (optional, blank)
         "example.com",
         "no",
         "no",
@@ -168,7 +174,11 @@ class WizardTest < Minitest::Test
       }
       blob = DevBoxer::CredentialsBlob.encode(blob_hash)
 
-      input = StringIO.new(answers_for_there_branch(blob: blob))
+      # Operator's Matrix username on the external homeserver is intentionally
+      # different from their Linux username here ("juser" vs "alice"), to
+      # cover the regression where the wizard silently used the Linux name
+      # for ALLOWED_USER_IDS and the bridge dropped every message.
+      input = StringIO.new(answers_for_there_branch(blob: blob, matrix_username: "juser"))
       output = StringIO.new
       DevBoxer::Wizard.run(config_path: config_path, input: input, output: output)
 
@@ -179,7 +189,9 @@ class WizardTest < Minitest::Test
       assert_equal "https://matrix.example.com", config.dig("matrix", "homeserver_url")
       assert_equal "matrix.example.com", config.dig("matrix", "server_domain")
       assert_equal "box4", config.dig("matrix", "bot_username")
-      assert_equal "alice", config.dig("matrix", "user_username")
+      assert_equal "juser", config.dig("matrix", "user_username")
+      assert_includes output.string, "Your Matrix username:"
+      assert_includes output.string, "MATRIX username, NOT your Linux username"
 
       assert_equal "@box4:matrix.example.com", secrets.dig("matrix", "bot_user_id")
       assert_equal "pw", secrets.dig("matrix", "bot_password")
@@ -217,21 +229,23 @@ class WizardTest < Minitest::Test
   # Answers feeding the wizard's STDIN for the "there" matrix branch.
   # Matches the prompt order in `lib/dev_boxer/wizard.rb#build_config`.
   # If a new prompt is added later, update this fixture too.
-  def answers_for_there_branch(blob:, trailing_blob_retries: [])
+  def answers_for_there_branch(blob:, trailing_blob_retries: [], matrix_username: "alice")
     ([
       "alice",                                    # 1. Linux username
       "ssh-ed25519 AAAATEST alice@example.com",   # 2. SSH public key
       "2223",                                     # 3. SSH port
-      "example.com",                              # 4. Base domain
-      "yes",                                      # 5. Let Dev Boxer manage DNS
-      "zone-token",                               # 6. Zone DNS API token
-      "yes",                                      # 7. Let Dev Boxer create tunnel + Access
-      "alice@example.com, example.com",           # 8. Allowed emails for Access
-      "setup-token",                              # 9. One-time CF setup token
-      "there",                                    # 10. Matrix homeserver location
-      blob,                                       # 11. Add-bot blob (first attempt)
+      "",                                         # 4. GitHub PAT (optional, blank)
+      "example.com",                              # 5. Base domain
+      "yes",                                      # 6. Let Dev Boxer manage DNS
+      "zone-token",                               # 7. Zone DNS API token
+      "yes",                                      # 8. Let Dev Boxer create tunnel + Access
+      "alice@example.com, example.com",           # 9. Allowed emails for Access
+      "setup-token",                              # 10. One-time CF setup token
+      "there",                                    # 11. Matrix homeserver location
+      blob,                                       # 12. Add-bot blob (first attempt)
     ] + trailing_blob_retries + [
-      "intermediate",                             # 12. Claude experience level
+      matrix_username,                            # 13. Your Matrix username on the external homeserver
+      "intermediate",                             # 14. Claude experience level
     ]).join("\n") + "\n"
   end
 

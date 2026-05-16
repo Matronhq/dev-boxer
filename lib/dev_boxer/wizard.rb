@@ -52,15 +52,25 @@ module DevBoxer
     def build_config(existing)
       section_header("1. Server login")
       username = ask("Linux username", default: existing.dig("user", "name") || default_username)
+      explain_ssh_public_key
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
 
-      section_header("2. Domain and DNS")
+      section_header("2. GitHub access")
+      explain_github_token
+      github_token = ask(
+        "GitHub personal access token",
+        default: existing.dig("github", "token"),
+        required: false,
+        secret: true,
+      )
+
+      section_header("3. Domain and DNS")
       explain_base_domain
       base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
       manual_dns, zone_token = choose_dns_setup(existing, base_domain)
 
-      section_header("3. Cloudflare tunnel and Access")
+      section_header("4. Cloudflare tunnel and Access")
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
       manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id, manual_dns: manual_dns)
       setup_token = nil
@@ -73,7 +83,7 @@ module DevBoxer
         )
       end
 
-      section_header("4. Matrix")
+      section_header("5. Matrix")
       matrix_choice = ask_choice(
         "Matrix homeserver location",
         choices: %w[here there],
@@ -88,6 +98,15 @@ module DevBoxer
         when "there"
           decoded = ask_blob_until_valid
           bot_localpart = decoded["bot_user_id"].split(":", 2).first.delete_prefix("@")
+          # Ask explicitly: the Matrix localpart on the external homeserver is
+          # often NOT the Linux username (e.g. juser on Matrix vs youruser
+          # in Linux). Falling back silently produced the wrong ALLOWED_USER_IDS
+          # in the bridge .env, which made box-2 silently drop every message.
+          explain_external_matrix_username(decoded["server_domain"])
+          name = ask(
+            "Your Matrix username on #{decoded['server_domain']}",
+            default: existing.dig("matrix", "user_username") || username,
+          )
           overrides = {
             "mode"           => "external",
             "homeserver_url" => decoded["homeserver_url"],
@@ -95,14 +114,10 @@ module DevBoxer
             "bot_username"   => bot_localpart,
           }
           secrets_block = decoded.slice("bot_user_id", "bot_password", "bot_recovery_key", "bridge_room_id")
-          [
-            existing.dig("matrix", "user_username") || username,
-            overrides,
-            secrets_block,
-          ]
+          [name, overrides, secrets_block]
         end
 
-      section_header("5. Claude behavior")
+      section_header("6. Claude behavior")
       claude_config = build_claude_config(existing)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
@@ -164,6 +179,7 @@ module DevBoxer
         }.compact,
       }
       secrets["matrix"] = matrix_secret_fields unless matrix_secret_fields.empty?
+      secrets["github"] = { "token" => github_token } unless github_token.to_s.empty?
 
       [config, secrets]
     end
@@ -341,6 +357,62 @@ module DevBoxer
       end
     end
 
+    def explain_ssh_public_key
+      output.puts
+      output.puts "SSH public key:"
+      output.puts "  What: The public half of an SSH key pair from your laptop. A single line that"
+      output.puts "        starts with ssh-ed25519, ssh-rsa, or sk-ssh-... and ends with a comment."
+      output.puts "  Why: Dev Boxer puts it in the new Linux user's ~/.ssh/authorized_keys so you can"
+      output.puts "       log in over SSH from your laptop without a password (and password auth is"
+      output.puts "       disabled by the security module)."
+      output.puts "  How (macOS/Linux): if you don't already have one, run on your laptop:"
+      output.puts "      ssh-keygen -t ed25519 -C \"you@laptop\""
+      output.puts "      # press Enter to accept the default path (~/.ssh/id_ed25519)"
+      output.puts "      # set a passphrase if you like (recommended)"
+      output.puts "    Then print and copy the public key:"
+      output.puts "      cat ~/.ssh/id_ed25519.pub        # macOS/Linux"
+      output.puts "      cat ~/.ssh/id_ed25519.pub | pbcopy   # macOS, copies to clipboard"
+      output.puts "  How (Windows): run the same `ssh-keygen` command in PowerShell or Git Bash;"
+      output.puts "      keys live at C:\\Users\\you\\.ssh\\id_ed25519.pub."
+      output.puts "  Already have a key? Reuse it: cat ~/.ssh/id_ed25519.pub (or ~/.ssh/id_rsa.pub)."
+      output.puts "  Paste the entire single line below."
+      output.puts
+    end
+
+    def explain_github_token
+      output.puts
+      output.puts "GitHub personal access token (optional):"
+      output.puts "  What: A fine-grained PAT with read access to the private repos Dev Boxer needs"
+      output.puts "        to clone (claude-matrix-bridge today, possibly more in future)."
+      output.puts "  Why: Without it, Dev Boxer pauses mid-setup and runs `gh auth login --web` as the"
+      output.puts "       new dev user so it can clone those repos. With a PAT here we configure git"
+      output.puts "       up-front and the rest of setup runs unattended."
+      output.puts "  How: Open https://github.com/settings/personal-access-tokens/new"
+      output.puts "       Resource owner: Matronhq (or whichever org owns the private repos)"
+      output.puts "       Repository access: Only select repositories → claude-matrix-bridge"
+      output.puts "       Permissions → Repository permissions → Contents: Read-only"
+      output.puts "       Expiration: pick something sensible (e.g. 1 year)."
+      output.puts "  Storage: Saved to secrets.yml (mode 0600). Re-used by `gh auth login --with-token`"
+      output.puts "       for the dev user. Stash a copy in your password manager so future boxes can"
+      output.puts "       reuse the same token."
+      output.puts "  Skip: Leave blank to fall back to the interactive `gh auth login --web` flow"
+      output.puts "       during the matrix-bridge module."
+      output.puts
+    end
+
+    def explain_external_matrix_username(server_domain)
+      output.puts
+      output.puts "Your Matrix username:"
+      output.puts "  What: The localpart of YOUR existing Matrix account on #{server_domain}"
+      output.puts "        (the part between @ and :, e.g. for @juser:#{server_domain} it's juser)."
+      output.puts "  Why: This becomes ALLOWED_USER_IDS in the bridge .env. Messages from any other"
+      output.puts "       account are silently dropped, so getting this wrong means the bridge looks"
+      output.puts "       dead even though it's actually receiving and decrypting your messages."
+      output.puts "  Tip: This is your MATRIX username, NOT your Linux username on this VPS — they"
+      output.puts "       are often different."
+      output.puts
+    end
+
     def explain_base_domain
       output.puts
       output.puts "Base domain:"
@@ -358,8 +430,17 @@ module DevBoxer
       output.puts "Cloudflare zone DNS API token:"
       output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
       output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, hello, and new subdomains for projects you make."
-      output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read and DNS:Edit."
+      output.puts "  Recommended: an account-owned token (owned by the account rather than your individual dashboard user, so it survives if you ever leave the account or rotate users)."
+      output.puts "  How (pre-filled, opens at the account-level token page):"
+      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
+      output.puts "      Open in your browser. Cloudflare resolves :account to your account (or asks you to pick if you have several)."
+      output.puts "      The form will be pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS'."
+      output.puts "      Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then 'Continue to summary' and 'Create Token'."
       output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
+      output.puts "  Manual route (account-level token page, no pre-fill):"
+      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens"
+      output.puts "      Click 'Create Token' > 'Get started' (custom token). Add Zone:Read and Zone:DNS:Edit, restrict to #{base_domain}."
+      output.puts "  Note: The account token page requires Super Administrator or Administrator on the account. The user-level page (https://dash.cloudflare.com/profile/api-tokens) also works, but creates a token tied to your individual dashboard user, which is harder to hand off."
       output.puts "  Alternative: Choose no below if you prefer to create each required subdomain manually."
       output.puts
     end
@@ -409,12 +490,17 @@ module DevBoxer
     def explain_cloudflare_setup_token
       output.puts
       output.puts "One-time Cloudflare account setup token:"
-      output.puts "  What: A temporary account-level Cloudflare API token."
+      output.puts "  What: A temporary account-owned Cloudflare API token."
       output.puts "  Why: Dev Boxer uses it once to create the Cloudflare Tunnel and optional Zero Trust Access app."
-      output.puts "  How: Create a custom token at https://dash.cloudflare.com/profile/api-tokens with these account permissions:"
-      output.puts "       - Cloudflare One Connector: cloudflared: Edit"
-      output.puts "       - Access: Apps: Edit"
-      output.puts "       - Access: Policies: Edit"
+      output.puts "  How: Open the account-level token page (Cloudflare resolves :account to your account, or asks you to pick if you have several):"
+      output.puts "       https://dash.cloudflare.com/?to=/:account/api-tokens"
+      output.puts "       Click 'Create Token' > 'Get started' next to 'Create Custom Token'."
+      output.puts "       Add these account permissions:"
+      output.puts "         - Cloudflare One Connector: cloudflared: Edit"
+      output.puts "         - Access: Apps: Edit"
+      output.puts "         - Access: Policies: Edit"
+      output.puts "       Leave 'Account Resources' as 'Include - All accounts' (or restrict to the specific account you're setting up)."
+      output.puts "  Note: Creating account-owned tokens needs Super Administrator or Administrator on the account. If you don't have that, the user-level page works too: https://dash.cloudflare.com/profile/api-tokens"
       output.puts "  Cleanup: Dev Boxer deletes this token from secrets.yml after setup succeeds."
       output.puts
     end

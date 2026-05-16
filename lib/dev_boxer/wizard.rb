@@ -406,54 +406,38 @@ module DevBoxer
     def explain_base_domain
       output.puts
       output.puts "Base domain:"
-      output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
-      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, viewer.<domain>, hello.<domain>, and can create new subdomains for projects you make."
-      output.puts "  Tip: We recommend giving the box its own domain."
-      output.puts "  Cost: Low-cost domains such as .uk or .us often start around $5-6/year, depending on current registrar pricing."
-      output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
-      output.puts "  Link: https://www.cloudflare.com/products/registrar/"
+      output.puts "Pick the Cloudflare-managed domain Dev Boxer should use, e.g. example.com."
+      output.puts "Dev Boxer will create dev, matrix, viewer, and hello subdomains under it, plus more for any projects you build later."
+      output.puts "If you don't already have one, we recommend giving the box its own domain — .uk and .us names start around $5–6/year at https://www.cloudflare.com/products/registrar/."
+      output.puts "An existing domain works too; just move it to Cloudflare DNS first."
       output.puts
     end
 
     def explain_cloudflare_zone_token(base_domain)
       output.puts
       output.puts "Cloudflare zone DNS API token:"
-      output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
-      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, hello, and new subdomains for projects you make."
-      output.puts "  Recommended: an account-owned token (owned by the account rather than your individual dashboard user, so it survives if you ever leave the account or rotate users)."
-      output.puts "  How (pre-filled, opens at the account-level token page):"
-      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
-      output.puts "      Open in your browser. Cloudflare resolves :account to your account (or asks you to pick if you have several)."
-      output.puts "      The form will be pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS'."
-      output.puts "      Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then 'Continue to summary' and 'Create Token'."
-      output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
-      output.puts "  Manual route (account-level token page, no pre-fill):"
-      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens"
-      output.puts "      Click 'Create Token' > 'Get started' (custom token). Add Zone:Read and Zone:DNS:Edit, restrict to #{base_domain}."
-      output.puts "  Note: The account token page requires Super Administrator or Administrator on the account. The user-level page (https://dash.cloudflare.com/profile/api-tokens) also works, but creates a token tied to your individual dashboard user, which is harder to hand off."
-      output.puts "  Alternative: Choose no below if you prefer to create each required subdomain manually."
+      output.puts "Dev Boxer needs a zone-scoped API token for #{base_domain} so it can create and update DNS records for dev, matrix, viewer, hello, and any project subdomains you make later."
+      output.puts "Create one — pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS' — at:"
+      output.puts "  https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
+      output.puts "Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then create the token. Scope it to this zone only — never all zones."
+      output.puts "Choose no below if you'd rather create each subdomain manually."
       output.puts
     end
 
     def explain_manual_dns_setup(base_domain)
       output.puts
-      output.puts "Manual DNS selected."
-      output.puts "  Dev Boxer will not store a DNS API token."
-      output.puts "  After the tunnel exists, create proxied CNAME records for:"
-      output.puts "    - dev.#{base_domain}"
-      output.puts "    - matrix.#{base_domain}"
-      output.puts "    - viewer.#{base_domain}"
-      output.puts "    - hello.#{base_domain}"
-      output.puts "  Point each record at the tunnel target Dev Boxer prints, usually <TunnelID>.cfargotunnel.com."
-      output.puts "  You will also need to create any future project subdomains yourself."
+      output.puts "Manual DNS selected:"
+      output.puts "Dev Boxer won't store an API token."
+      output.puts "Once the tunnel exists you'll need to create proxied CNAME records for dev.#{base_domain}, matrix.#{base_domain}, viewer.#{base_domain}, and hello.#{base_domain}, pointing at the tunnel target Dev Boxer prints (usually <TunnelID>.cfargotunnel.com)."
+      output.puts "Any future project subdomains will also be your responsibility to create."
       output.puts
     end
 
     def explain_manual_access_after_manual_dns
       output.puts
-      output.puts "Cloudflare Access will be manual because DNS is manual."
-      output.puts "  Dev Boxer normally derives the Cloudflare account from the zone DNS token."
-      output.puts "  Without that token, create the Access app manually later if you want browser SSO for dev/viewer/hello."
+      output.puts "Cloudflare Access will be manual too:"
+      output.puts "Dev Boxer normally derives your Cloudflare account from the zone DNS token, and without that token it can't reach the Access API."
+      output.puts "Create the Access app yourself later from the dashboard if you want browser SSO on dev, viewer, and hello — see docs/cloudflare-access.md."
       output.puts
     end
 

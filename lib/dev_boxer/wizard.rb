@@ -76,7 +76,7 @@ module DevBoxer
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
       manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id, manual_dns: manual_dns)
       setup_token = nil
-      if needs_setup_token?(tunnel_id: tunnel_id, manual_tunnel: manual_tunnel, access_config: access_config)
+      if needs_setup_token?(tunnel_id: tunnel_id, manual_tunnel: manual_tunnel, access_config: access_config, base_domain: base_domain)
         explain_cloudflare_setup_token
         setup_token = ask(
           "One-time Cloudflare account setup token",
@@ -331,20 +331,41 @@ module DevBoxer
       }.compact
     end
 
-    def needs_setup_token?(tunnel_id:, manual_tunnel:, access_config:)
+    def needs_setup_token?(tunnel_id:, manual_tunnel:, access_config:, base_domain:)
       tunnel_needs_token = tunnel_id.to_s.empty? && manual_tunnel != true
-      # The Cloudflare module creates two Access apps (protected wildcard +
-      # public bypass). Either app's id missing means the module will need
-      # the setup token to POST it, so the wizard has to prompt for one. The
-      # earlier single-app version only checked app_id, which broke the
-      # upgrade path from old installs that already have app_id but no
-      # bypass_app_id (the module crashed asking for a token nobody collected).
-      access_enabled = access_config["enabled"] == true
-      access_needs_token = access_enabled && (
-        access_config["app_id"].to_s.empty? ||
-        access_config["bypass_app_id"].to_s.empty?
-      )
-      tunnel_needs_token || access_needs_token
+      return tunnel_needs_token unless access_config["enabled"] == true
+
+      # Protected app: always needed when Access is enabled.
+      return true if access_config["app_id"].to_s.empty?
+
+      # Bypass app: only needed when there will actually be bypass
+      # destinations. Without this check the wizard demands a token any time
+      # bypass_app_id is missing, even for installs that explicitly turned
+      # bypass off — the module would correctly skip creation in that case
+      # and the prompted token goes unused. Mirrors needs_bypass in
+      # Modules::Cloudflare#configure_cloudflare_access.
+      if access_config["bypass_app_id"].to_s.empty? &&
+         !would_be_bypass_destinations(access_config, base_domain).empty?
+        return true
+      end
+
+      tunnel_needs_token
+    end
+
+    # Mirrors Modules::Cloudflare#access_bypass_destinations using the data
+    # the wizard has at hand (base_domain becomes hostname_matrix when the
+    # wizard later writes config.cloudflare.tunnel.hostname_matrix).
+    def would_be_bypass_destinations(access_config, base_domain)
+      configured =
+        if access_config.key?("bypass_hostnames")
+          Array(access_config["bypass_hostnames"]).reject { |h| h.to_s.empty? }
+        elsif !base_domain.to_s.empty?
+          ["public-*.#{base_domain}"]
+        else
+          []
+        end
+      matrix = base_domain.to_s.empty? ? nil : "matrix.#{base_domain}"
+      [matrix, *configured].compact.reject { |h| h.to_s.empty? }.uniq
     end
 
     def default_access_allowed(existing)

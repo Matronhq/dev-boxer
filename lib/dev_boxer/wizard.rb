@@ -86,6 +86,7 @@ module DevBoxer
       end
 
       section_header("5. Matrix")
+      explain_matrix_location
       matrix_choice = ask_choice(
         "Matrix homeserver location",
         choices: %w[here there],
@@ -95,6 +96,7 @@ module DevBoxer
       matrix_user, matrix_overrides, matrix_secret_fields =
         case matrix_choice
         when "here"
+          explain_matrix_username
           name = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
           [name, { "mode" => "bundled" }, {}]
         when "there"
@@ -221,7 +223,33 @@ module DevBoxer
       end
     end
 
+    def explain_matrix_location
+      output.puts
+      output.puts "Matrix homeserver location:"
+      output.puts "Where should Matrix live?"
+      output.puts "Choose `here` for the standard setup — Dev Boxer runs a fresh Matrix homeserver on this box and your Element account talks directly to it."
+      output.puts "Choose `there` if you already have another Dev Boxer host running Matrix and want this box to join your existing Element session as a separate bot identity (you'll paste an add-bot blob from the other box on the next prompt)."
+      output.puts
+    end
+
+    def explain_matrix_username
+      output.puts
+      output.puts "Matrix username:"
+      output.puts "The local part of your Matrix user — the bit before the colon in @you:matrix.example.com."
+      output.puts "Defaults to your Linux username, which is usually what you want."
+      output.puts
+    end
+
+    def explain_add_bot_blob
+      output.puts
+      output.puts "Add-bot blob:"
+      output.puts "Paste the blob from running `dev-boxer add-bot <name>` on your existing homeserver box."
+      output.puts "It encodes the new bot's credentials and the bridge room id so this box can join your Element session as a separate identity — see docs/adding-bots.md."
+      output.puts
+    end
+
     def ask_blob_until_valid
+      explain_add_bot_blob
       loop do
         raw = ask("Paste add-bot blob from your homeserver box", secret: true)
         begin

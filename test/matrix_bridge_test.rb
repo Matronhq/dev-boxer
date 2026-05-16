@@ -108,6 +108,35 @@ class MatrixBridgeTest < Minitest::Test
     end
   end
 
+  def test_bootstrap_external_crosssigning_restarts_bridge_even_when_node_step_fails
+    Dir.mktmpdir do |dir|
+      mod = build_module(
+        secrets_path: File.join(dir, "secrets.yml"),
+        matrix: { "bot_password" => "pw", "bot_recovery_key" => "EsTm 4uK4" },
+      )
+      systemctl_calls = []
+      mod.shell.define_singleton_method(:systemctl) do |action, name|
+        systemctl_calls << [action, name]
+        true
+      end
+      mod.shell.define_singleton_method(:sh) { |_cmd| false }
+      mod.shell.define_singleton_method(:run_as_user) do |_user, cmd|
+        raise "node bootstrap-crosssigning failed" if cmd.include?("bootstrap-crosssigning.mjs")
+        true
+      end
+
+      assert_raises(RuntimeError) do
+        mod.stub(:sleep, nil) do
+          mod.send(:bootstrap_external_crosssigning)
+        end
+      end
+
+      assert_includes systemctl_calls, [:stop, "claude-matrix-bridge"]
+      assert_includes systemctl_calls, [:restart, "claude-matrix-bridge"],
+                      "bridge must be restarted even if cross-signing bootstrap fails"
+    end
+  end
+
   private
 
   def build_module(secrets_path:, matrix: {})

@@ -35,17 +35,41 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 
 ## Quick start
 
+### Public repos (default)
+
 Run this on the VPS as root, or from a sudo-capable account:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh | sudo bash
 ```
 
+### Private repos (Matronhq today)
+
+While the Dev Boxer and bridge repos are private, the public installer URL is unauthenticated and will 404. Use `bootstrap-vps.sh` from this repo instead — it installs `gh`, walks you through `gh auth login`, then clones and hands off to the same installer.
+
+Copy `bootstrap-vps.sh` from your laptop's checkout to a fresh VPS root shell (paste the file contents into a heredoc, or `scp` it across), then either:
+
+```bash
+# Interactive: walks through gh's web/device-code flow
+sudo bash bootstrap-vps.sh
+```
+
+or, fully unattended once you've created a fine-grained PAT (the same one the wizard stores in `secrets.yml`):
+
+```bash
+GH_TOKEN=ghp_xxx sudo -E bash bootstrap-vps.sh
+```
+
+The bootstrap is idempotent — re-running it just confirms gh is still authenticated and `git pull`s the existing checkout.
+
+### What happens next
+
 The installer clones Dev Boxer to `/opt/dev-boxer`, prompts for the minimum required settings, writes `config.yml` and gitignored `secrets.yml`, then runs the full setup. Later `sudo ./setup.rb ...` reruns from that checkout automatically fast-forward before continuing; set `DEV_BOXER_SKIP_AUTO_UPDATE=1` to disable that.
 
 It asks for:
 
 - Linux username, SSH public key, and SSH port
+- GitHub fine-grained PAT (optional; lets the dev user clone private repos without an interactive `gh auth login` mid-setup)
 - Base domain, e.g. `example.com`
 - Whether Dev Boxer should manage Cloudflare DNS automatically, or whether you will create the required subdomains manually
 - Cloudflare zone DNS API token if automatic DNS management is enabled

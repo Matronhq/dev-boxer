@@ -26,15 +26,51 @@ class HelloWorldTest < Minitest::Test
       end
 
       summary = output.string
-      assert_includes summary, "Matrix bridge — Matron first login"
+      assert_includes summary, "Matrix bridge — first login"
       assert_includes summary, "URL: https://matrix.example.com"
       assert_includes summary, "User ID: @dev:matrix.example.com"
       assert_includes summary, "Password: matrix-pass"
       assert_includes summary, "Secure Backup recovery key: recovery-key-value"
-      refute_includes summary, "Open Element"
       refute_includes summary, "custom homeserver"
       refute_includes summary, "recovery-key.txt"
     end
+  end
+
+  def test_matrix_login_instructions_for_external_homeserver
+    output = StringIO.new
+    mod = build_module(
+      output: output,
+      config_hash: {
+        "user" => { "name" => "dev" },
+        "matrix" => {
+          "mode" => "external",
+          "server_domain" => "matrix-dev2.yearbooks.be",
+          "user_username" => "danbarker",
+          "homeserver_url" => "https://matrix-dev2.yearbooks.be",
+        },
+        # Cloudflare tunnel hostname for matrix exists for unrelated reasons
+        # (e.g. previously was bundled). External mode must NOT use it as the
+        # homeserver URL — the homeserver lives on a different box entirely.
+        "cloudflare" => {
+          "tunnel" => {
+            "hostname_matrix" => "matrix.christinabox.uk",
+          },
+        },
+      },
+    )
+
+    mod.send(:print_matrix_login_instructions)
+
+    summary = output.string
+    assert_includes summary, "Matrix bridge — first login"
+    assert_includes summary, "Open Element"
+    assert_includes summary, "Homeserver URL: https://matrix-dev2.yearbooks.be"
+    assert_includes summary, "User ID: @danbarker:matrix-dev2.yearbooks.be"
+    assert_includes summary, "(use your existing matrix-dev2.yearbooks.be account password)"
+    assert_includes summary, "(use your existing recovery key)"
+    refute_includes summary, "matrix.christinabox.uk"
+    refute_includes summary, "missing from secrets.yml"
+    refute_includes summary, "recovery-key.txt"
   end
 
   def test_matrix_login_instructions_skip_disabled_matrix

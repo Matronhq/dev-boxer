@@ -60,6 +60,7 @@ module DevBoxer
         write_bridge_env
         write_mcp_config
         install_systemd_units
+        bootstrap_external_crosssigning if mode == "external"
         ok "Matrix bridge setup complete"
       end
 
@@ -378,10 +379,39 @@ module DevBoxer
           skip "Bridge repo already cloned"
           shell.sh("su - #{username} -c 'cd #{bridge_dir} && git pull --ff-only'")
         else
+          ensure_dev_user_can_clone_bridge
           info "Cloning claude-matrix-bridge"
           shell.run_as_user(username, "git clone #{BRIDGE_REPO} #{bridge_dir}")
           ok "Bridge repo cloned"
         end
+      end
+
+      # The bridge lives in a private GitHub org, so the dev user needs git
+      # credentials before the clone. `gh auth login` was almost certainly
+      # done as root during install, but git-as-the-dev-user has no helper
+      # configured. Probe with GIT_TERMINAL_PROMPT=0 so the check returns
+      # cleanly instead of hanging on a credential prompt, then run the
+      # interactive `gh auth login --web` device-code flow when needed.
+      def ensure_dev_user_can_clone_bridge
+        probe = "GIT_TERMINAL_PROMPT=0 git ls-remote #{Shellwords.escape(BRIDGE_REPO)} HEAD >/dev/null 2>&1"
+        if shell.sh("su - #{Shellwords.escape(username)} -c #{Shellwords.escape(probe)}")
+          skip "GitHub auth already configured for #{username}"
+          return
+        end
+
+        unless $stdin.tty?
+          raise "#{username} cannot clone #{BRIDGE_REPO}; re-run interactively so we can run `gh auth login --web` as #{username}"
+        end
+
+        info "GitHub auth required for #{username} to clone the private bridge repo"
+        info "About to run: gh auth login --web --git-protocol https --hostname github.com (as #{username})"
+        info "You'll see a one-time code and a URL — open the URL in any browser, paste the code, and authorize."
+        shell.run_as_user_interactive(
+          username,
+          "gh auth login --web --git-protocol https --hostname github.com",
+        )
+        shell.run_as_user_interactive(username, "gh auth setup-git")
+        ok "GitHub CLI authenticated for #{username}"
       end
 
       def npm_install
@@ -466,6 +496,60 @@ module DevBoxer
         shell.systemctl(:restart, "claude-matrix-bridge")
         shell.systemctl(:restart, "claude-matrix-file-viewer")
         ok "Bridge services installed and started"
+      end
+
+      # External-mode-only: after the bridge has started for the first time
+      # and uploaded its (unsigned) device, sign that device with the bot's
+      # cross-signing key (restored from BOT_RECOVERY_KEY in the bridge's
+      # .env). Without this step, your Element session sees the bot device as
+      # unverified, encrypted messages don't decrypt cleanly, and `!start`
+      # silently no-ops.
+      #
+      # In bundled mode, setup-user.mjs / the onboarding flow already cross-
+      # signs the bot device, so this is unnecessary there.
+      #
+      # Idempotent via a sentinel inside the crypto store dir — wiping the
+      # store also wipes the sentinel, so re-bootstrapping happens naturally.
+      def bootstrap_external_crosssigning
+        unless config.matrix&.bot_password && config.matrix&.bot_recovery_key
+          info "Skipping cross-signing bootstrap (no bot_password / bot_recovery_key in secrets.yml)"
+          return
+        end
+
+        marker = "#{home_dir}/.claude-matrix-bot-crypto/.dev-boxer-crosssigning-bootstrapped"
+        if shell.sh("test -f #{Shellwords.escape(marker)}")
+          skip "Cross-signing already bootstrapped for this bot device"
+          return
+        end
+
+        info "Waiting for bridge to register its device on the homeserver"
+        # The bridge's first-start bootstrap mints an access token and the
+        # rust-sdk crypto layer creates+uploads a device on the first sync.
+        # 10s is comfortably more than the few seconds that takes in practice
+        # and keeps us off any Tuwunel-side rate limiters.
+        sleep 10
+
+        info "Stopping bridge so cross-signing bootstrap can write to its crypto store"
+        shell.systemctl(:stop, "claude-matrix-bridge")
+
+        # The bridge is stopped while we run the bootstrap script and drop the
+        # sentinel. If either step raises, the bridge must still be restarted —
+        # leaving it stopped is worse than the pre-method state (bridge running
+        # with an unsigned device). Mirror the begin/ensure pattern from
+        # onboard_users.
+        begin
+          info "Bootstrapping cross-signing for bot device (this signs the bridge's device with the bot's master key)"
+          shell.run_as_user(
+            username,
+            "cd #{Shellwords.escape(bridge_dir)} && node bootstrap-crosssigning.mjs",
+          )
+
+          shell.run_as_user(username, "touch #{Shellwords.escape(marker)}")
+          ok "Cross-signing bootstrapped — bot device is now signed by the bot's master key"
+        ensure
+          info "Restarting bridge"
+          shell.systemctl(:restart, "claude-matrix-bridge")
+        end
       end
 
     end

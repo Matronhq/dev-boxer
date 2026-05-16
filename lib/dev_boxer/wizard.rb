@@ -51,9 +51,11 @@ module DevBoxer
 
     def build_config(existing)
       section_header("1. Server login")
+      explain_linux_username
       username = ask("Linux username", default: existing.dig("user", "name") || default_username)
       explain_ssh_public_key
       ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
+      explain_ssh_port
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
 
       section_header("2. GitHub access")
@@ -84,6 +86,7 @@ module DevBoxer
       end
 
       section_header("5. Matrix")
+      explain_matrix_location
       matrix_choice = ask_choice(
         "Matrix homeserver location",
         choices: %w[here there],
@@ -93,6 +96,7 @@ module DevBoxer
       matrix_user, matrix_overrides, matrix_secret_fields =
         case matrix_choice
         when "here"
+          explain_matrix_username
           name = ask("Matrix username", default: existing.dig("matrix", "user_username") || username)
           [name, { "mode" => "bundled" }, {}]
         when "there"
@@ -185,18 +189,22 @@ module DevBoxer
     end
 
     def build_claude_config(existing)
-      output.puts
-      output.puts "Claude behavior:"
-      output.puts "  Beginner: explain more, ask before meaningful technical choices, summarize next steps."
-      output.puts "  Intermediate: concise explanations, proceed on routine choices, ask on tradeoffs."
-      output.puts "  Advanced: terse summaries, proceed with reasonable assumptions, focus on diffs/tests/blockers."
-      output.puts
-
+      explain_claude_experience_level
       level = ask_experience_level(existing)
       config = { "experience_level" => level }
       plugins = existing.dig("claude", "plugins")
       config["plugins"] = plugins unless plugins.nil?
       config
+    end
+
+    def explain_claude_experience_level
+      output.puts
+      output.puts "Claude experience level:"
+      output.puts "How should Claude collaborate with you on this box?"
+      output.puts "Beginner means more explanation, and Claude asks before meaningful technical choices and summarises next steps."
+      output.puts "Intermediate (the default) is concise — Claude proceeds on routine choices and asks on real tradeoffs."
+      output.puts "Advanced is terse: Claude makes reasonable assumptions and focuses on diffs, tests, and blockers."
+      output.puts
     end
 
     def ask_experience_level(existing)
@@ -219,7 +227,33 @@ module DevBoxer
       end
     end
 
+    def explain_matrix_location
+      output.puts
+      output.puts "Matrix homeserver location:"
+      output.puts "Where should Matrix live?"
+      output.puts "Choose `here` for the standard setup — Dev Boxer runs a fresh Matrix homeserver on this box and your Element account talks directly to it."
+      output.puts "Choose `there` if you already have another Dev Boxer host running Matrix and want this box to join your existing Element session as a separate bot identity (you'll paste an add-bot blob from the other box on the next prompt)."
+      output.puts
+    end
+
+    def explain_matrix_username
+      output.puts
+      output.puts "Matrix username:"
+      output.puts "The local part of your Matrix user — the bit before the colon in @you:matrix.example.com."
+      output.puts "Defaults to your Linux username, which is usually what you want."
+      output.puts
+    end
+
+    def explain_add_bot_blob
+      output.puts
+      output.puts "Add-bot blob:"
+      output.puts "Paste the blob from running `dev-boxer add-bot <name>` on your existing homeserver box."
+      output.puts "It encodes the new bot's credentials and the bridge room id so this box can join your Element session as a separate identity — see docs/adding-bots.md."
+      output.puts
+    end
+
     def ask_blob_until_valid
+      explain_add_bot_blob
       loop do
         raw = ask("Paste add-bot blob from your homeserver box", secret: true)
         begin
@@ -357,151 +391,114 @@ module DevBoxer
       end
     end
 
+    def explain_linux_username
+      output.puts
+      output.puts "Linux username:"
+      output.puts "The Linux account you'll ssh into and do your work as."
+      output.puts "`dev` is fine if you don't have a preference; just avoid `root` — Dev Boxer disables root login regardless."
+      output.puts
+    end
+
     def explain_ssh_public_key
       output.puts
       output.puts "SSH public key:"
-      output.puts "  What: The public half of an SSH key pair from your laptop. A single line that"
-      output.puts "        starts with ssh-ed25519, ssh-rsa, or sk-ssh-... and ends with a comment."
-      output.puts "  Why: Dev Boxer puts it in the new Linux user's ~/.ssh/authorized_keys so you can"
-      output.puts "       log in over SSH from your laptop without a password (and password auth is"
-      output.puts "       disabled by the security module)."
-      output.puts "  How (macOS/Linux): if you don't already have one, run on your laptop:"
-      output.puts "      ssh-keygen -t ed25519 -C \"you@laptop\""
-      output.puts "      # press Enter to accept the default path (~/.ssh/id_ed25519)"
-      output.puts "      # set a passphrase if you like (recommended)"
-      output.puts "    Then print and copy the public key:"
-      output.puts "      cat ~/.ssh/id_ed25519.pub        # macOS/Linux"
-      output.puts "      cat ~/.ssh/id_ed25519.pub | pbcopy   # macOS, copies to clipboard"
-      output.puts "  How (Windows): run the same `ssh-keygen` command in PowerShell or Git Bash;"
-      output.puts "      keys live at C:\\Users\\you\\.ssh\\id_ed25519.pub."
-      output.puts "  Already have a key? Reuse it: cat ~/.ssh/id_ed25519.pub (or ~/.ssh/id_rsa.pub)."
-      output.puts "  Paste the entire single line below."
+      output.puts "Paste the public half of your SSH key — a single line starting with `ssh-ed25519`, `ssh-rsa`, or `sk-ssh-...`."
+      output.puts "Dev Boxer drops it into the new account's authorized_keys and disables password auth, so this key is your only way in."
+      output.puts "If you don't already have one, run `ssh-keygen -t ed25519` on your laptop and paste `~/.ssh/id_ed25519.pub` (on macOS, `pbcopy < ~/.ssh/id_ed25519.pub` puts it on your clipboard)."
+      output.puts
+    end
+
+    def explain_ssh_port
+      output.puts
+      output.puts "SSH port:"
+      output.puts "Dev Boxer puts ssh on a non-standard port to cut down on the noise from automated scanners hammering port 22."
+      output.puts "2222 is the default; pick whatever you like between 1024 and 65535."
       output.puts
     end
 
     def explain_github_token
       output.puts
       output.puts "GitHub personal access token (optional):"
-      output.puts "  What: A fine-grained PAT with read access to the private repos Dev Boxer needs"
-      output.puts "        to clone (claude-matrix-bridge today, possibly more in future)."
-      output.puts "  Why: Without it, Dev Boxer pauses mid-setup and runs `gh auth login --web` as the"
-      output.puts "       new dev user so it can clone those repos. With a PAT here we configure git"
-      output.puts "       up-front and the rest of setup runs unattended."
-      output.puts "  How: Open https://github.com/settings/personal-access-tokens/new"
-      output.puts "       Resource owner: Matronhq (or whichever org owns the private repos)"
-      output.puts "       Repository access: Only select repositories → claude-matrix-bridge"
-      output.puts "       Permissions → Repository permissions → Contents: Read-only"
-      output.puts "       Expiration: pick something sensible (e.g. 1 year)."
-      output.puts "  Storage: Saved to secrets.yml (mode 0600). Re-used by `gh auth login --with-token`"
-      output.puts "       for the dev user. Stash a copy in your password manager so future boxes can"
-      output.puts "       reuse the same token."
-      output.puts "  Skip: Leave blank to fall back to the interactive `gh auth login --web` flow"
-      output.puts "       during the matrix-bridge module."
+      output.puts "A fine-grained PAT for the private repos Dev Boxer needs to clone — today that's just claude-matrix-bridge, possibly more later."
+      output.puts "Without it, setup pauses partway through and runs `gh auth login --web` as the new dev user; with it, the rest of setup runs unattended."
+      output.puts "Create one at https://github.com/settings/personal-access-tokens/new — resource owner Matronhq, repository access \"Only select repositories\" → claude-matrix-bridge, Contents: Read-only, sensible expiration (e.g. 1 year)."
+      output.puts "Saved to secrets.yml (mode 0600). Leave blank to fall back to the interactive web flow during the matrix-bridge module."
       output.puts
     end
 
     def explain_external_matrix_username(server_domain)
       output.puts
       output.puts "Your Matrix username:"
-      output.puts "  What: The localpart of YOUR existing Matrix account on #{server_domain}"
-      output.puts "        (the part between @ and :, e.g. for @dbarker:#{server_domain} it's dbarker)."
-      output.puts "  Why: This becomes ALLOWED_USER_IDS in the bridge .env. Messages from any other"
-      output.puts "       account are silently dropped, so getting this wrong means the bridge looks"
-      output.puts "       dead even though it's actually receiving and decrypting your messages."
-      output.puts "  Tip: This is your MATRIX username, NOT your Linux username on this VPS — they"
-      output.puts "       are often different."
+      output.puts "The local part of your existing Matrix account on #{server_domain} — the bit between `@` and `:`, e.g. `dbarker` in `@dbarker:#{server_domain}`."
+      output.puts "This becomes ALLOWED_USER_IDS in the bridge .env. Anything else gets silently dropped, so getting this wrong leaves the bridge looking dead while it's actually receiving and decrypting your messages."
+      output.puts "This is your MATRIX username, not your Linux username on this VPS — they're often different."
       output.puts
     end
 
     def explain_base_domain
       output.puts
       output.puts "Base domain:"
-      output.puts "  What: The Cloudflare-managed domain Dev Boxer will use, for example example.com."
-      output.puts "  Why: Dev Boxer creates dev.<domain>, matrix.<domain>, viewer.<domain>, hello.<domain>, and can create new subdomains for projects you make."
-      output.puts "  Tip: We recommend giving the box its own domain."
-      output.puts "  Cost: Low-cost domains such as .uk or .us often start around $5-6/year, depending on current registrar pricing."
-      output.puts "  How: Register or transfer a domain with Cloudflare Registrar, or add an existing domain to Cloudflare DNS first."
-      output.puts "  Link: https://www.cloudflare.com/products/registrar/"
+      output.puts "Pick the Cloudflare-managed domain Dev Boxer should use, e.g. example.com."
+      output.puts "Dev Boxer will create dev, matrix, viewer, and hello subdomains under it, plus more for any projects you build later."
+      output.puts "If you don't already have one, we recommend giving the box its own domain — .uk and .us names start around $5–6/year at https://www.cloudflare.com/products/registrar/."
+      output.puts "An existing domain works too; just move it to Cloudflare DNS first."
       output.puts
     end
 
     def explain_cloudflare_zone_token(base_domain)
       output.puts
       output.puts "Cloudflare zone DNS API token:"
-      output.puts "  What: A zone-scoped Cloudflare API token for #{base_domain}."
-      output.puts "  Why: Dev Boxer keeps this token in secrets.yml so it can create and update DNS records for dev, matrix, viewer, hello, and new subdomains for projects you make."
-      output.puts "  Recommended: an account-owned token (owned by the account rather than your individual dashboard user, so it survives if you ever leave the account or rotate users)."
-      output.puts "  How (pre-filled, opens at the account-level token page):"
-      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
-      output.puts "      Open in your browser. Cloudflare resolves :account to your account (or asks you to pick if you have several)."
-      output.puts "      The form will be pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS'."
-      output.puts "      Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then 'Continue to summary' and 'Create Token'."
-      output.puts "  Scope: Limit the token to the #{base_domain} zone only. Do not grant access to all zones."
-      output.puts "  Manual route (account-level token page, no pre-fill):"
-      output.puts "      https://dash.cloudflare.com/?to=/:account/api-tokens"
-      output.puts "      Click 'Create Token' > 'Get started' (custom token). Add Zone:Read and Zone:DNS:Edit, restrict to #{base_domain}."
-      output.puts "  Note: The account token page requires Super Administrator or Administrator on the account. The user-level page (https://dash.cloudflare.com/profile/api-tokens) also works, but creates a token tied to your individual dashboard user, which is harder to hand off."
-      output.puts "  Alternative: Choose no below if you prefer to create each required subdomain manually."
+      output.puts "Dev Boxer needs a zone-scoped API token for #{base_domain} so it can create and update DNS records for dev, matrix, viewer, hello, and any project subdomains you make later."
+      output.puts "Create one — pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS' — at:"
+      output.puts "  https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
+      output.puts "Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then create the token. Scope it to this zone only — never all zones."
+      output.puts "Choose no below if you'd rather create each subdomain manually."
       output.puts
     end
 
     def explain_manual_dns_setup(base_domain)
       output.puts
-      output.puts "Manual DNS selected."
-      output.puts "  Dev Boxer will not store a DNS API token."
-      output.puts "  After the tunnel exists, create proxied CNAME records for:"
-      output.puts "    - dev.#{base_domain}"
-      output.puts "    - matrix.#{base_domain}"
-      output.puts "    - viewer.#{base_domain}"
-      output.puts "    - hello.#{base_domain}"
-      output.puts "  Point each record at the tunnel target Dev Boxer prints, usually <TunnelID>.cfargotunnel.com."
-      output.puts "  You will also need to create any future project subdomains yourself."
+      output.puts "Manual DNS selected:"
+      output.puts "Dev Boxer won't store an API token."
+      output.puts "Once the tunnel exists you'll need to create proxied CNAME records for dev.#{base_domain}, matrix.#{base_domain}, viewer.#{base_domain}, and hello.#{base_domain}, pointing at the tunnel target Dev Boxer prints (usually <TunnelID>.cfargotunnel.com)."
+      output.puts "Any future project subdomains will also be your responsibility to create."
       output.puts
     end
 
     def explain_manual_access_after_manual_dns
       output.puts
-      output.puts "Cloudflare Access will be manual because DNS is manual."
-      output.puts "  Dev Boxer normally derives the Cloudflare account from the zone DNS token."
-      output.puts "  Without that token, create the Access app manually later if you want browser SSO for dev/viewer/hello."
+      output.puts "Cloudflare Access will be manual too:"
+      output.puts "Dev Boxer normally derives your Cloudflare account from the zone DNS token, and without that token it can't reach the Access API."
+      output.puts "Create the Access app yourself later from the dashboard if you want browser SSO on dev, viewer, and hello — see docs/cloudflare-access.md."
       output.puts
     end
 
     def explain_cloudflare_automation
       output.puts
       output.puts "Cloudflare automation:"
-      output.puts "  What: Dev Boxer can create one Cloudflare Tunnel and one Zero Trust Access app."
-      output.puts "  Why: The tunnel exposes dev.<domain>, matrix.<domain>, viewer.<domain>, and hello.<domain> without opening inbound ports."
-      output.puts "       Access protects dev/viewer/hello in the browser, while matrix stays outside Access so Matrix clients work normally."
-      output.puts "  Manual option: If you prefer, choose no. Dev Boxer will pause later with the exact cloudflared tunnel command, then ask for the TunnelID."
-      output.puts "                 You can create the Access app manually after setup using docs/cloudflare-access.md."
+      output.puts "Dev Boxer can create the Cloudflare Tunnel (which exposes your hostnames without opening any inbound ports) and a Zero Trust Access app (browser SSO) in one go."
+      output.puts "Matrix stays outside Access so Matrix clients keep working normally."
+      output.puts "Say no if you'd rather run the cloudflared tunnel login and cloudflared tunnel create commands by hand — Dev Boxer will pause and tell you exactly what to run, then ask for the resulting TunnelID."
       output.puts
     end
 
     def explain_manual_cloudflare_setup
       output.puts
-      output.puts "Manual Cloudflare setup selected."
-      output.puts "  Tunnel: Dev Boxer will install cloudflared, print a one-time tunnel creation command, and ask you to paste the resulting TunnelID."
-      output.puts "  Login: The manual tunnel command starts with cloudflared tunnel login, which opens a Cloudflare authorization URL."
-      output.puts "  Access: Dev Boxer will not create a Zero Trust Access app. Protect dev/viewer/hello manually later if you want browser SSO."
+      output.puts "Manual Cloudflare setup selected:"
+      output.puts "Dev Boxer will install cloudflared, print the exact `cloudflared tunnel login` and `cloudflared tunnel create` commands to run in another root shell, then ask you to paste the resulting TunnelID."
+      output.puts "It won't create the Access app either — set that up later from the dashboard if you want SSO; see docs/cloudflare-access.md."
       output.puts
     end
 
     def explain_cloudflare_setup_token
       output.puts
       output.puts "One-time Cloudflare account setup token:"
-      output.puts "  What: A temporary account-owned Cloudflare API token."
-      output.puts "  Why: Dev Boxer uses it once to create the Cloudflare Tunnel and optional Zero Trust Access app."
-      output.puts "  How: Open the account-level token page (Cloudflare resolves :account to your account, or asks you to pick if you have several):"
-      output.puts "       https://dash.cloudflare.com/?to=/:account/api-tokens"
-      output.puts "       Click 'Create Token' > 'Get started' next to 'Create Custom Token'."
-      output.puts "       Add these account permissions:"
-      output.puts "         - Cloudflare One Connector: cloudflared: Edit"
-      output.puts "         - Access: Apps: Edit"
-      output.puts "         - Access: Policies: Edit"
-      output.puts "       Leave 'Account Resources' as 'Include - All accounts' (or restrict to the specific account you're setting up)."
-      output.puts "  Note: Creating account-owned tokens needs Super Administrator or Administrator on the account. If you don't have that, the user-level page works too: https://dash.cloudflare.com/profile/api-tokens"
-      output.puts "  Cleanup: Dev Boxer deletes this token from secrets.yml after setup succeeds."
+      output.puts "A one-time account-level Cloudflare API token used only to create the tunnel and the Access app."
+      output.puts "Create a custom token at https://dash.cloudflare.com/?to=/:account/api-tokens with these account permissions:"
+      output.puts "  - Cloudflare One Connector: cloudflared: Edit"
+      output.puts "  - Access: Apps: Edit"
+      output.puts "  - Access: Policies: Edit"
+      output.puts "Dev Boxer wipes it from secrets.yml as soon as setup finishes."
       output.puts
     end
 

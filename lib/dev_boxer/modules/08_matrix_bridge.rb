@@ -532,17 +532,24 @@ module DevBoxer
         info "Stopping bridge so cross-signing bootstrap can write to its crypto store"
         shell.systemctl(:stop, "claude-matrix-bridge")
 
-        info "Bootstrapping cross-signing for bot device (this signs the bridge's device with the bot's master key)"
-        shell.run_as_user(
-          username,
-          "cd #{Shellwords.escape(bridge_dir)} && node bootstrap-crosssigning.mjs",
-        )
+        # The bridge is stopped while we run the bootstrap script and drop the
+        # sentinel. If either step raises, the bridge must still be restarted —
+        # leaving it stopped is worse than the pre-method state (bridge running
+        # with an unsigned device). Mirror the begin/ensure pattern from
+        # onboard_users.
+        begin
+          info "Bootstrapping cross-signing for bot device (this signs the bridge's device with the bot's master key)"
+          shell.run_as_user(
+            username,
+            "cd #{Shellwords.escape(bridge_dir)} && node bootstrap-crosssigning.mjs",
+          )
 
-        shell.run_as_user(username, "touch #{Shellwords.escape(marker)}")
-
-        info "Restarting bridge with cross-signed device"
-        shell.systemctl(:restart, "claude-matrix-bridge")
-        ok "Cross-signing bootstrapped — bot device is now signed by the bot's master key"
+          shell.run_as_user(username, "touch #{Shellwords.escape(marker)}")
+          ok "Cross-signing bootstrapped — bot device is now signed by the bot's master key"
+        ensure
+          info "Restarting bridge"
+          shell.systemctl(:restart, "claude-matrix-bridge")
+        end
       end
 
     end

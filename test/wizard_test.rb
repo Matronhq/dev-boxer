@@ -102,7 +102,9 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "One-time Cloudflare account setup token:"
       assert_includes wizard_output, "Cloudflare automation:"
       assert_includes wizard_output, "Dev Boxer can create the Cloudflare Tunnel"
-      assert_includes wizard_output, "Matrix stays outside Access"
+      assert_includes wizard_output, "two Zero Trust Access apps"
+      assert_includes wizard_output, "bypass app that lets matrix"
+      assert_includes wizard_output, "public-`"
       assert_includes wizard_output, "one-time account-level Cloudflare API token used only to create the tunnel"
       assert_includes wizard_output, "wipes it from secrets.yml"
 
@@ -165,10 +167,12 @@ class WizardTest < Minitest::Test
       assert_includes output.string, "hello.example.com"
       assert_includes output.string, "Any future project subdomains will also be your responsibility to create."
       assert_includes output.string, "Cloudflare Access will be manual too:"
+      assert_includes output.string, "Create the two Access apps yourself"
       assert_includes output.string, "Let Dev Boxer create the Cloudflare tunnel now?"
       assert_includes output.string, "Manual Cloudflare setup selected:"
       assert_includes output.string, "Dev Boxer will install cloudflared"
-      assert_includes output.string, "It won't create the Access app either"
+      assert_includes output.string, "It won't create the Access apps either"
+      assert_includes output.string, "set up both"
       assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.load(config_path))
     end
   end

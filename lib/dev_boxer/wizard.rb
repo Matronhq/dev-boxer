@@ -483,9 +483,16 @@ module DevBoxer
       output.puts
       output.puts "Cloudflare zone DNS API token:"
       output.puts "Dev Boxer needs a zone-scoped API token for #{base_domain} so it can create and update DNS records for dev, matrix, viewer, hello, and any project subdomains you make later."
-      output.puts "Create one — pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS' — at:"
+      output.puts "Open this prefill link — it sets Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS':"
       output.puts "  https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
-      output.puts "Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then create the token. Scope it to this zone only — never all zones."
+      output.puts
+      output.puts "!! IMPORTANT — Cloudflare does NOT let us pre-fill the zone scope, so the page will default to 'All zones'. You MUST change it before creating the token:"
+      output.puts "  1. Scroll to 'Zone Resources'."
+      output.puts "  2. Change 'Include' from 'All zones from an account' to 'Specific zone'."
+      output.puts "  3. In the zone dropdown, pick #{base_domain}."
+      output.puts "  4. Continue to the summary and create the token."
+      output.puts
+      output.puts "Scope it to this zone only — never all zones. A token granting access to every zone in your Cloudflare account is far more powerful than Dev Boxer needs and is a much bigger blast radius if it ever leaks."
       output.puts "Choose no below if you'd rather create each subdomain manually."
       output.puts
     end

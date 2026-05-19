@@ -1,6 +1,7 @@
 require "io/console"
 require "fileutils"
 require "securerandom"
+require "uri"
 require "yaml"
 require "dev_boxer/credentials_blob"
 
@@ -58,21 +59,12 @@ module DevBoxer
       explain_ssh_port
       ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
 
-      section_header("2. GitHub access")
-      explain_github_token
-      github_token = ask(
-        "GitHub personal access token",
-        default: existing.dig("github", "token"),
-        required: false,
-        secret: true,
-      )
-
-      section_header("3. Domain and DNS")
+      section_header("2. Domain and DNS")
       explain_base_domain
       base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
       manual_dns, zone_token = choose_dns_setup(existing, base_domain)
 
-      section_header("4. Cloudflare tunnel and Access")
+      section_header("3. Cloudflare tunnel and Access")
       tunnel_id = existing.dig("cloudflare", "tunnel", "id")
       manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id, manual_dns: manual_dns)
       setup_token = nil
@@ -85,7 +77,7 @@ module DevBoxer
         )
       end
 
-      section_header("5. Matrix")
+      section_header("4. Matrix")
       explain_matrix_location
       matrix_choice = ask_choice(
         "Matrix homeserver location",
@@ -121,7 +113,7 @@ module DevBoxer
           [name, overrides, secrets_block]
         end
 
-      section_header("6. Claude behavior")
+      section_header("5. Claude behavior")
       claude_config = build_claude_config(existing)
       rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
@@ -183,7 +175,6 @@ module DevBoxer
         }.compact,
       }
       secrets["matrix"] = matrix_secret_fields unless matrix_secret_fields.empty?
-      secrets["github"] = { "token" => github_token } unless github_token.to_s.empty?
 
       [config, secrets]
     end
@@ -450,16 +441,6 @@ module DevBoxer
       output.puts
     end
 
-    def explain_github_token
-      output.puts
-      output.puts "GitHub personal access token (optional):"
-      output.puts "A fine-grained PAT for the private repos Dev Boxer needs to clone — today that's just claude-matrix-bridge, possibly more later."
-      output.puts "Without it, setup pauses partway through and runs `gh auth login --web` as the new dev user; with it, the rest of setup runs unattended."
-      output.puts "Create one at https://github.com/settings/personal-access-tokens/new — resource owner Matronhq, repository access \"Only select repositories\" → claude-matrix-bridge, Contents: Read-only, sensible expiration (e.g. 1 year)."
-      output.puts "Saved to secrets.yml (mode 0600). Leave blank to fall back to the interactive web flow during the matrix-bridge module."
-      output.puts
-    end
-
     def explain_external_matrix_username(server_domain)
       output.puts
       output.puts "Your Matrix username:"
@@ -480,12 +461,21 @@ module DevBoxer
     end
 
     def explain_cloudflare_zone_token(base_domain)
+      token_name = "Dev Boxer DNS (#{base_domain})"
+      encoded_name = URI.encode_www_form_component(token_name)
       output.puts
       output.puts "Cloudflare zone DNS API token:"
       output.puts "Dev Boxer needs a zone-scoped API token for #{base_domain} so it can create and update DNS records for dev, matrix, viewer, hello, and any project subdomains you make later."
-      output.puts "Create one — pre-filled with Zone:Read + Zone:DNS:Edit and the name 'Dev Boxer DNS' — at:"
-      output.puts "  https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=Dev+Boxer+DNS"
-      output.puts "Set 'Zone Resources' to 'Include - Specific zone - #{base_domain}', then create the token. Scope it to this zone only — never all zones."
+      output.puts "Open this prefill link — it sets Zone:Read + Zone:DNS:Edit and the name '#{token_name}':"
+      output.puts "  https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&name=#{encoded_name}"
+      output.puts
+      output.puts "!! IMPORTANT — Cloudflare does NOT let us pre-fill the zone scope, so the page will default to 'All zones'. You MUST change it before creating the token:"
+      output.puts "  1. Scroll to 'Zone Resources'."
+      output.puts "  2. Change 'Include' from 'All zones from an account' to 'Specific zone'."
+      output.puts "  3. In the zone dropdown, pick #{base_domain}."
+      output.puts "  4. Continue to the summary and create the token."
+      output.puts
+      output.puts "Scope it to this zone only — never all zones. A token granting access to every zone in your Cloudflare account is far more powerful than Dev Boxer needs and is a much bigger blast radius if it ever leaks."
       output.puts "Choose no below if you'd rather create each subdomain manually."
       output.puts
     end

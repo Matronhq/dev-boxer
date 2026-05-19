@@ -10,7 +10,6 @@ class WizardTest < Minitest::Test
         "alice",
         "ssh-ed25519 AAAATEST alice@example.com",
         "2223",
-        "ghp_test_pat",
         "example.com",
         "yes",
         "zone-token",
@@ -68,18 +67,17 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "Paste the public half of your SSH key"
       assert_includes wizard_output, "SSH port:"
       assert_includes wizard_output, "non-standard port to cut down on the noise"
-      assert_includes wizard_output, "== 2. GitHub access =="
-      assert_includes wizard_output, "GitHub personal access token (optional):"
-      assert_includes wizard_output, "https://github.com/settings/personal-access-tokens/new"
-      assert_equal "ghp_test_pat", secrets.dig("github", "token")
-      assert_includes wizard_output, "== 3. Domain and DNS =="
-      assert_includes wizard_output, "== 4. Cloudflare tunnel and Access =="
-      assert_includes wizard_output, "== 5. Matrix =="
+      refute_includes wizard_output, "GitHub access"
+      refute_includes wizard_output, "GitHub personal access token"
+      assert_nil secrets.dig("github", "token")
+      assert_includes wizard_output, "== 2. Domain and DNS =="
+      assert_includes wizard_output, "== 3. Cloudflare tunnel and Access =="
+      assert_includes wizard_output, "== 4. Matrix =="
       assert_includes wizard_output, "Matrix homeserver location:"
       assert_includes wizard_output, "Choose `here` for the standard setup"
       assert_includes wizard_output, "Matrix username:"
       assert_includes wizard_output, "local part of your Matrix user"
-      assert_includes wizard_output, "== 6. Claude behavior =="
+      assert_includes wizard_output, "== 5. Claude behavior =="
       assert_includes wizard_output, "Claude experience level:"
       assert_includes wizard_output, "How should Claude collaborate with you on this box?"
       assert_includes wizard_output, "Beginner means more explanation"
@@ -93,6 +91,8 @@ class WizardTest < Minitest::Test
       assert_includes wizard_output, "zone-scoped API token for example.com"
       assert_includes wizard_output, "any project subdomains you make later"
       assert_includes wizard_output, "https://dash.cloudflare.com/?to=/:account/api-tokens"
+      assert_includes wizard_output, "name=Dev+Boxer+DNS+%28example.com%29"
+      assert_includes wizard_output, "the name 'Dev Boxer DNS (example.com)'"
       assert_includes wizard_output, "to this zone only — never all zones"
       assert_includes wizard_output, "Let Dev Boxer manage DNS records for this domain?"
       assert_includes wizard_output, "Let Dev Boxer create the Cloudflare tunnel and Zero Trust Access app now?"
@@ -140,7 +140,6 @@ class WizardTest < Minitest::Test
         "alice",
         "ssh-ed25519 AAAATEST alice@example.com",
         "2223",
-        "",                                         # GitHub PAT (optional, blank)
         "example.com",
         "no",
         "no",
@@ -331,18 +330,17 @@ class WizardTest < Minitest::Test
       "alice",                                    # 1. Linux username
       "ssh-ed25519 AAAATEST alice@example.com",   # 2. SSH public key
       "2223",                                     # 3. SSH port
-      "",                                         # 4. GitHub PAT (optional, blank)
-      "example.com",                              # 5. Base domain
-      "yes",                                      # 6. Let Dev Boxer manage DNS
-      "zone-token",                               # 7. Zone DNS API token
-      "yes",                                      # 8. Let Dev Boxer create tunnel + Access
-      "alice@example.com, example.com",           # 9. Allowed emails for Access
-      "setup-token",                              # 10. One-time CF setup token
-      "there",                                    # 11. Matrix homeserver location
-      blob,                                       # 12. Add-bot blob (first attempt)
+      "example.com",                              # 4. Base domain
+      "yes",                                      # 5. Let Dev Boxer manage DNS
+      "zone-token",                               # 6. Zone DNS API token
+      "yes",                                      # 7. Let Dev Boxer create tunnel + Access
+      "alice@example.com, example.com",           # 8. Allowed emails for Access
+      "setup-token",                              # 9. One-time CF setup token
+      "there",                                    # 10. Matrix homeserver location
+      blob,                                       # 11. Add-bot blob (first attempt)
     ] + trailing_blob_retries + [
-      matrix_username,                            # 13. Your Matrix username on the external homeserver
-      "intermediate",                             # 14. Claude experience level
+      matrix_username,                            # 12. Your Matrix username on the external homeserver
+      "intermediate",                             # 13. Claude experience level
     ]).join("\n") + "\n"
   end
 

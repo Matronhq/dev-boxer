@@ -11,8 +11,8 @@
 **Spec:** `docs/superpowers/specs/2026-05-02-add-bot-flow-design.md`.
 
 **Repos:**
-- This repo: `/home/danbarker/dev-boxer`
-- Bridge repo: `/home/danbarker/claude-matrix-bridge` (separate git repo)
+- This repo: `~/dev-boxer`
+- Bridge repo: `~/claude-matrix-bridge` (separate git repo)
 
 ---
 
@@ -88,7 +88,7 @@ end
 - [ ] **Step 2: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/credentials_blob_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/credentials_blob_test.rb
 ```
 
 Expected: failure (`uninitialized constant DevBoxer::CredentialsBlob` or similar).
@@ -161,7 +161,7 @@ end
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/credentials_blob_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/credentials_blob_test.rb
 ```
 
 Expected: 6 runs, 0 failures.
@@ -169,7 +169,7 @@ Expected: 6 runs, 0 failures.
 - [ ] **Step 5: Run the full suite**
 
 ```
-cd /home/danbarker/dev-boxer && rake test
+cd ~/dev-boxer && rake test
 ```
 
 Expected: all green; new tests included.
@@ -303,7 +303,7 @@ end
 - [ ] **Step 2: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/matrix_registration_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/matrix_registration_test.rb
 ```
 
 Expected: failure (`uninitialized constant DevBoxer::MatrixRegistration`).
@@ -440,7 +440,7 @@ Keep the surrounding `info`/`ok` log lines that the existing flow uses.
 - [ ] **Step 5: Run all tests**
 
 ```
-cd /home/danbarker/dev-boxer && rake test
+cd ~/dev-boxer && rake test
 ```
 
 Expected: all green. The new `MatrixRegistration` tests pass; existing `MatrixBridgeTest` tests still pass because the public surface didn't change.
@@ -517,7 +517,7 @@ If `base_valid_config_hash` doesn't already exist in the test file, add it as a 
 - [ ] **Step 2: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/config_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/config_test.rb
 ```
 
 Expected: failure (`undefined method` for the helper, or schema rejecting unknown keys — depends on current state).
@@ -561,7 +561,7 @@ matrix:
 - [ ] **Step 5: Run the full suite**
 
 ```
-cd /home/danbarker/dev-boxer && rake test
+cd ~/dev-boxer && rake test
 ```
 
 Expected: all green.
@@ -691,7 +691,7 @@ The answer script above is a starting point. Run the wizard tests after pasting 
 - [ ] **Step 2: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/wizard_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/wizard_test.rb
 ```
 
 Expected: failure (the stub raises).
@@ -770,7 +770,7 @@ Then merge `matrix_overrides` into the `"matrix"` block of the `config` hash, an
 - [ ] **Step 5: Run the wizard tests**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/wizard_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/wizard_test.rb
 ```
 
 Expected: all wizard tests pass, including the two new ones.
@@ -778,7 +778,7 @@ Expected: all wizard tests pass, including the two new ones.
 - [ ] **Step 6: Run the full suite**
 
 ```
-cd /home/danbarker/dev-boxer && rake test
+cd ~/dev-boxer && rake test
 ```
 
 Expected: all green.
@@ -861,7 +861,7 @@ end
 - [ ] **Step 2: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/matrix_bridge_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/matrix_bridge_test.rb
 ```
 
 Expected: failure (`MATRIX_BOT_USER_ID` not set).
@@ -913,7 +913,7 @@ Note that the template engine renders missing vars as the empty string (verify b
 - [ ] **Step 5: Run the full suite**
 
 ```
-cd /home/danbarker/dev-boxer && rake test
+cd ~/dev-boxer && rake test
 ```
 
 Expected: all green.
@@ -1147,7 +1147,7 @@ end
 - [ ] **Step 2: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/add_bot_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/add_bot_test.rb
 ```
 
 Expected: failure (`uninitialized constant DevBoxer::AddBot`).
@@ -1332,7 +1332,7 @@ end
 - [ ] **Step 4: Run the failing test**
 
 ```
-cd /home/danbarker/dev-boxer && ruby -Ilib -Itest test/add_bot_test.rb
+cd ~/dev-boxer && ruby -Ilib -Itest test/add_bot_test.rb
 ```
 
 Expected: all 6 tests pass.
@@ -1405,13 +1405,13 @@ end
 - [ ] **Step 6: Make the CLI executable**
 
 ```
-chmod +x /home/danbarker/dev-boxer/bin/add-bot
+chmod +x ~/dev-boxer/bin/add-bot
 ```
 
 - [ ] **Step 7: Smoke-test the CLI**
 
 ```
-cd /home/danbarker/dev-boxer && bin/add-bot 2>&1 | head -5
+cd ~/dev-boxer && bin/add-bot 2>&1 | head -5
 ```
 
 Expected: prints `name is required (e.g. \`bin/add-bot box4\`)` and the usage banner, exits non-zero.
@@ -1419,7 +1419,7 @@ Expected: prints `name is required (e.g. \`bin/add-bot box4\`)` and the usage ba
 - [ ] **Step 8: Run the full suite**
 
 ```
-cd /home/danbarker/dev-boxer && rake test
+cd ~/dev-boxer && rake test
 ```
 
 Expected: all green.
@@ -1445,7 +1445,7 @@ EOF
 
 ## Phase 2 — claude-matrix-bridge (JS)
 
-These tasks operate inside `/home/danbarker/claude-matrix-bridge`, which is a *separate git repo*. Switch directories before each task and commit independently. The dev-boxer module that drives `add-bot.mjs` is already pinned via `git pull --ff-only` in the bridge clone step, so once the bridge repo is updated, dev-boxer boxes will pick it up on next `setup.rb` run.
+These tasks operate inside `~/claude-matrix-bridge`, which is a *separate git repo*. Switch directories before each task and commit independently. The dev-boxer module that drives `add-bot.mjs` is already pinned via `git pull --ff-only` in the bridge clone step, so once the bridge repo is updated, dev-boxer boxes will pick it up on next `setup.rb` run.
 
 Branch: create `feat/add-bot-flow` in the bridge repo.
 
@@ -1461,12 +1461,12 @@ There are no automated tests for this — it touches a real homeserver and a rea
 - [ ] **Step 1: Switch to the bridge repo and create the branch**
 
 ```
-cd /home/danbarker/claude-matrix-bridge && git checkout -b feat/add-bot-flow
+cd ~/claude-matrix-bridge && git checkout -b feat/add-bot-flow
 ```
 
 - [ ] **Step 2: Create `add-bot.mjs`**
 
-Create `/home/danbarker/claude-matrix-bridge/add-bot.mjs`. Use `setup-user.mjs` as the structural reference for env loading, console suppression, login + sync, and creds-file writing.
+Create `~/claude-matrix-bridge/add-bot.mjs`. Use `setup-user.mjs` as the structural reference for env loading, console suppression, login + sync, and creds-file writing.
 
 The full script:
 
@@ -1696,7 +1696,7 @@ main().catch(e => { console.error('Failed:', e); process.exit(1); });
 - [ ] **Step 3: Confirm imports / API names against the pinned matrix-js-sdk version**
 
 ```
-cd /home/danbarker/claude-matrix-bridge && grep '"matrix-js-sdk"' package.json
+cd ~/claude-matrix-bridge && grep '"matrix-js-sdk"' package.json
 ```
 
 Then quickly check that `VerificationPhase`, `requestVerificationDM`, and `verifier.verify` exist in that version:
@@ -1710,7 +1710,7 @@ If `VerificationPhase` is exported under a different path or `requestVerificatio
 - [ ] **Step 4: Smoke test the script's CLI surface**
 
 ```
-cd /home/danbarker/claude-matrix-bridge && node add-bot.mjs 2>&1 | head -3
+cd ~/claude-matrix-bridge && node add-bot.mjs 2>&1 | head -3
 ```
 
 Expected: prints usage, exits non-zero.
@@ -1718,7 +1718,7 @@ Expected: prints usage, exits non-zero.
 - [ ] **Step 5: Commit (in the bridge repo)**
 
 ```
-cd /home/danbarker/claude-matrix-bridge
+cd ~/claude-matrix-bridge
 git add add-bot.mjs
 git commit -m "$(cat <<'EOF'
 feat: add-bot.mjs for cross-machine bot bootstrap
@@ -1747,7 +1747,7 @@ The bootstrap is split into a sibling module rather than inlined into `index.js`
 
 - [ ] **Step 1: Create the bootstrap helper**
 
-Create `/home/danbarker/claude-matrix-bridge/bootstrap-from-creds.mjs`:
+Create `~/claude-matrix-bridge/bootstrap-from-creds.mjs`:
 
 ```js
 #!/usr/bin/env node
@@ -1846,7 +1846,7 @@ main().catch(e => { console.error('Failed:', e.stack || e.message); process.exit
 
 - [ ] **Step 2: Wire the bootstrap into `index.js`**
 
-Open `/home/danbarker/claude-matrix-bridge/index.js`. Find the line:
+Open `~/claude-matrix-bridge/index.js`. Find the line:
 
 ```js
 const cryptoStorage = new RustSdkCryptoStorageProvider(path.join(os.homedir(), '.claude-matrix-bot-crypto'));
@@ -1910,7 +1910,7 @@ function appendOrReplaceEnvVar(envPath, key, value) {
 - [ ] **Step 3: Verify the bridge still loads cleanly when MATRIX_ACCESS_TOKEN is set**
 
 ```
-cd /home/danbarker/claude-matrix-bridge && MATRIX_ACCESS_TOKEN=stub MATRIX_HOMESERVER_URL=http://localhost:6167 node -e "process.argv=['node', 'index.js']; import('./index.js').catch(e => { console.error(e.message); process.exit(0); })" 2>&1 | head -10
+cd ~/claude-matrix-bridge && MATRIX_ACCESS_TOKEN=stub MATRIX_HOMESERVER_URL=http://localhost:6167 node -e "process.argv=['node', 'index.js']; import('./index.js').catch(e => { console.error(e.message); process.exit(0); })" 2>&1 | head -10
 ```
 
 Expected: the process either tries to connect and fails (acceptable) or exits cleanly without crashing on the new code path. The point is to confirm the file parses and the new code doesn't error before the existing logic runs.
@@ -1934,7 +1934,7 @@ Expected: prints `access_token=<long string>` on the last line.
 - [ ] **Step 5: Commit (in the bridge repo)**
 
 ```
-cd /home/danbarker/claude-matrix-bridge
+cd ~/claude-matrix-bridge
 git add bootstrap-from-creds.mjs index.js
 git commit -m "$(cat <<'EOF'
 feat: bridge first-start bootstrap from imported bot creds
@@ -2117,7 +2117,7 @@ Watch `journalctl -u claude-matrix-bridge -f`. Expect: bootstrap re-runs from `s
 If you discovered the existing single-machine onboarding is in fact broken (spec open question #1), or the matrix-js-sdk API names differed (open question #3), update the spec inline with what you found and commit:
 
 ```
-cd /home/danbarker/dev-boxer
+cd ~/dev-boxer
 # edit docs/superpowers/specs/2026-05-02-add-bot-flow-design.md
 git add docs/superpowers/specs/2026-05-02-add-bot-flow-design.md
 git commit -m "docs(add-bot-spec): record findings from manual E2E"
@@ -2126,8 +2126,8 @@ git commit -m "docs(add-bot-spec): record findings from manual E2E"
 - [ ] **Step 9: Push branches and open PRs**
 
 ```
-cd /home/danbarker/dev-boxer && git push -u origin feat/add-bot-flow-design
-cd /home/danbarker/claude-matrix-bridge && git push -u origin feat/add-bot-flow
+cd ~/dev-boxer && git push -u origin feat/add-bot-flow-design
+cd ~/claude-matrix-bridge && git push -u origin feat/add-bot-flow
 ```
 
 Open one PR per repo. In the dev-boxer PR, link the bridge PR and note the order of merging (bridge first — clones in the matrix-bridge module pull `main`, so the bridge change has to land before existing dev-boxer installations re-run setup successfully).

@@ -44,16 +44,16 @@ class HelloWorldTest < Minitest::Test
         "user" => { "name" => "dev" },
         "matrix" => {
           "mode" => "external",
-          "server_domain" => "matrix-dev2.yearbooks.be",
-          "user_username" => "danbarker",
-          "homeserver_url" => "https://matrix-dev2.yearbooks.be",
+          "server_domain" => "matrix.example.com",
+          "user_username" => "youruser",
+          "homeserver_url" => "https://matrix.example.com",
         },
         # Cloudflare tunnel hostname for matrix exists for unrelated reasons
         # (e.g. previously was bundled). External mode must NOT use it as the
         # homeserver URL — the homeserver lives on a different box entirely.
         "cloudflare" => {
           "tunnel" => {
-            "hostname_matrix" => "matrix.christinabox.uk",
+            "hostname_matrix" => "matrix.other-example.org",
           },
         },
       },
@@ -64,11 +64,11 @@ class HelloWorldTest < Minitest::Test
     summary = output.string
     assert_includes summary, "Matrix bridge — first login"
     assert_includes summary, "Open Element"
-    assert_includes summary, "Homeserver URL: https://matrix-dev2.yearbooks.be"
-    assert_includes summary, "User ID: @danbarker:matrix-dev2.yearbooks.be"
-    assert_includes summary, "(use your existing matrix-dev2.yearbooks.be account password)"
+    assert_includes summary, "Homeserver URL: https://matrix.example.com"
+    assert_includes summary, "User ID: @youruser:matrix.example.com"
+    assert_includes summary, "(use your existing matrix.example.com account password)"
     assert_includes summary, "(use your existing recovery key)"
-    refute_includes summary, "matrix.christinabox.uk"
+    refute_includes summary, "matrix.other-example.org"
     refute_includes summary, "missing from secrets.yml"
     refute_includes summary, "recovery-key.txt"
   end

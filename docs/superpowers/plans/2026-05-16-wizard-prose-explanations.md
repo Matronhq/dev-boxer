@@ -46,7 +46,7 @@ Open `test/wizard_test.rb`. Find the line near the top of `test_wizard_writes_co
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 failure with one of the new substrings missing from `wizard_output`. (Minitest stops on the first failed `assert_includes`, so you may need to fix and re-run to see all three fail.)
 
@@ -106,22 +106,22 @@ Replace it with:
 
 - [ ] **Step 5: Run the test and verify it passes**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 run, all assertions pass, 0 failures.
 
 - [ ] **Step 6: Run the full suite to confirm no regressions**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test`
+Run: `cd ~/projects/dev-boxer && rake test`
 
 Expected: all tests pass, 0 failures.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/danbarker/projects/dev-boxer
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" commit -m "Preface server-login prompts with prose explanations
+cd ~/projects/dev-boxer
+git -c user.name="Dan Barker" -c user.email="you@example.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
+git -c user.name="Dan Barker" -c user.email="you@example.com" commit -m "Preface server-login prompts with prose explanations
 
 Linux username, SSH key, and SSH port now get a short prose paragraph
 before the prompt — what's being asked, why, what to do — in the same
@@ -169,7 +169,7 @@ Replace it with:
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 failure — the new substring (`"Pick the Cloudflare-managed domain Dev Boxer should use"` or one of the others) is not present because the wizard still emits the old labelled-bullet copy.
 
@@ -235,22 +235,22 @@ Replace the existing `def explain_manual_access_after_manual_dns ... end` block 
 
 - [ ] **Step 7: Run the test and verify it passes**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 run, all assertions pass.
 
 - [ ] **Step 8: Run the full suite to confirm no regressions**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test`
+Run: `cd ~/projects/dev-boxer && rake test`
 
 Expected: all tests pass.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-cd /home/danbarker/projects/dev-boxer
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" commit -m "Rewrite domain-and-DNS wizard prefaces as prose
+cd ~/projects/dev-boxer
+git -c user.name="Dan Barker" -c user.email="you@example.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
+git -c user.name="Dan Barker" -c user.email="you@example.com" commit -m "Rewrite domain-and-DNS wizard prefaces as prose
 
 Convert the four labelled-bullet explain methods (base_domain,
 cloudflare_zone_token, manual_dns_setup, manual_access_after_manual_dns)
@@ -285,7 +285,7 @@ Open `test/wizard_test.rb`. Below the assertions for zone-token copy (which Task
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 failure on the first new assertion (the rewritten setup-token prose isn't in the output yet).
 
@@ -335,22 +335,22 @@ Replace the existing `def explain_cloudflare_setup_token ... end` block with:
 
 - [ ] **Step 6: Run the test and verify it passes**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 run, all assertions pass.
 
 - [ ] **Step 7: Run the full suite to confirm no regressions**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test`
+Run: `cd ~/projects/dev-boxer && rake test`
 
 Expected: all tests pass.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd /home/danbarker/projects/dev-boxer
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" commit -m "Rewrite Cloudflare tunnel/Access wizard prefaces as prose
+cd ~/projects/dev-boxer
+git -c user.name="Dan Barker" -c user.email="you@example.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
+git -c user.name="Dan Barker" -c user.email="you@example.com" commit -m "Rewrite Cloudflare tunnel/Access wizard prefaces as prose
 
 Convert cloudflare_automation, manual_cloudflare_setup, and
 cloudflare_setup_token from labelled bullets to short prose paragraphs.
@@ -381,7 +381,7 @@ Open `test/wizard_test.rb`. Find the `"== 4. Matrix =="` assertion. Add immediat
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 failure on `"Matrix homeserver location:"` not being in the output.
 
@@ -481,22 +481,22 @@ In `test/wizard_test.rb`, find `def test_wizard_there_branch_decodes_blob_and_wr
 
 - [ ] **Step 7: Run the relevant tests and verify they pass**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=/wizard/'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=/wizard/'`
 
 Expected: all wizard tests pass.
 
 - [ ] **Step 8: Run the full suite to confirm no regressions**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test`
+Run: `cd ~/projects/dev-boxer && rake test`
 
 Expected: all tests pass.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-cd /home/danbarker/projects/dev-boxer
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" commit -m "Preface Matrix prompts with prose explanations
+cd ~/projects/dev-boxer
+git -c user.name="Dan Barker" -c user.email="you@example.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
+git -c user.name="Dan Barker" -c user.email="you@example.com" commit -m "Preface Matrix prompts with prose explanations
 
 The Matrix here/there choice, the matrix username prompt, and the
 add-bot blob paste now each get a short prose paragraph in the same
@@ -534,7 +534,7 @@ Replace it with:
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 failure — `"Claude experience level:"` is not in the output (current code emits `"Claude behavior:"`).
 
@@ -590,22 +590,22 @@ Replace it with:
 
 - [ ] **Step 5: Run the test and verify it passes**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
+Run: `cd ~/projects/dev-boxer && rake test TESTOPTS='--name=test_wizard_writes_config_and_secrets'`
 
 Expected: 1 run, all assertions pass.
 
 - [ ] **Step 6: Run the full suite to confirm no regressions**
 
-Run: `cd /home/danbarker/projects/dev-boxer && rake test`
+Run: `cd ~/projects/dev-boxer && rake test`
 
 Expected: all tests pass.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/danbarker/projects/dev-boxer
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
-git -c user.name="Dan Barker" -c user.email="dan@yearbook.com" commit -m "Move Claude-behavior summary into explain_claude_experience_level
+cd ~/projects/dev-boxer
+git -c user.name="Dan Barker" -c user.email="you@example.com" add lib/dev_boxer/wizard.rb test/wizard_test.rb
+git -c user.name="Dan Barker" -c user.email="you@example.com" commit -m "Move Claude-behavior summary into explain_claude_experience_level
 
 The inline labelled summary in build_claude_config becomes a proper
 explain_* method written as prose, matching the rest of the wizard.
@@ -624,7 +624,7 @@ level:' to match the section header more directly."
 Run a one-off Ruby snippet that reproduces the test fixture's stdin and prints the wizard's full rendered output to your terminal so you can read it like a user would:
 
 ```bash
-cd /home/danbarker/projects/dev-boxer && ruby -e '
+cd ~/projects/dev-boxer && ruby -e '
 require_relative "lib/dev_boxer/wizard"
 require_relative "lib/dev_boxer/config"
 require_relative "lib/dev_boxer/credentials_blob"
@@ -657,7 +657,7 @@ Read the rendered output top-to-bottom. Confirm: every prompt has a paragraph pr
 
 - [ ] **Step 2: Search the wizard source for any remaining labelled-bullet output**
 
-Run: `cd /home/danbarker/projects/dev-boxer && grep -nE "puts \"  (What|Why|How|Tip|Cost|Link|Scope|Alternative|Manual option|Login|Access|Tunnel|Cleanup): " lib/dev_boxer/wizard.rb`
+Run: `cd ~/projects/dev-boxer && grep -nE "puts \"  (What|Why|How|Tip|Cost|Link|Scope|Alternative|Manual option|Login|Access|Tunnel|Cleanup): " lib/dev_boxer/wizard.rb`
 
 Expected: no matches. (If anything matches, that's a labelled bullet I missed — rewrite it as prose in a follow-up commit before opening the PR.)
 
@@ -666,7 +666,7 @@ Expected: no matches. (If anything matches, that's a labelled bullet I missed �
 Confirm with Dan that he's ready to push before running this.
 
 ```bash
-cd /home/danbarker/projects/dev-boxer
+cd ~/projects/dev-boxer
 git push -u origin feat/wizard-prose-explanations
 gh pr create --base main --head feat/wizard-prose-explanations \
   --title "Give every wizard prompt a short prose explanation" \

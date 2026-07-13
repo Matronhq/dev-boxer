@@ -10,6 +10,8 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 | [Matron Web](https://github.com/matronhq/matron-web) | Web client |
 | [Matron iOS](https://github.com/matronhq/matron-ios) | iOS client |
 | [Matron Server](https://github.com/matronhq/matron-server) | Matrix homeserver |
+| [matron-journal](https://github.com/Matronhq/matron-journal) | Sync server |
+| [claude-matrix-bridge](https://github.com/Matronhq/claude-matrix-bridge) | Runs Claude Code sessions and bridges them |
 | **Dev Boxer** | One-command dev environment setup (this repo) |
 
 ## What you get
@@ -35,32 +37,13 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 
 ## Quick start
 
-### Public repos (default)
-
 Run this on the VPS as root, or from a sudo-capable account:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh | sudo bash
 ```
 
-### Private repos (Matronhq today)
-
-While the Dev Boxer and bridge repos are private, the public installer URL is unauthenticated and will 404. Use `bootstrap-vps.sh` from this repo instead — it installs `gh`, walks you through `gh auth login`, then clones and hands off to the same installer.
-
-Copy `bootstrap-vps.sh` from your laptop's checkout to a fresh VPS root shell (paste the file contents into a heredoc, or `scp` it across), then either:
-
-```bash
-# Interactive: walks through gh's web/device-code flow
-sudo bash bootstrap-vps.sh
-```
-
-or, fully unattended once you've created a fine-grained PAT (the same one the wizard stores in `secrets.yml`):
-
-```bash
-GH_TOKEN=ghp_xxx sudo -E bash bootstrap-vps.sh
-```
-
-The bootstrap is idempotent — re-running it just confirms gh is still authenticated and `git pull`s the existing checkout.
+> **Private forks:** if you fork this repo and keep your fork private, the raw installer URL above won't work unauthenticated. Use `bootstrap-vps.sh` from your fork instead — it installs `gh`, authenticates (interactively via `sudo bash bootstrap-vps.sh`, or unattended with `GH_TOKEN=... sudo -E bash bootstrap-vps.sh`), then clones and hands off to the same installer. It's idempotent to re-run.
 
 ### What happens next
 

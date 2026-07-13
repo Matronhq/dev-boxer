@@ -95,9 +95,9 @@ module DevBoxer
           decoded = ask_blob_until_valid
           bot_localpart = decoded["bot_user_id"].split(":", 2).first.delete_prefix("@")
           # Ask explicitly: the Matrix localpart on the external homeserver is
-          # often NOT the Linux username (e.g. juser on Matrix vs youruser
+          # often NOT the Linux username (e.g. juser on Matrix vs joeuser
           # in Linux). Falling back silently produced the wrong ALLOWED_USER_IDS
-          # in the bridge .env, which made box-2 silently drop every message.
+          # in the bridge .env, which made the second box silently drop every message.
           explain_external_matrix_username(decoded["server_domain"])
           name = ask(
             "Your Matrix username on #{decoded['server_domain']}",

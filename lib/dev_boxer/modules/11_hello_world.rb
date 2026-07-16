@@ -28,7 +28,6 @@ module DevBoxer
       private
 
       def username = config.user.name
-      def home_dir = "/home/#{username}"
       def hello_port = config.hello_world&.port || 9820
 
       def deploy_doc_root

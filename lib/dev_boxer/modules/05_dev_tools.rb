@@ -84,7 +84,7 @@ module DevBoxer
 
       # Configure `gh` + git's credential helper for the dev user using the PAT
       # the operator pasted into the wizard. This avoids the mid-setup pause in
-      # 08_matrix_bridge that would otherwise trigger an interactive
+      # 08_matron that would otherwise trigger an interactive
       # `gh auth login --web` because the dev user has no GitHub credentials
       # of its own. With this configured, all subsequent `git clone` calls as
       # the dev user against private repos in the PAT's scope just work.

@@ -301,7 +301,7 @@ module DevBoxer
         bypass = access_bypass_destinations
         # "Needs create" must NOT flag the bypass app when there are no
         # destinations to put in it (operator's chosen state, not a TODO).
-        # Otherwise an install with bypass_hostnames: [] and no matrix
+        # Otherwise an install with bypass_hostnames: [] and no journal
         # hostname can never settle — bypass_app_id stays empty forever,
         # which used to permanently flag needs_create and demand a token
         # the operator no longer has.
@@ -529,7 +529,7 @@ module DevBoxer
 
       # Tighten umask before File.write so the zone API token is never
       # briefly world-readable between create-time (default umask, 0o644)
-      # and File.chmod. Mirrors MatrixBridge#write_secret_file.
+      # and File.chmod.
       def write_user_file(path, content)
         old_umask = File.umask(0o077)
         begin

@@ -1,0 +1,51 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Re-enroll this box's bridge with its matron-journal server — use after a
+# token was revoked from the app or the journal moved. Skips the existing
+# token and re-runs enrollment (local mint in bundled mode, app pairing in
+# external mode), then restarts the bridge. Replaces the old bin/add-bot.
+
+require "optparse"
+
+ROOT = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift(File.join(ROOT, "lib"))
+require "dev_boxer"
+
+options = { config: File.join(ROOT, "config.yml") }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: bin/enroll [options]"
+  opts.on("--config PATH", "Path to config.yml (default: ./config.yml)") { |v| options[:config] = v }
+  opts.on("-h", "--help", "Show this help") { puts opts; exit 0 }
+end
+
+begin
+  parser.parse!
+rescue OptionParser::InvalidOption, OptionParser::MissingArgument => e
+  warn e.message
+  warn parser
+  exit 2
+end
+
+abort "bin/enroll must run as root (it writes /etc/matron and restarts the bridge)" unless Process.uid.zero?
+
+config_path = options[:config]
+abort "config.yml not found at #{config_path} — run setup.rb first" unless File.exist?(config_path)
+
+log = DevBoxer::Log.new
+enrollment = DevBoxer::JournalEnrollment.new(
+  config: DevBoxer::Config.load(config_path),
+  shell: DevBoxer::Shell.new,
+  log: log,
+  interactive: $stdin.tty?,
+)
+
+begin
+  path = enrollment.resolve!(force: true)
+rescue DevBoxer::JournalEnrollment::NotEnrolled => e
+  abort e.message
+end
+
+log.ok "Agent token written to #{path}"
+DevBoxer::Shell.new.systemctl(:restart, "matron-bridge")
+log.ok "matron-bridge restarted"

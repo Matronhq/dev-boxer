@@ -58,105 +58,16 @@ module DevBoxer
     def self.validation_errors(config)
       hash = config.respond_to?(:to_h) ? config.to_h : config
       errors = []
-
       errors << MATRIX_RETIRED if hash.key?("matrix")
-
-      %w[
-        user.name
-        user.ssh_public_key
-        user.rdp_password
-        ssh.port
-        hello_world.port
-      ].each do |path|
-        value = hash.dig(*path.split("."))
-        errors << "#{path} is required" if blank?(value)
-      end
-
-      validate_journal_block(errors, hash)
-      validate_exposure_block(errors, hash)
-
-      validate_port(errors, "ssh.port", hash.dig("ssh", "port"))
-      validate_port(errors, "hello_world.port", hash.dig("hello_world", "port"))
-      validate_username(errors, hash.dig("user", "name"))
-
+      wizard_sections.each { |section| section.validate(hash, errors) }
       errors
     end
 
-    # NOTE: validate_journal_block / validate_exposure_block move into the
-    # wizard sections (JournalSection.validate / ExposureSection.validate)
-    # when the wizard restructure lands — see the SP4 plan, Task 3.
-    def self.validate_journal_block(errors, hash)
-      mode = hash.dig("journal", "mode")
-      if blank?(mode)
-        errors << "journal.mode is required"
-      elsif !%w[bundled external].include?(mode)
-        errors << "journal.mode must be bundled or external"
-      end
-      return unless mode == "external"
-
-      url = hash.dig("journal", "url")
-      if blank?(url)
-        errors << "journal.url is required when journal.mode is external"
-      elsif !url.to_s.match?(%r{\Awss?://})
-        errors << "journal.url must be a ws:// or wss:// URL"
-      end
-    end
-
-    def self.validate_exposure_block(errors, hash)
-      mode = hash.dig("exposure", "mode")
-      if blank?(mode)
-        errors << "exposure.mode is required"
-      elsif !%w[cloudflare ip].include?(mode)
-        errors << "exposure.mode must be cloudflare or ip"
-      end
-      validate_exposure_cloudflare(errors, hash) if mode == "cloudflare"
-      validate_exposure_ip(errors, hash) if mode == "ip"
-    end
-
-    def self.validate_exposure_cloudflare(errors, hash)
-      cf = hash.dig("exposure", "cloudflare") || {}
-
-      errors << "exposure.cloudflare.zone_name is required" if blank?(cf["zone_name"])
-      errors << "exposure.cloudflare.tunnel.hostname is required" if blank?(cf.dig("tunnel", "hostname"))
-      errors << "exposure.cloudflare.tunnel.hostname_viewer is required" if blank?(cf.dig("tunnel", "hostname_viewer"))
-
-      if hash.dig("journal", "mode") != "external" && blank?(cf.dig("tunnel", "hostname_journal"))
-        errors << "exposure.cloudflare.tunnel.hostname_journal is required when the journal is bundled"
-      end
-
-      if blank?(cf["zone_api_token"]) && cf.dig("dns", "create_manually") != true
-        errors << "exposure.cloudflare.zone_api_token is required unless exposure.cloudflare.dns.create_manually is true"
-      end
-
-      if blank?(cf.dig("tunnel", "id")) && blank?(cf["api_token"]) &&
-          cf.dig("tunnel", "create_manually") != true
-        errors << "exposure.cloudflare.api_token is required until exposure.cloudflare.tunnel.id exists, unless exposure.cloudflare.tunnel.create_manually is true"
-      end
-
-      validate_exposure_access(errors, cf)
-    end
-
-    def self.validate_exposure_access(errors, cf)
-      access = cf["access"] || {}
-      return unless access["enabled"] == true
-
-      if blank?(access["app_id"]) && blank?(cf["api_token"])
-        errors << "exposure.cloudflare.api_token is required until exposure.cloudflare.access.app_id exists"
-      end
-
-      allowed_emails = Array(access["allowed_emails"]).reject { |value| blank?(value) }
-      allowed_domains = Array(access["allowed_email_domains"]).reject { |value| blank?(value) }
-      if allowed_emails.empty? && allowed_domains.empty?
-        errors << "exposure.cloudflare.access needs at least one allowed email or email domain"
-      end
-    end
-
-    def self.validate_exposure_ip(errors, hash)
-      ip = hash.dig("exposure", "ip") || {}
-      %w[journal_port viewer_port hello_port].each do |key|
-        value = ip[key]
-        validate_port(errors, "exposure.ip.#{key}", value) unless value.nil?
-      end
+    # Lazy so requiring config.rb alone (load order in dev_boxer.rb) does
+    # not pull the wizard in a cycle.
+    def self.wizard_sections
+      require "dev_boxer/wizard"
+      Wizard::SECTIONS
     end
 
     def self.validate!(config)

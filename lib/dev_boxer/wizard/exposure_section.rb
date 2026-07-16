@@ -26,7 +26,7 @@ module DevBoxer
         errors << "exposure.cloudflare.tunnel.hostname is required" if Config.blank?(cf.dig("tunnel", "hostname"))
         errors << "exposure.cloudflare.tunnel.hostname_viewer is required" if Config.blank?(cf.dig("tunnel", "hostname_viewer"))
 
-        if hash.dig("journal", "mode") != "external" && Config.blank?(cf.dig("tunnel", "hostname_journal"))
+        if hash.dig("journal", "mode") == "bundled" && Config.blank?(cf.dig("tunnel", "hostname_journal"))
           errors << "exposure.cloudflare.tunnel.hostname_journal is required when the journal is bundled"
         end
 

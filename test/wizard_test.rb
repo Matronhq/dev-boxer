@@ -133,6 +133,20 @@ class WizardTest < Minitest::Test
     end
   end
 
+  def test_invalid_journal_mode_does_not_trigger_hostname_journal_error
+    # Regression: when journal.mode is invalid ("banana"), we should get the
+    # journal mode error, but NOT the hostname_journal error. The hostname_journal
+    # requirement should only apply when journal.mode is exactly "bundled".
+    hash = complete_config.dup
+    hash["journal"]["mode"] = "banana"
+    hash["exposure"]["cloudflare"]["tunnel"].delete("hostname_journal")
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "journal.mode must be bundled or external"
+    refute_includes errors, "exposure.cloudflare.tunnel.hostname_journal is required when the journal is bundled"
+  end
+
   # The drift guard: every leaf the wizard writes must fall under some
   # section's owned_keys prefix, so a key can't be prompted for without
   # also being owned (and therefore validated) by its section.
@@ -157,6 +171,43 @@ class WizardTest < Minitest::Test
   end
 
   private
+
+  def complete_config
+    {
+      "user" => {
+        "name" => "alice",
+        "ssh_public_key" => "ssh-ed25519 AAAATEST alice@example.com",
+        "rdp_password" => "rdp-secret",
+      },
+      "ssh" => { "port" => 2223 },
+      "journal" => { "mode" => "bundled", "username" => "alice" },
+      "exposure" => {
+        "mode" => "cloudflare",
+        "cloudflare" => {
+          "zone_name" => "example.com",
+          "api_token" => "setup-token",
+          "zone_api_token" => "zone-token",
+          "tunnel" => {
+            "hostname" => "dev.example.com",
+            "hostname_journal" => "chat.example.com",
+            "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
+            "create_manually" => false,
+          },
+          "dns" => { "create_manually" => false },
+          "access" => {
+            "enabled" => true,
+            "app_name" => "Dev Boxer",
+            "bypass_app_name" => "Dev Boxer Public",
+            "session_duration" => "24h",
+            "allowed_emails" => ["alice@example.com"],
+          },
+        },
+      },
+      "hello_world" => { "port" => 9820 },
+      "claude" => { "experience_level" => "intermediate" },
+    }
+  end
 
   def leaf_paths(hash, prefix = [])
     hash.flat_map do |key, value|

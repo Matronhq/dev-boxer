@@ -44,7 +44,11 @@ module DevBoxer
 
       config, secrets = collect_all(existing)
       write_yaml(config_path, config, mode: 0o644)
-      write_yaml(secrets_path, secrets, mode: 0o600)
+      # Deep-merge secrets rather than replace: a reconfigure (force: true)
+      # must not drop module-owned secrets the wizard never collects, e.g.
+      # journal.user_password and bridge.hmac_secret (module 08). Collected
+      # values win on conflict. merge_into_file preserves the 0600 mode.
+      Config.merge_into_file(secrets_path, secrets)
 
       prompter.say
       prompter.say "Wrote #{config_path}"

@@ -47,7 +47,19 @@ module DevBoxer
             default: existing.dig("journal", "token_file"),
             required: false,
           )
-          [{ "journal" => { "mode" => "external", "url" => url, "token_file" => token_file }.compact }, {}]
+          # Carry forward keys the wizard doesn't prompt for but that config
+          # supports (config.example.yml) and probe_external_journal! relies on
+          # (module 08). Without this a reconfigure drops ca_file and the next
+          # run's TLS probe fails. External branch only — switching to bundled
+          # must not resurrect them.
+          journal = {
+            "mode" => "external",
+            "url" => url,
+            "token_file" => token_file,
+            "ca_file" => existing.dig("journal", "ca_file"),
+            "agent_name" => existing.dig("journal", "agent_name"),
+          }.compact
+          [{ "journal" => journal }, {}]
         end
       end
 

@@ -170,7 +170,95 @@ class WizardTest < Minitest::Test
     assert_equal prefixes.uniq.sort, prefixes.sort
   end
 
+  # Reconfigure (--reconfigure -> force: true) must not clobber secrets the
+  # modules own but the wizard never collects (journal.user_password from
+  # module 08, bridge.hmac_secret from module 08). A wizard-collected secret
+  # must still win on conflict.
+  def test_reconfigure_preserves_module_provisioned_secrets
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+
+      run_wizard(CLOUDFLARE_BUNDLED_ANSWERS, config_path: config_path)
+
+      # Simulate module-08 persistence of secrets the wizard never prompts for.
+      DevBoxer::Config.merge_into_file(secrets_path, {
+        "journal" => { "user_password" => "keep-me-login" },
+        "bridge" => { "hmac_secret" => "keep-me-hmac" },
+      })
+
+      answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
+      answers[8] = "rotated-zone-token" # zone DNS API token -> collected value
+      input = StringIO.new(answers.join("\n") + "\n")
+      output = StringIO.new
+      result = DevBoxer::Wizard.run(
+        config_path: config_path, input: input, output: output, force: true,
+      )
+
+      assert_equal :created, result
+      secrets = YAML.safe_load_file(secrets_path)
+      assert_equal "keep-me-login", secrets.dig("journal", "user_password")
+      assert_equal "keep-me-hmac", secrets.dig("bridge", "hmac_secret")
+      # Wizard-collected secret still overrides on conflict.
+      assert_equal "rotated-zone-token",
+        secrets.dig("exposure", "cloudflare", "zone_api_token")
+    end
+  end
+
+  def test_journal_section_external_reconfigure_preserves_ca_file_and_agent_name
+    existing = {
+      "journal" => {
+        "mode" => "external",
+        "url" => "wss://old.example.com/ws",
+        "ca_file" => "/etc/matron/journal-ca.pem",
+        "agent_name" => "team-box",
+      },
+    }
+    answers = [
+      "external",                   # journal location
+      "wss://chat.example.com/ws",  # journal URL
+      "",                           # token file (skip -> pair from app)
+    ]
+    fragment, _secrets = collect_journal(answers, existing)
+    journal = fragment["journal"]
+
+    assert_equal "external", journal["mode"]
+    assert_equal "wss://chat.example.com/ws", journal["url"]
+    assert_equal "/etc/matron/journal-ca.pem", journal["ca_file"]
+    assert_equal "team-box", journal["agent_name"]
+  end
+
+  def test_journal_section_bundled_does_not_resurrect_external_ca_file
+    existing = {
+      "journal" => {
+        "mode" => "external",
+        "url" => "wss://old.example.com/ws",
+        "ca_file" => "/etc/matron/journal-ca.pem",
+        "agent_name" => "team-box",
+      },
+    }
+    answers = [
+      "bundled",  # journal location (switch away from external)
+      "alice",    # journal username
+    ]
+    fragment, _secrets = collect_journal(answers, existing)
+    journal = fragment["journal"]
+
+    assert_equal "bundled", journal["mode"]
+    refute journal.key?("ca_file"), "ca_file must not survive a switch to bundled"
+    refute journal.key?("agent_name"), "agent_name must not survive a switch to bundled"
+  end
+
   private
+
+  def collect_journal(answers, existing, so_far = {})
+    prompter = DevBoxer::Wizard::Prompter.new(
+      input: StringIO.new(answers.join("\n") + "\n"),
+      output: StringIO.new,
+    )
+    DevBoxer::Wizard::JournalSection.new(prompter: prompter, existing: existing).collect(so_far)
+  end
+
 
   def complete_config
     {

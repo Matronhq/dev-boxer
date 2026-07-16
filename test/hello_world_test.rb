@@ -3,89 +3,50 @@ require "tmpdir"
 require_relative "../lib/dev_boxer/modules/11_hello_world"
 
 class HelloWorldTest < Minitest::Test
-  def test_matrix_login_instructions_are_matron_focused_and_inline
+  def test_matron_login_instructions_bundled_show_server_user_password
     Dir.mktmpdir do |dir|
       secrets_path = File.join(dir, "secrets.yml")
-      home = File.join(dir, "home")
-      FileUtils.mkdir_p(home)
-      File.write(secrets_path, {
-        "matrix" => {
-          "user_password" => "matrix-pass",
-        },
-      }.to_yaml)
-      File.write(File.join(home, "recovery-key.txt"), <<~KEY)
-        # Copy this key
-
-        recovery-key-value
-      KEY
+      File.write(secrets_path, { "journal" => { "username" => "dan", "user_password" => "journal-pass" } }.to_yaml)
       output = StringIO.new
-      mod = build_module(secrets_path: secrets_path, output: output)
+      mod = build_module(
+        secrets_path: secrets_path,
+        output: output,
+        config_hash: {
+          "user" => { "name" => "dev" },
+          "journal" => { "mode" => "bundled" },
+          "exposure" => { "mode" => "ip", "ip" => { "address" => "203.0.113.7" } },
+        },
+      )
 
-      mod.stub(:home_dir, home) do
-        mod.send(:print_matrix_login_instructions)
-      end
+      mod.send(:print_matron_login_instructions)
 
       summary = output.string
-      assert_includes summary, "Matrix bridge — first login"
-      assert_includes summary, "URL: https://matrix.example.com"
-      assert_includes summary, "User ID: @dev:matrix.example.com"
-      assert_includes summary, "Password: matrix-pass"
-      assert_includes summary, "Secure Backup recovery key: recovery-key-value"
-      refute_includes summary, "custom homeserver"
-      refute_includes summary, "recovery-key.txt"
+      assert_includes summary, "Matron — first login"
+      assert_includes summary, "wss://203.0.113.7:8443/ws"
+      assert_includes summary, "Username: dan"
+      assert_includes summary, "Password: journal-pass"
+      assert_includes summary, "bin/enroll"
+      refute_match(/matrix/i, summary)
     end
   end
 
-  def test_matrix_login_instructions_for_external_homeserver
+  def test_matron_login_instructions_external_point_at_existing_journal
     output = StringIO.new
     mod = build_module(
       output: output,
       config_hash: {
         "user" => { "name" => "dev" },
-        "matrix" => {
-          "mode" => "external",
-          "server_domain" => "matrix.example.com",
-          "user_username" => "youruser",
-          "homeserver_url" => "https://matrix.example.com",
-        },
-        # Cloudflare tunnel hostname for matrix exists for unrelated reasons
-        # (e.g. previously was bundled). External mode must NOT use it as the
-        # homeserver URL — the homeserver lives on a different box entirely.
-        "cloudflare" => {
-          "tunnel" => {
-            "hostname_matrix" => "matrix.other-example.org",
-          },
-        },
+        "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" },
+        "exposure" => { "mode" => "ip", "ip" => { "address" => "203.0.113.7" } },
       },
     )
 
-    mod.send(:print_matrix_login_instructions)
+    mod.send(:print_matron_login_instructions)
 
     summary = output.string
-    assert_includes summary, "Matrix bridge — first login"
-    assert_includes summary, "Open Element"
-    assert_includes summary, "Homeserver URL: https://matrix.example.com"
-    assert_includes summary, "User ID: @youruser:matrix.example.com"
-    assert_includes summary, "(use your existing matrix.example.com account password)"
-    assert_includes summary, "(use your existing recovery key)"
-    refute_includes summary, "matrix.other-example.org"
-    refute_includes summary, "missing from secrets.yml"
-    refute_includes summary, "recovery-key.txt"
-  end
-
-  def test_matrix_login_instructions_skip_disabled_matrix
-    output = StringIO.new
-    mod = build_module(
-      output: output,
-      config_hash: {
-        "user" => { "name" => "dev" },
-        "matrix" => { "mode" => "disabled" },
-      },
-    )
-
-    mod.send(:print_matrix_login_instructions)
-
-    assert_empty output.string
+    assert_includes summary, "wss://chat.example.com/ws"
+    assert_includes summary, "existing"
+    refute_includes summary, "Password:"
   end
 
   def test_default_port_is_9820_to_avoid_journal_collision
@@ -117,16 +78,6 @@ class HelloWorldTest < Minitest::Test
   def default_config
     {
       "user" => { "name" => "dev" },
-      "matrix" => {
-        "mode" => "bundled",
-        "server_domain" => "matrix.example.com",
-        "user_username" => "dev",
-      },
-      "cloudflare" => {
-        "tunnel" => {
-          "hostname_matrix" => "matrix.example.com",
-        },
-      },
     }
   end
 end

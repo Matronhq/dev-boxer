@@ -66,13 +66,5 @@ module DevBoxer
     def ok(msg)        = log.ok(msg)
     def skip(msg)      = log.skip(msg)
     def warn(msg)      = log.warn(msg)
-
-    def cloudflare_hello_hostname
-      configured = config.cloudflare&.tunnel&.hostname_hello
-      return configured unless configured.to_s.empty?
-
-      zone_name = config.cloudflare&.zone_name
-      zone_name.to_s.empty? ? nil : "hello.#{zone_name}"
-    end
   end
 end

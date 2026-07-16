@@ -70,7 +70,7 @@ class DesktopAppsTest < Minitest::Test
 
     mod.send(:print_summary)
 
-    assert_includes log_io.string, "Cloudflare Access: configured for browser tunnel URLs; Matrix is excluded."
+    assert_includes log_io.string, "Cloudflare Access protects: *.example.com"
     refute_includes log_io.string, "IMPORTANT: set up Cloudflare Access"
   end
 
@@ -134,7 +134,7 @@ class DesktopAppsTest < Minitest::Test
       "zone_name" => "example.com",
       "tunnel" => {
         "hostname" => "dev.example.com",
-        "hostname_matrix" => "matrix.example.com",
+        "hostname_journal" => "chat.example.com",
         "hostname_viewer" => "viewer.example.com",
         "hostname_hello" => "hello.example.com",
       },
@@ -145,7 +145,8 @@ class DesktopAppsTest < Minitest::Test
       "user" => { "name" => "dev" },
       "ssh" => { "port" => 2222 },
       "claude" => { "experience_level" => experience_level },
-      "cloudflare" => cloudflare,
+      "journal" => { "mode" => "bundled" },
+      "exposure" => { "mode" => "cloudflare", "cloudflare" => cloudflare },
     )
   end
 end

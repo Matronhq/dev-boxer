@@ -1,14 +1,14 @@
 [Unit]
-Description=Claude Matrix Bridge
+Description=Matron Bridge
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User={{USERNAME}}
-WorkingDirectory=/home/{{USERNAME}}/claude-matrix-bridge
-EnvironmentFile=/home/{{USERNAME}}/claude-matrix-bridge/.env
-ExecStart=/usr/bin/node /home/{{USERNAME}}/claude-matrix-bridge/index.js
+WorkingDirectory=/home/{{USERNAME}}/matron-bridge
+EnvironmentFile=/home/{{USERNAME}}/matron-bridge/.env
+ExecStart=/usr/bin/node /home/{{USERNAME}}/matron-bridge/index.js
 Restart=always
 RestartSec=5
 Environment=PATH=/home/{{USERNAME}}/.local/bin:/home/{{USERNAME}}/.claude/bin:/usr/local/bin:/usr/bin:/bin

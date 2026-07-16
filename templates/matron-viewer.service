@@ -1,0 +1,16 @@
+[Unit]
+Description=Matron Bridge File Viewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USERNAME}}
+WorkingDirectory=/home/{{USERNAME}}/matron-bridge
+EnvironmentFile=/home/{{USERNAME}}/matron-bridge/.env
+ExecStart=/usr/bin/node /home/{{USERNAME}}/matron-bridge/viewer/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

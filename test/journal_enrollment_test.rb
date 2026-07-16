@@ -128,6 +128,76 @@ class JournalEnrollmentTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  # Finding A: a force re-enroll must write the fresh token to the configured
+  # journal.token_file (the path module 08 pointed the bridge .env at), not the
+  # default /etc/matron/agent-token. Otherwise the bridge keeps reading the old
+  # revoked token.
+  def test_force_re_enroll_bundled_writes_to_configured_token_file
+    Dir.mktmpdir do |dir|
+      configured = File.join(dir, "provided-token")
+      File.write(configured, "stale\n")
+      respond_default(success: true, stdout: AGENT_ADD_OUTPUT)
+      enrollment = build_enrollment(
+        { "journal" => { "mode" => "bundled", "username" => "dan", "agent_name" => "dev-4", "token_file" => configured } },
+        dir: dir,
+      )
+
+      path = enrollment.resolve!(force: true)
+
+      assert_equal configured, path
+      assert_equal "tok_abc123\n", File.read(configured)
+      refute File.exist?(File.join(dir, "agent-token")),
+        "force mint must not write to the default token_path when journal.token_file is set"
+    end
+  end
+
+  def test_force_re_enroll_external_pairing_writes_to_configured_token_file
+    Dir.mktmpdir do |dir|
+      configured = File.join(dir, "provided-token")
+      File.write(configured, "stale\n")
+      responses = [
+        [200, { "pair_code" => "ABCD-EFGH", "poll_token" => "poll1", "expires_in" => 600 }],
+        [200, { "status" => "approved", "token" => "tok_paired", "device_id" => 7 }],
+      ]
+      http_post = lambda { |_url, _body| responses.shift }
+      enrollment = build_enrollment(
+        { "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws", "token_file" => configured } },
+        dir: dir, interactive: true, http_post: http_post,
+      )
+
+      path = enrollment.resolve!(force: true)
+
+      assert_equal configured, path
+      assert_equal "tok_paired\n", File.read(configured)
+      refute File.exist?(File.join(dir, "agent-token")),
+        "force pairing must not write to the default token_path when journal.token_file is set"
+    end
+  end
+
+  def test_force_without_token_file_writes_to_default_path
+    Dir.mktmpdir do |dir|
+      respond_default(success: true, stdout: AGENT_ADD_OUTPUT)
+      enrollment = build_enrollment({ "journal" => { "mode" => "bundled" } }, dir: dir)
+
+      path = enrollment.resolve!(force: true)
+
+      assert_equal File.join(dir, "agent-token"), path
+      assert_equal "tok_abc123\n", File.read(File.join(dir, "agent-token"))
+    end
+  end
+
+  # Finding C: pairing without journal.url must raise an actionable NotEnrolled
+  # error, not an opaque URI error from https_base.
+  def test_interactive_pairing_without_journal_url_raises_actionable_error
+    Dir.mktmpdir do |dir|
+      enrollment = build_enrollment({ "journal" => { "mode" => "external" } }, dir: dir, interactive: true)
+
+      error = assert_raises(DevBoxer::JournalEnrollment::NotEnrolled) { enrollment.resolve! }
+      assert_match(/journal\.url/, error.message)
+      assert_match(/config\.yml/, error.message)
+    end
+  end
+
   def test_https_base_conversion
     assert_equal "https://chat.example.com", DevBoxer::JournalEnrollment.https_base("wss://chat.example.com/ws")
     assert_equal "https://203.0.113.7:8443", DevBoxer::JournalEnrollment.https_base("wss://203.0.113.7:8443/ws")

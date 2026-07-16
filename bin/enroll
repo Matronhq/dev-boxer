@@ -33,8 +33,16 @@ config_path = options[:config]
 abort "config.yml not found at #{config_path} — run setup.rb first" unless File.exist?(config_path)
 
 log = DevBoxer::Log.new
+
+config = DevBoxer::Config.load(config_path)
+begin
+  DevBoxer::Config.validate!(config)
+rescue DevBoxer::Config::Invalid => e
+  abort e.message
+end
+
 enrollment = DevBoxer::JournalEnrollment.new(
-  config: DevBoxer::Config.load(config_path),
+  config: config,
   shell: DevBoxer::Shell.new,
   log: log,
   interactive: $stdin.tty?,

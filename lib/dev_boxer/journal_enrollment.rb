@@ -95,7 +95,17 @@ module DevBoxer
 
     private
 
-    attr_reader :config, :shell, :log, :interactive, :input, :token_path
+    attr_reader :config, :shell, :log, :interactive, :input
+
+    # The path the resolved token actually lives at. A configured
+    # journal.token_file wins over the injected/default token_path so a force
+    # re-enroll writes the fresh token to the exact path module 08 pointed the
+    # bridge .env (JOURNAL_TOKEN_FILE) at. Preserves the invariant:
+    # the path resolve! returns == where the token lives == what .env reads.
+    def token_path
+      configured = config.journal&.token_file
+      configured.to_s.empty? ? @token_path : configured
+    end
 
     def bundled? = (config.journal&.mode || "bundled") == "bundled"
 
@@ -114,7 +124,12 @@ module DevBoxer
     end
 
     def pair!
-      base = self.class.https_base(config.journal&.url)
+      url = config.journal&.url
+      if url.to_s.empty?
+        raise NotEnrolled, "journal.url is not set, so the app pairing flow can't reach the " \
+          "journal. Set journal.url in config.yml (or re-run setup.rb) and try again."
+      end
+      base = self.class.https_base(url)
       loop do
         code, body = @http_post.call("#{base}/pair/start", {})
         if code == 429

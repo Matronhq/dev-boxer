@@ -106,7 +106,7 @@ class CLITest < Minitest::Test
 
       refute status.success?, "expected nonzero exit for incomplete config"
       assert_match(/Config is incomplete/, err)
-      assert_match(/cloudflare\.enabled/, err)
+      assert_match(/exposure\.mode/, err)
     end
   end
 end

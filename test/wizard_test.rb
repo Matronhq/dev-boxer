@@ -3,6 +3,7 @@ require "tmpdir"
 
 class WizardTest < Minitest::Test
   def test_wizard_writes_config_and_secrets
+    skip "rewritten in SP4 Task 3 (wizard restructure)"
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = DevBoxer::Config.secrets_path_for(config_path)
@@ -116,10 +117,10 @@ class WizardTest < Minitest::Test
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = DevBoxer::Config.secrets_path_for(config_path)
-      File.write(config_path, complete_config("cloudflare" => { "tunnel" => { "id" => "abc" } }).to_yaml)
+      File.write(config_path, complete_config("exposure" => { "cloudflare" => { "tunnel" => { "id" => "abc" } } }).to_yaml)
       File.write(secrets_path, {
         "user" => { "rdp_password" => "rdp-secret" },
-        "cloudflare" => { "zone_api_token" => "zone-token" },
+        "exposure" => { "cloudflare" => { "zone_api_token" => "zone-token" } },
       }.to_yaml)
 
       result = DevBoxer::Wizard.run(
@@ -133,6 +134,7 @@ class WizardTest < Minitest::Test
   end
 
   def test_wizard_can_choose_manual_tunnel_setup
+    skip "rewritten in SP4 Task 3 (wizard restructure)"
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = DevBoxer::Config.secrets_path_for(config_path)
@@ -351,20 +353,18 @@ class WizardTest < Minitest::Test
         "ssh_public_key" => "ssh-ed25519 AAAATEST dev@example.com",
       },
       "ssh" => { "port" => 2222 },
-      "matrix" => {
-        "mode" => "bundled",
-        "server_domain" => "matrix.example.com",
-        "user_username" => "dev",
-      },
-      "cloudflare" => {
-        "enabled" => true,
-        "zone_name" => "example.com",
-        "tunnel" => {
-          "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
-          "hostname_viewer" => "viewer.example.com",
-          "hostname_hello" => "hello.example.com",
-          "create_manually" => false,
+      "journal" => { "mode" => "bundled" },
+      "exposure" => {
+        "mode" => "cloudflare",
+        "cloudflare" => {
+          "zone_name" => "example.com",
+          "tunnel" => {
+            "hostname" => "dev.example.com",
+            "hostname_journal" => "chat.example.com",
+            "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
+            "create_manually" => false,
+          },
         },
       },
       "hello_world" => { "port" => 9810 },

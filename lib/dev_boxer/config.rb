@@ -49,52 +49,114 @@ module DevBoxer
       merged
     end
 
+    MATRIX_RETIRED =
+      "config contains a retired `matrix:` section — Matrix support was removed in the " \
+      "journal-only migration (config schema v2). Replace it with `journal:` and `exposure:` " \
+      "sections; see README \"Upgrading from a Matrix-era install\" and " \
+      "docs/superpowers/specs/2026-07-16-sp4-dev-boxer-journal-only-design.md".freeze
+
     def self.validation_errors(config)
       hash = config.respond_to?(:to_h) ? config.to_h : config
       errors = []
 
-      require_present = lambda do |path|
-        value = hash.dig(*path.split("."))
-        errors << "#{path} is required" if blank?(value)
-      end
+      errors << MATRIX_RETIRED if hash.key?("matrix")
 
       %w[
         user.name
         user.ssh_public_key
         user.rdp_password
         ssh.port
-        matrix.mode
-        matrix.server_domain
-        matrix.user_username
-        cloudflare.zone_name
-        cloudflare.tunnel.hostname
-        cloudflare.tunnel.hostname_matrix
-        cloudflare.tunnel.hostname_viewer
         hello_world.port
-      ].each { |path| require_present.call(path) }
-
-      unless hash.dig("cloudflare", "enabled") == true
-        errors << "cloudflare.enabled must be true"
+      ].each do |path|
+        value = hash.dig(*path.split("."))
+        errors << "#{path} is required" if blank?(value)
       end
 
-      if blank?(hash.dig("cloudflare", "zone_api_token")) &&
-          hash.dig("cloudflare", "dns", "create_manually") != true
-        errors << "cloudflare.zone_api_token is required unless cloudflare.dns.create_manually is true"
-      end
-
-      if blank?(hash.dig("cloudflare", "tunnel", "id")) &&
-          blank?(hash.dig("cloudflare", "api_token")) &&
-          hash.dig("cloudflare", "tunnel", "create_manually") != true
-        errors << "cloudflare.api_token is required until cloudflare.tunnel.id exists, unless cloudflare.tunnel.create_manually is true"
-      end
-
-      validate_cloudflare_access(errors, hash)
+      validate_journal_block(errors, hash)
+      validate_exposure_block(errors, hash)
 
       validate_port(errors, "ssh.port", hash.dig("ssh", "port"))
       validate_port(errors, "hello_world.port", hash.dig("hello_world", "port"))
       validate_username(errors, hash.dig("user", "name"))
 
       errors
+    end
+
+    # NOTE: validate_journal_block / validate_exposure_block move into the
+    # wizard sections (JournalSection.validate / ExposureSection.validate)
+    # when the wizard restructure lands — see the SP4 plan, Task 3.
+    def self.validate_journal_block(errors, hash)
+      mode = hash.dig("journal", "mode")
+      if blank?(mode)
+        errors << "journal.mode is required"
+      elsif !%w[bundled external].include?(mode)
+        errors << "journal.mode must be bundled or external"
+      end
+      return unless mode == "external"
+
+      url = hash.dig("journal", "url")
+      if blank?(url)
+        errors << "journal.url is required when journal.mode is external"
+      elsif !url.to_s.match?(%r{\Awss?://})
+        errors << "journal.url must be a ws:// or wss:// URL"
+      end
+    end
+
+    def self.validate_exposure_block(errors, hash)
+      mode = hash.dig("exposure", "mode")
+      if blank?(mode)
+        errors << "exposure.mode is required"
+      elsif !%w[cloudflare ip].include?(mode)
+        errors << "exposure.mode must be cloudflare or ip"
+      end
+      validate_exposure_cloudflare(errors, hash) if mode == "cloudflare"
+      validate_exposure_ip(errors, hash) if mode == "ip"
+    end
+
+    def self.validate_exposure_cloudflare(errors, hash)
+      cf = hash.dig("exposure", "cloudflare") || {}
+
+      errors << "exposure.cloudflare.zone_name is required" if blank?(cf["zone_name"])
+      errors << "exposure.cloudflare.tunnel.hostname is required" if blank?(cf.dig("tunnel", "hostname"))
+      errors << "exposure.cloudflare.tunnel.hostname_viewer is required" if blank?(cf.dig("tunnel", "hostname_viewer"))
+
+      if hash.dig("journal", "mode") != "external" && blank?(cf.dig("tunnel", "hostname_journal"))
+        errors << "exposure.cloudflare.tunnel.hostname_journal is required when the journal is bundled"
+      end
+
+      if blank?(cf["zone_api_token"]) && cf.dig("dns", "create_manually") != true
+        errors << "exposure.cloudflare.zone_api_token is required unless exposure.cloudflare.dns.create_manually is true"
+      end
+
+      if blank?(cf.dig("tunnel", "id")) && blank?(cf["api_token"]) &&
+          cf.dig("tunnel", "create_manually") != true
+        errors << "exposure.cloudflare.api_token is required until exposure.cloudflare.tunnel.id exists, unless exposure.cloudflare.tunnel.create_manually is true"
+      end
+
+      validate_exposure_access(errors, cf)
+    end
+
+    def self.validate_exposure_access(errors, cf)
+      access = cf["access"] || {}
+      return unless access["enabled"] == true
+
+      if blank?(access["app_id"]) && blank?(cf["api_token"])
+        errors << "exposure.cloudflare.api_token is required until exposure.cloudflare.access.app_id exists"
+      end
+
+      allowed_emails = Array(access["allowed_emails"]).reject { |value| blank?(value) }
+      allowed_domains = Array(access["allowed_email_domains"]).reject { |value| blank?(value) }
+      if allowed_emails.empty? && allowed_domains.empty?
+        errors << "exposure.cloudflare.access needs at least one allowed email or email domain"
+      end
+    end
+
+    def self.validate_exposure_ip(errors, hash)
+      ip = hash.dig("exposure", "ip") || {}
+      %w[journal_port viewer_port hello_port].each do |key|
+        value = ip[key]
+        validate_port(errors, "exposure.ip.#{key}", value) unless value.nil?
+      end
     end
 
     def self.validate!(config)
@@ -151,19 +213,6 @@ module DevBoxer
       return if blank?(value)
       return if value.match?(/\A[a-z_][a-z0-9_-]*\z/)
       errors << "user.name must be a shell-safe Linux username"
-    end
-
-    def self.validate_cloudflare_access(errors, hash)
-      access = hash.dig("cloudflare", "access") || {}
-      return unless access["enabled"] == true
-
-      errors << "cloudflare.api_token is required until cloudflare.access.app_id exists" if blank?(access["app_id"]) && blank?(hash.dig("cloudflare", "api_token"))
-
-      allowed_emails = Array(access["allowed_emails"]).reject { |value| blank?(value) }
-      allowed_domains = Array(access["allowed_email_domains"]).reject { |value| blank?(value) }
-      if allowed_emails.empty? && allowed_domains.empty?
-        errors << "cloudflare.access needs at least one allowed email or email domain"
-      end
     end
 
     def self.default_mode_for(path)

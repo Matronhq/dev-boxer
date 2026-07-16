@@ -19,13 +19,14 @@ module DevBoxer
 
     attr_reader :config, :log, :shell, :templates_dir, :config_path, :secrets_path
 
-    def initialize(config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil)
+    def initialize(config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil, interactive: true)
       @config = config
       @log = log
       @shell = shell
       @templates_dir = templates_dir
       @config_path = config_path
       @secrets_path = secrets_path
+      @interactive = interactive
     end
 
     def module_name
@@ -41,6 +42,15 @@ module DevBoxer
     end
 
     private
+
+    def interactive? = @interactive
+
+    def exposure
+      @exposure ||= DevBoxer::Exposure.for(
+        config: config, shell: shell, log: log, templates_dir: templates_dir,
+        config_path: config_path, secrets_path: secrets_path, interactive: interactive?,
+      )
+    end
 
     def template_path(name)
       raise "templates_dir not set" unless templates_dir

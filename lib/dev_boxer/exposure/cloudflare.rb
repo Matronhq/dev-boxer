@@ -5,20 +5,13 @@ require "uri"
 require "yaml"
 
 module DevBoxer
-  module Modules
-    class Cloudflare < ModuleBase
-      module_name  "cloudflare"
-      module_order 9
+  module Exposure
+    class Cloudflare < Base
       API_BASE = "https://api.cloudflare.com/client/v4".freeze
       CREDENTIALS_PATH = "/etc/cloudflared/credentials.json".freeze
 
-      def run
+      def setup!
         section "Cloudflare Tunnel"
-
-        unless config.cloudflare&.enabled
-          skip "Cloudflare disabled in config"
-          return
-        end
 
         install_cloudflared
         create_tunnel
@@ -29,27 +22,57 @@ module DevBoxer
         write_user_credentials
         cleanup_setup_token
         ok "Cloudflare Tunnel setup complete"
-        print_hostnames
+      end
+
+      def journal_public_url
+        return config.journal&.url unless journal_bundled?
+        "wss://#{hostname_journal}/ws"
+      end
+
+      def viewer_base_url = "https://#{hostname_viewer}"
+      def hello_url = "https://#{hostname_hello}"
+
+      def summary_lines
+        lines = []
+        lines << "Main:    https://#{tunnel_hostname}" if tunnel_hostname
+        lines << "Journal (Matron apps): #{journal_public_url}" if journal_bundled? && hostname_journal
+        lines << "Viewer:  https://#{hostname_viewer}" if hostname_viewer
+        lines << "Hello:   https://#{hostname_hello}" if hostname_hello
+        if access_enabled?
+          lines << "Cloudflare Access protects: #{access_protected_destinations.join(', ')}"
+          bypass = access_bypass_destinations
+          lines << "Cloudflare Access bypasses: #{bypass.join(', ')}" unless bypass.empty?
+        else
+          lines << "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
+        end
+        lines
       end
 
       private
 
+      def cf = config.exposure&.cloudflare
       def username = config.user.name
       def home_dir = "/home/#{username}"
-      def setup_token = config.cloudflare&.api_token
-      def zone_token = config.cloudflare&.zone_api_token
-      def zone_name = config.cloudflare&.zone_name
-      def dns_managed_manually? = config.cloudflare&.dns&.create_manually == true
-      def tunnel_managed_manually? = config.cloudflare&.tunnel&.create_manually == true
-      def tunnel_id = config.cloudflare&.tunnel&.id
-      def tunnel_hostname = config.cloudflare&.tunnel&.hostname
-      def hostname_matrix = config.cloudflare&.tunnel&.hostname_matrix
-      def hostname_viewer = config.cloudflare&.tunnel&.hostname_viewer
-      def hostname_hello = cloudflare_hello_hostname
-      def config_managed_locally? = config.cloudflare&.tunnel&.config_managed_locally
-      def access_config = config.cloudflare&.access
+      def setup_token = cf&.api_token
+      def zone_token = cf&.zone_api_token
+      def zone_name = cf&.zone_name
+      def dns_managed_manually? = cf&.dns&.create_manually == true
+      def tunnel_managed_manually? = cf&.tunnel&.create_manually == true
+      def tunnel_id = cf&.tunnel&.id
+      def tunnel_hostname = cf&.tunnel&.hostname
+      def hostname_journal = cf&.tunnel&.hostname_journal
+      def hostname_viewer = cf&.tunnel&.hostname_viewer
+
+      def hostname_hello
+        configured = cf&.tunnel&.hostname_hello
+        return configured unless configured.to_s.empty?
+        zone_name.to_s.empty? ? nil : "hello.#{zone_name}"
+      end
+
+      def config_managed_locally? = cf&.tunnel&.config_managed_locally
+      def access_config = cf&.access
       def access_enabled? = access_config&.enabled == true
-      def cloudflare_account_id = config.cloudflare&.account_id || access_config&.account_id || (zone_token.to_s.empty? ? nil : cloudflare_zone_account_id)
+      def cloudflare_account_id = cf&.account_id || access_config&.account_id || (zone_token.to_s.empty? ? nil : cloudflare_zone_account_id)
       def access_account_id = cloudflare_account_id
       def access_app_id = access_config&.app_id
       def access_app_name = access_config&.app_name || "Dev Boxer"
@@ -115,7 +138,7 @@ module DevBoxer
 
       def create_tunnel_via_api(tunnel_name)
         account_id = cloudflare_account_id
-        raise "Cloudflare account ID could not be derived from zone #{zone_name.inspect}; set cloudflare.access.account_id" if account_id.to_s.empty?
+        raise "Cloudflare account ID could not be derived from zone #{zone_name.inspect}; set exposure.cloudflare.access.account_id" if account_id.to_s.empty?
 
         cloudflare_api(
           token: setup_token,
@@ -146,7 +169,7 @@ module DevBoxer
       def persist_tunnel_id(id)
         @current_tunnel_id = id
         return unless config_path && File.exist?(config_path)
-        Config.merge_into_file(config_path, { "cloudflare" => { "tunnel" => { "id" => id } } })
+        Config.merge_into_file(config_path, { "exposure" => { "cloudflare" => { "tunnel" => { "id" => id } } } })
       end
 
       def create_dns_routes
@@ -189,7 +212,9 @@ module DevBoxer
       # the cloudflared-config.yml template doesn't render `hostname: `
       # (literal empty value) — which is invalid YAML and breaks tunnel boot.
       def configured_hostnames
-        [tunnel_hostname, hostname_matrix, hostname_viewer, hostname_hello].compact.reject { |h| h.to_s.empty? }
+        hosts = [tunnel_hostname, hostname_viewer, hostname_hello]
+        hosts.insert(1, hostname_journal) if journal_bundled?
+        hosts.compact.reject { |h| h.to_s.empty? }
       end
 
       def cloudflare_zone_id
@@ -203,7 +228,7 @@ module DevBoxer
 
       def cloudflare_zone
         return @cloudflare_zone if @cloudflare_zone
-        raise "cloudflare.zone_name is required to create DNS routes" if zone_name.to_s.empty?
+        raise "exposure.cloudflare.zone_name is required to create DNS routes" if zone_name.to_s.empty?
 
         zones = cloudflare_api(
           token: zone_token,
@@ -255,7 +280,7 @@ module DevBoxer
         proxied = record.key?("proxied") ? record["proxied"] : "unknown"
         message = "Existing DNS record for #{hostname} points to #{current} (proxied: #{proxied}). Update it to #{target}?"
 
-        unless $stdin.tty?
+        unless interactive?
           raise "#{message} Re-run interactively to confirm, or choose manual DNS setup."
         end
 
@@ -288,8 +313,8 @@ module DevBoxer
           return
         end
 
-        raise "cloudflare.access.account_id is required when Access setup is enabled" if access_account_id.to_s.empty?
-        raise "cloudflare.api_token is required until cloudflare.access apps exist" if setup_token.to_s.empty?
+        raise "exposure.cloudflare.access.account_id is required when Access setup is enabled" if access_account_id.to_s.empty?
+        raise "exposure.cloudflare.api_token is required until exposure.cloudflare.access apps exist" if setup_token.to_s.empty?
 
         info "Configuring Cloudflare Access protected app for #{protected_destinations.join(", ")}"
         result = upsert_access_app(app_id: access_app_id, body: protected_access_app_payload)
@@ -327,7 +352,7 @@ module DevBoxer
         else
           configured = []
         end
-        [hostname_matrix, *configured].compact.reject { |h| h.to_s.empty? }.uniq
+        [(journal_bundled? ? hostname_journal : nil), *configured].compact.reject { |h| h.to_s.empty? }.uniq
       end
 
       def protected_access_app_payload
@@ -377,27 +402,27 @@ module DevBoxer
           next if domain.to_s.empty?
           rules << { "email_domain" => { "domain" => domain } }
         end
-        raise "At least one cloudflare.access allowed email or email domain is required" if rules.empty?
+        raise "At least one exposure.cloudflare.access allowed email or email domain is required" if rules.empty?
 
         rules
       end
 
       def persist_access_app_id(id)
         return unless config_path && File.exist?(config_path)
-        Config.merge_into_file(config_path, { "cloudflare" => { "access" => { "app_id" => id } } })
+        Config.merge_into_file(config_path, { "exposure" => { "cloudflare" => { "access" => { "app_id" => id } } } })
       end
 
       def persist_access_bypass_app_id(id)
         return unless config_path && File.exist?(config_path)
-        Config.merge_into_file(config_path, { "cloudflare" => { "access" => { "bypass_app_id" => id } } })
+        Config.merge_into_file(config_path, { "exposure" => { "cloudflare" => { "access" => { "bypass_app_id" => id } } } })
       end
 
       def prompt_for_manual_tunnel_setup
-        unless $stdin.tty?
+        unless interactive?
           if tunnel_managed_manually?
-            raise "cloudflare.tunnel.create_manually is true; run interactively for manual tunnel setup or set cloudflare.tunnel.id"
+            raise "exposure.cloudflare.tunnel.create_manually is true; run interactively for manual tunnel setup or set exposure.cloudflare.tunnel.id"
           end
-          raise "No cloudflare.tunnel.id and no one-time cloudflare.api_token; run interactively for manual tunnel setup"
+          raise "No exposure.cloudflare.tunnel.id and no one-time exposure.cloudflare.api_token; run interactively for manual tunnel setup"
         end
 
         tunnel_name = "dev-boxer-#{shell.sh!('hostname -s').strip}"
@@ -460,11 +485,11 @@ module DevBoxer
       # would break the tunnel on startup.
       def render_ingress
         rules = []
-        if !hostname_matrix.to_s.empty?
-          rules << "  - hostname: #{hostname_matrix}\n    service: http://localhost:6167"
+        if journal_bundled? && !hostname_journal.to_s.empty?
+          rules << "  - hostname: #{hostname_journal}\n    service: http://localhost:9810"
         end
         if !hostname_viewer.to_s.empty?
-          rules << "  - hostname: #{hostname_viewer}\n    service: http://localhost:9801"
+          rules << "  - hostname: #{hostname_viewer}\n    service: http://localhost:9803"
         end
         if !hostname_hello.to_s.empty?
           rules << "  - hostname: #{hostname_hello}\n    service: http://localhost:#{hello_world_port}"
@@ -475,8 +500,6 @@ module DevBoxer
         rules << "  - service: http_status:404"
         rules.join("\n")
       end
-
-      def hello_world_port = config.hello_world&.port || 9820
 
       def install_systemd_unit
         FileUtils.cp(template_path("cloudflared-tunnel.service"), "/etc/systemd/system/cloudflared-tunnel.service")
@@ -535,7 +558,7 @@ module DevBoxer
       def clear_setup_token(path)
         return false unless File.exist?(path)
         data = YAML.safe_load_file(path) || {}
-        cf = data["cloudflare"]
+        cf = data.dig("exposure", "cloudflare")
         return false unless cf && cf["api_token"] && !cf["api_token"].to_s.empty?
         cf.delete("api_token")
         write_yaml_preserving_mode(path, data)
@@ -582,20 +605,6 @@ module DevBoxer
           File.umask(old_umask) if old_umask
         end
         File.chmod(mode, path)
-      end
-
-      def print_hostnames
-        info "Main:    https://#{tunnel_hostname}"        if tunnel_hostname
-        info "Matrix:  https://#{hostname_matrix}"        if hostname_matrix
-        info "Viewer:  https://#{hostname_viewer}"        if hostname_viewer
-        info "Hello:   https://#{hostname_hello}"         if hostname_hello
-        if access_enabled?
-          info "Cloudflare Access protects: #{access_protected_destinations.join(", ")}"
-          bypass = access_bypass_destinations
-          info "Cloudflare Access bypasses: #{bypass.join(", ")}" unless bypass.empty?
-        else
-          info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
-        end
       end
     end
   end

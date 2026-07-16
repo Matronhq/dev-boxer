@@ -15,7 +15,7 @@ module DevBoxer
       def run
         section "Hello world smoke-test service"
 
-        port = config.hello_world&.port || 9810
+        port = hello_port
         deploy_doc_root
         deploy_unit(port)
         shell.sh!("systemctl daemon-reload")
@@ -29,6 +29,7 @@ module DevBoxer
 
       def username = config.user.name
       def home_dir = "/home/#{username}"
+      def hello_port = config.hello_world&.port || 9820
 
       def deploy_doc_root
         FileUtils.mkdir_p(DOC_ROOT)

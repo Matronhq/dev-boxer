@@ -11,14 +11,12 @@ desktop:
   enabled: false          # optional; run ~/setup-desktop after setup if you want XFCE/XRDP
 
 docker:
-  # Optional: relocate Docker + containerd storage to a separate volume
-  # (e.g. a big data disk or an encrypted /secure mount). Leave nil for the
-  # system default under /var/lib/{docker,containerd}.
+  # Optional: relocate Docker + containerd storage to a separate volume.
   data_root: null         # e.g. "/secure/docker"
-  containerd_root: null   # e.g. "/secure/containerd" (auto-derived from data_root if nil)
+  containerd_root: null   # auto-derived from data_root if nil
   prune:
-    interval: 2h          # how often docker-prune.timer fires
-    keep_until: 4h        # untag images / build cache older than this
+    interval: 2h
+    keep_until: 4h
 
 claude:
   experience_level: intermediate  # beginner | intermediate | advanced
@@ -27,68 +25,60 @@ claude:
     - context7
     - serena
 
-matrix:
-  mode: bundled            # bundled | external | disabled
-  server_domain: matrix.example.com   # the matrix server name
-  user_username: dev        # local part of your matrix user (default: linux user.name)
-  bot_username: null        # default: claude-bot-<hostname>; override here if you want
-  # All secrets generated during onboarding (bot_access_token, bot_password,
-  # user_password, bridge_room_id, hmac_secret) are written to ./secrets.yml
-  # — gitignored, mode 0600 — NOT here. The recovery key is written to
-  # ~/recovery-key.txt with a "delete after copying" header.
+# Where the matron-journal server lives. The journal is the sync service the
+# Matron apps (iOS/desktop/web) talk to; the bridge on this box publishes
+# Claude's output into it.
+journal:
+  mode: bundled            # bundled (install it here) | external (use an existing one)
+  url: null                # external only: wss://chat.example.com/ws
+  token_file: null         # external only: path to a pre-provisioned agent token
+                           #   (mint on the journal host: matron-admin agent add <user> <name>)
+                           #   Leave null to pair from the Matron app during setup instead.
+  ca_file: null            # external only: pinned cert when that journal is self-signed
+  agent_name: null         # how this box appears in the app; default: hostname -s
+  username: null           # bundled only: journal user to create; default: user.name
+  # Bundled mode writes journal.username + journal.user_password to
+  # ./secrets.yml (gitignored, mode 0600) — that password is your Matron
+  # app login. The agent token lives in /etc/matron/agent-token, not here.
 
-  # When mode == external and you used `dev-boxer add-bot` on another
-  # box, the wizard places the imported bot creds here. The bridge's
-  # first-start bootstrap consumes them, then writes back bot_access_token.
-  # bot_user_id:      "@box4:matrix.example.com"
-  # bot_password:     "..."
-  # bot_recovery_key: "..."
-  # bridge_room_id:   "!abc:matrix.example.com"
-
-  # On a homeserver-host box, `dev-boxer add-bot <name>` records each
-  # issued bot here so `--reprint` can regenerate the blob without
-  # touching the homeserver. No bot_access_token is stored — the receiving
-  # box mints its own.
-  # bots:
-  #   box4:
-  #     bot_user_id:      "@box4:matrix.example.com"
-  #     bot_password:     "..."
-  #     bot_recovery_key: "..."
-  #     bridge_room_id:   "!abc:matrix.example.com"
-  #     created_at:       2026-05-02T12:34:56Z
+# How this box is reached from the internet.
+exposure:
+  mode: cloudflare         # cloudflare (own domain, trusted cert)
+                           # | ip (no domain; self-signed cert apps must accept)
+  ip:
+    address: null          # default: auto-detected from `hostname -I`
+    journal_port: 8443     # wss://<ip>:8443/ws (bundled journal only)
+    viewer_port: 8444      # https://<ip>:8444 file viewer
+    hello_port: 8445       # https://<ip>:8445 smoke test
+  cloudflare:
+    zone_name: example.com
+    # zone_api_token is written to secrets.yml by the first-run wizard.
+    # Optional api_token is used once for tunnel + Access setup, then wiped.
+    dns:
+      create_manually: false
+    tunnel:
+      hostname: dev.example.com
+      hostname_journal: chat.example.com   # omitted when journal.mode is external
+      hostname_viewer: viewer.example.com
+      hostname_hello: hello.example.com
+      create_manually: false
+      config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml
+    access:
+      enabled: true
+      account_id: null              # optional override; otherwise derived from zone_name
+      app_id: null                  # persisted after the protected Access app is created
+      app_name: Dev Boxer
+      # Two Access apps: "Dev Boxer" protects *.<zone_name> (allow policy);
+      # "Dev Boxer Public" bypasses the journal + bypass_hostnames (bypass
+      # policy) so Matron apps and public-* subdomains skip the login wall.
+      bypass_app_id: null
+      bypass_app_name: Dev Boxer Public
+      bypass_hostnames:
+        - public-*.example.com
+      session_duration: 24h
+      allowed_emails: []
+      allowed_email_domains:
+        - example.com
 
 hello_world:
-  port: 9810             # deploys a localhost:port "hello world" smoke-test service
-
-cloudflare:
-  enabled: true
-  zone_name: example.com
-  # zone_api_token is written to secrets.yml by the first-run wizard.
-  # Optional api_token is used once for tunnel + Access setup, then wiped.
-  dns:
-    create_manually: false
-  tunnel:
-    hostname: dev.example.com
-    hostname_matrix: matrix.example.com
-    hostname_viewer: viewer.example.com
-    hostname_hello: hello.example.com
-    create_manually: false
-    config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml
-  access:
-    enabled: true
-    account_id: null              # optional override; otherwise derived from zone_name
-    app_id: null                  # persisted after the protected Access app is created
-    app_name: Dev Boxer
-    # Dev Boxer manages two Cloudflare Access apps:
-    #   "Dev Boxer"        protects *.<zone_name>            (allow policy)
-    #   "Dev Boxer Public" bypasses matrix + bypass_hostnames (bypass policy)
-    # Cloudflare matches more-specific destinations first, so requests to
-    # matrix.* and public-* hit the bypass app and skip the login wall.
-    bypass_app_id: null           # persisted after the bypass Access app is created
-    bypass_app_name: Dev Boxer Public
-    bypass_hostnames:             # extra destinations to bypass; matrix is added automatically
-      - public-*.example.com      # any project subdomain prefixed `public-` is public
-    session_duration: 24h
-    allowed_emails: []
-    allowed_email_domains:
-      - example.com
+  port: 9820             # local "hello world" smoke-test service (9810 belongs to the journal)

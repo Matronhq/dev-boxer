@@ -88,6 +88,21 @@ class HelloWorldTest < Minitest::Test
     assert_empty output.string
   end
 
+  def test_default_port_is_9820_to_avoid_journal_collision
+    mod = build_module(output: StringIO.new)
+
+    assert_equal 9820, mod.send(:hello_port)
+  end
+
+  def test_configured_port_overrides_default
+    mod = build_module(output: StringIO.new, config_hash: {
+      "user" => { "name" => "dev" },
+      "hello_world" => { "port" => 12345 },
+    })
+
+    assert_equal 12345, mod.send(:hello_port)
+  end
+
   private
 
   def build_module(output:, secrets_path: nil, config_hash: default_config)

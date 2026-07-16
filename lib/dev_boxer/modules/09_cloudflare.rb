@@ -476,7 +476,7 @@ module DevBoxer
         rules.join("\n")
       end
 
-      def hello_world_port = config.hello_world&.port || 9810
+      def hello_world_port = config.hello_world&.port || 9820
 
       def install_systemd_unit
         FileUtils.cp(template_path("cloudflared-tunnel.service"), "/etc/systemd/system/cloudflared-tunnel.service")

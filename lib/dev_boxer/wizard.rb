@@ -9,7 +9,7 @@ module DevBoxer
   class Wizard
     DEFAULT_USERNAME = "dev".freeze
     DEFAULT_SSH_PORT = 2222
-    DEFAULT_HELLO_WORLD_PORT = 9810
+    DEFAULT_HELLO_WORLD_PORT = 9820
     DEFAULT_EXPERIENCE_LEVEL = "intermediate".freeze
     EXPERIENCE_LEVELS = %w[beginner intermediate advanced].freeze
 

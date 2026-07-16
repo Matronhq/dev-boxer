@@ -6,12 +6,12 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment with 
 
 | Project | Description |
 |---------|-------------|
-| [Matron Desktop](https://github.com/matronhq/matron-desktop) | Desktop client |
-| [Matron Web](https://github.com/matronhq/matron-web) | Web client |
-| [Matron iOS](https://github.com/matronhq/matron-ios) | iOS client |
-| [Matron Server](https://github.com/matronhq/matron-server) | Matrix homeserver |
-| [matron-journal](https://github.com/Matronhq/matron-journal) | Sync server |
-| [claude-matrix-bridge](https://github.com/Matronhq/claude-matrix-bridge) | Runs Claude Code sessions and bridges them |
+| [matron-apple](https://github.com/Matronhq/matron-apple) | Native iPhone and Mac apps |
+| [matron-desktop](https://github.com/Matronhq/matron-desktop) | Desktop client for Windows and Linux |
+| [matron-web](https://github.com/Matronhq/matron-web) | Browser client |
+| [matron-journal](https://github.com/Matronhq/matron-journal) | Sync server for the Matron apps |
+| [matron-bridge](https://github.com/Matronhq/matron-bridge) | Runs Claude Code / Codex sessions and connects them to the journal |
+| [matron-server](https://github.com/Matronhq/matron-server) | Bundled Matrix homeserver |
 | **Dev Boxer** | One-command dev environment setup (this repo) |
 
 ## What you get
@@ -126,7 +126,7 @@ Setup runs 11 idempotent modules in order:
 | 05 | `dev-tools`    | Node.js 22, Git, Python, uv, GitHub CLI |
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
-| 08 | `matrix-bridge`| Matron Server + claude-matrix-bridge |
+| 08 | `matrix-bridge`| Matron Server + matron-bridge |
 | 09 | `cloudflare`   | Cloudflare Tunnel, DNS routes, zone token deploy |
 | 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |
 | 11 | `hello-world`  | `localhost:9810` tunnel smoke-test service |
@@ -139,13 +139,13 @@ sudo ./setup.rb --from matrix-bridge
 sudo ./setup.rb --skip desktop --dry-run
 ```
 
-## Multiple boxes, one Element session
+## Multiple boxes, one Matrix session
 
 If you already have one Dev Boxer running and want to bring up another
-box that uses the same Element identity, see [docs/adding-bots.md](docs/adding-bots.md).
+box that uses the same Matrix identity, see [docs/adding-bots.md](docs/adding-bots.md).
 The `dev-boxer add-bot <name>` command registers a new bot, has you
-sign it via SAS in Element, and prints a blob you paste into the new
-box's installer.
+sign it via SAS in your Matrix client, and prints a blob you paste into
+the new box's installer.
 
 ## Development
 
@@ -171,7 +171,7 @@ Connect your RDP client to `localhost:3389`.
 
 ### Matrix (chat with Claude)
 
-1. Open any Matrix client (Matron, Element, etc.)
+1. Open Matron — or any other Matrix client
 2. Sign in to your homeserver (e.g. `matrix.yourdomain.com` if using bundled mode)
 3. Find the bridge room (created during setup)
 4. `!start` to begin a Claude Code session

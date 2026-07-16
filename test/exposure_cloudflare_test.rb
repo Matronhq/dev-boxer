@@ -316,6 +316,28 @@ class ExposureCloudflareTest < Minitest::Test
     assert_equal ["*.example.com"], mod.send(:access_protected_destinations)
   end
 
+  def test_summary_lines_list_access_destinations_when_enabled
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config("access" => { "enabled" => true }),
+    )
+
+    summary = mod.summary_lines.join("\n")
+    assert_includes summary, "Cloudflare Access protects: *.example.com"
+    refute_includes summary, "IMPORTANT: set up Cloudflare Access"
+  end
+
+  def test_summary_lines_warn_when_access_disabled
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config("access" => { "enabled" => false }),
+    )
+
+    assert_includes mod.summary_lines.join("\n"), "IMPORTANT: set up Cloudflare Access"
+  end
+
   def test_access_bypass_destinations_defaults_to_journal_and_public_wildcard
     mod = build_cloudflare_module(
       config_path: "/tmp/config.yml",

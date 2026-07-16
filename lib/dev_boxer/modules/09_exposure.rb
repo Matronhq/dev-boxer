@@ -9,7 +9,9 @@ module DevBoxer
       def run
         section "Exposure"
         exposure.setup!
-        exposure.summary_lines.each { |line| info line }
+        # The full connection summary (URLs, Access, self-signed fingerprint)
+        # is printed once at the very end of the run by the hello-world module,
+        # the last to run. setup! already logs its own completion line here.
       end
     end
   end

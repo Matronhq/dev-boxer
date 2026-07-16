@@ -231,7 +231,7 @@ module DevBoxer
         # bypass_app_id is missing, even for installs that explicitly turned
         # bypass off — the module would correctly skip creation in that case
         # and the prompted token goes unused. Mirrors needs_bypass in
-        # Modules::Cloudflare#configure_cloudflare_access.
+        # Exposure::Cloudflare#configure_cloudflare_access.
         if access_config["bypass_app_id"].to_s.empty? &&
            !would_be_bypass_destinations(access_config, base_domain, journal_bundled: journal_bundled).empty?
           return true
@@ -240,7 +240,7 @@ module DevBoxer
         tunnel_needs_token
       end
 
-      # Mirrors Modules::Cloudflare#access_bypass_destinations using the data
+      # Mirrors Exposure::Cloudflare#access_bypass_destinations using the data
       # the wizard has at hand (base_domain becomes hostname_journal when the
       # wizard later writes exposure.cloudflare.tunnel.hostname_journal).
       def would_be_bypass_destinations(access_config, base_domain, journal_bundled:)

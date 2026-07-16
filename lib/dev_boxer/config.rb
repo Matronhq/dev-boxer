@@ -109,6 +109,11 @@ module DevBoxer
 
     private
 
+    # NOTE: `private` above does NOT apply to the `def self.` singleton methods
+    # below — they stay public and are called as Config.blank? / validate_port /
+    # validate_username / default_mode_for from the wizard sections. Do not
+    # "fix" this with private_class_method; that would break section validation.
+
     def self.blank?(value)
       value.nil? || (value.respond_to?(:empty?) && value.empty?)
     end

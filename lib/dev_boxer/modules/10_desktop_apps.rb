@@ -182,8 +182,8 @@ module DevBoxer
         else
           info "Desktop: optional; run ~/setup-desktop after SSH login"
         end
-        info ""
-        exposure.summary_lines.each { |line| info "  #{line}" }
+        # The exposure connection summary is printed once at the end of the run
+        # by the hello-world module (the last to run), not repeated here.
       end
 
       # Best-effort: take the first non-loopback IPv4/v6 from `hostname -I`.

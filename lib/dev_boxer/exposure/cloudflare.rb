@@ -163,9 +163,9 @@ module DevBoxer
       end
 
       # Use Config.merge_into_file rather than appending raw lines —
-      # appending a duplicate top-level `cloudflare:` key would silently
-      # destroy enabled / tunnel.hostname etc. on
-      # the next YAML.safe_load_file.
+      # appending a duplicate top-level `exposure:` key would silently
+      # destroy the rest of exposure.cloudflare (enabled / tunnel.hostname
+      # etc.) on the next YAML.safe_load_file.
       def persist_tunnel_id(id)
         @current_tunnel_id = id
         return unless config_path && File.exist?(config_path)

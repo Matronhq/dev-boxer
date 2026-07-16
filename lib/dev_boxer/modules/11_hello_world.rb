@@ -72,7 +72,13 @@ module DevBoxer
           info "  Username: #{secrets.dig('journal', 'username') || username}"
           info "  Password: #{secrets.dig('journal', 'user_password') || '(missing from secrets.yml)'}"
         end
-        exposure.summary_lines.each { |line| info line }
+        # Single end-of-run connection summary (modules 09/10 no longer repeat
+        # it). The journal URL was just printed above as "Server:", so skip
+        # summary_lines' duplicate "Journal (Matron apps):" entry.
+        exposure.summary_lines.each do |line|
+          next if line.start_with?("Journal (Matron apps):")
+          info line
+        end
         info ""
         info "If the agent token is ever revoked, re-enroll with: sudo bin/enroll"
       end

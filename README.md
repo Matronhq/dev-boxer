@@ -45,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh 
 
 ### What happens next
 
-The installer clones Dev Boxer to `/opt/dev-boxer`, prompts for the minimum required settings, writes `config.yml` and gitignored `secrets.yml`, then runs the full setup. Later `sudo ./setup.rb ...` reruns from that checkout automatically fast-forward before continuing; set `DEV_BOXER_SKIP_AUTO_UPDATE=1` to disable that.
+The installer clones Dev Boxer to `/opt/dev-boxer`, prompts for the minimum required settings, writes `config.yml` and gitignored `secrets.yml`, then runs the full setup. Later `sudo ./setup.rb ...` reruns from that checkout, which will automatically fast-forward before continuing; set `DEV_BOXER_SKIP_AUTO_UPDATE=1` to disable that.
 
 It asks for:
 
@@ -105,10 +105,10 @@ If a matching CNAME already exists and points somewhere else, Dev Boxer asks bef
 
 ### Cloudflare Access
 
-The wizard can optionally create a Cloudflare Zero Trust Access self-hosted application for the browser-facing hostnames:
+The wizard can optionally create two Cloudflare Zero Trust Access self-hosted applications:
 
-- Protected: `dev.<domain>`, `viewer.<domain>`, and `hello.<domain>`
-- Excluded: `chat.<domain>`, so Matron apps can reach the journal directly
+- Protected: the whole zone, `*.<domain>`. `dev`, `viewer`, `hello`, and any future subdomains you add under the zone are behind browser SSO by default.
+- Bypass (no login): `chat.<domain>`, so Matron apps can reach the journal directly, plus `public-*.<domain>`, so any subdomain you deliberately name `public-…` is served without the SSO wall.
 
 Automated Access setup derives the Cloudflare account from the zone and requires a one-time API token with `Access: Apps: Edit` and `Access: Policies: Edit`. Dev Boxer persists the resulting Access app ID and removes the setup token after a successful run.
 

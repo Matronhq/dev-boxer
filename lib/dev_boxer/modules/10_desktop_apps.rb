@@ -33,8 +33,16 @@ module DevBoxer
       def home_dir = "/home/#{username}"
       def ssh_port = config.ssh&.port || 2222
       def setup_path = File.expand_path("../../../setup.rb", __dir__)
-      def hostname_hello = cloudflare_hello_hostname
-      def access_enabled? = config.cloudflare&.access&.enabled == true
+
+      # CLAUDE.md documents the Cloudflare tunnel hostnames already in use so
+      # Claude Code doesn't collide with them when adding new local projects.
+      # Only meaningful in Cloudflare exposure mode; blank in IP mode.
+      def hostname_hello
+        configured = config.exposure&.cloudflare&.tunnel&.hostname_hello
+        return configured unless configured.to_s.empty?
+        zone_name = config.exposure&.cloudflare&.zone_name
+        zone_name.to_s.empty? ? nil : "hello.#{zone_name}"
+      end
 
       def install_lazydocker
         if shell.command_exists?("lazydocker")
@@ -97,11 +105,10 @@ module DevBoxer
         {
           "USERNAME"                => username,
           "SSH_PORT"                => ssh_port,
-          "CF_HOSTNAME_MAIN"        => config.cloudflare&.tunnel&.hostname,
-          "CF_HOSTNAME_MATRIX"      => config.cloudflare&.tunnel&.hostname_matrix,
-          "CF_HOSTNAME_VIEWER"      => config.cloudflare&.tunnel&.hostname_viewer,
+          "CF_HOSTNAME_MAIN"        => config.exposure&.cloudflare&.tunnel&.hostname,
+          "CF_HOSTNAME_VIEWER"      => config.exposure&.cloudflare&.tunnel&.hostname_viewer,
           "CF_HOSTNAME_HELLO"       => hostname_hello,
-          "CF_ZONE_NAME"            => config.cloudflare&.zone_name,
+          "CF_ZONE_NAME"            => config.exposure&.cloudflare&.zone_name,
           "USER_EXPERIENCE_GUIDANCE" => user_experience_guidance,
         }
       end
@@ -152,9 +159,9 @@ module DevBoxer
           ┌──────────────────────────────────────────────────────────────┐
           │  Dev Boxer — remote Claude Code dev environment              │
           ├──────────────────────────────────────────────────────────────┤
-          │  Logs:      journalctl -u claude-matrix-bridge -f            │
-          │  Restart:   sudo systemctl restart claude-matrix-bridge      │
-          │  Bridge:    cd ~/claude-matrix-bridge                        │
+          │  Logs:      journalctl -u matron-bridge -f                   │
+          │  Restart:   sudo systemctl restart matron-bridge             │
+          │  Bridge:    cd ~/matron-bridge                               │
           │  Desktop:   ~/setup-desktop                                  │
           │  Setup log: /var/log/dev-boxer-setup.log                     │
           └──────────────────────────────────────────────────────────────┘
@@ -175,20 +182,8 @@ module DevBoxer
         else
           info "Desktop: optional; run ~/setup-desktop after SSH login"
         end
-        info ""
-        if config.cloudflare&.tunnel&.hostname
-          info "Tunnel URLs:"
-          info "  Main:    https://#{config.cloudflare.tunnel.hostname}"
-          info "  Matrix:  https://#{config.cloudflare.tunnel.hostname_matrix}" if config.cloudflare.tunnel.hostname_matrix
-          info "  Viewer:  https://#{config.cloudflare.tunnel.hostname_viewer}" if config.cloudflare.tunnel.hostname_viewer
-          info "  Hello:   https://#{hostname_hello}" if hostname_hello
-          info ""
-        end
-        if access_enabled?
-          info "Cloudflare Access: configured for browser tunnel URLs; Matrix is excluded."
-        else
-          info "IMPORTANT: set up Cloudflare Access for zero-trust security. See docs/cloudflare-access.md."
-        end
+        # The exposure connection summary is printed once at the end of the run
+        # by the hello-world module (the last to run), not repeated here.
       end
 
       # Best-effort: take the first non-loopback IPv4/v6 from `hostname -I`.

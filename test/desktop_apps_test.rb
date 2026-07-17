@@ -64,25 +64,6 @@ class DesktopAppsTest < Minitest::Test
     refute(recorded.any? { |cmd| cmd.include?("code") })
   end
 
-  def test_print_summary_does_not_warn_when_cloudflare_access_is_enabled
-    log_io = StringIO.new
-    mod = build_module("intermediate", log_io: log_io, access_enabled: true)
-
-    mod.send(:print_summary)
-
-    assert_includes log_io.string, "Cloudflare Access: configured for browser tunnel URLs; Matrix is excluded."
-    refute_includes log_io.string, "IMPORTANT: set up Cloudflare Access"
-  end
-
-  def test_print_summary_warns_when_cloudflare_access_is_disabled
-    log_io = StringIO.new
-    mod = build_module("intermediate", log_io: log_io, access_enabled: false)
-
-    mod.send(:print_summary)
-
-    assert_includes log_io.string, "IMPORTANT: set up Cloudflare Access"
-  end
-
   def test_print_summary_uses_detected_ip_in_ssh_line
     log_io = StringIO.new
     shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
@@ -120,32 +101,32 @@ class DesktopAppsTest < Minitest::Test
 
   private
 
-  def build_module(experience_level, log_io: StringIO.new, access_enabled: nil)
+  def build_module(experience_level, log_io: StringIO.new)
     DevBoxer::Modules::DesktopApps.new(
-      config: config(experience_level, access_enabled: access_enabled),
+      config: config(experience_level),
       log: DevBoxer::Log.new(io: log_io, color: false),
       shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
       templates_dir: File.expand_path("../templates", __dir__),
     )
   end
 
-  def config(experience_level, access_enabled: nil)
+  def config(experience_level)
     cloudflare = {
       "zone_name" => "example.com",
       "tunnel" => {
         "hostname" => "dev.example.com",
-        "hostname_matrix" => "matrix.example.com",
+        "hostname_journal" => "chat.example.com",
         "hostname_viewer" => "viewer.example.com",
         "hostname_hello" => "hello.example.com",
       },
     }
-    cloudflare["access"] = { "enabled" => access_enabled } unless access_enabled.nil?
 
     DevBoxer::Config.from_hash(
       "user" => { "name" => "dev" },
       "ssh" => { "port" => 2222 },
       "claude" => { "experience_level" => experience_level },
-      "cloudflare" => cloudflare,
+      "journal" => { "mode" => "bundled" },
+      "exposure" => { "mode" => "cloudflare", "cloudflare" => cloudflare },
     )
   end
 end

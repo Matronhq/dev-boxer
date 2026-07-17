@@ -1,19 +1,18 @@
 require_relative "test_helper"
 require "fileutils"
 require "tmpdir"
-require_relative "../lib/dev_boxer/modules/09_cloudflare"
 
-class CloudflareModuleTest < Minitest::Test
+class ExposureCloudflareTest < Minitest::Test
   def test_persists_tunnel_id_to_active_config_path
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
-      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      File.write(config_path, { "exposure" => { "cloudflare" => {} } }.to_yaml)
 
       mod = build_cloudflare_module(config_path: config_path, secrets_path: secrets_path)
       mod.send(:persist_tunnel_id, "tunnel-123")
 
-      assert_equal "tunnel-123", YAML.safe_load_file(config_path).dig("cloudflare", "tunnel", "id")
+      assert_equal "tunnel-123", YAML.safe_load_file(config_path).dig("exposure", "cloudflare", "tunnel", "id")
     end
   end
 
@@ -21,14 +20,14 @@ class CloudflareModuleTest < Minitest::Test
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
-      File.write(config_path, { "cloudflare" => { "api_token" => "from-config" } }.to_yaml)
-      File.write(secrets_path, { "cloudflare" => { "api_token" => "from-secrets" } }.to_yaml)
+      File.write(config_path, { "exposure" => { "cloudflare" => { "api_token" => "from-config" } } }.to_yaml)
+      File.write(secrets_path, { "exposure" => { "cloudflare" => { "api_token" => "from-secrets" } } }.to_yaml)
 
       mod = build_cloudflare_module(config_path: config_path, secrets_path: secrets_path)
       mod.send(:cleanup_setup_token)
 
-      assert_nil YAML.safe_load_file(config_path).dig("cloudflare", "api_token")
-      assert_nil YAML.safe_load_file(secrets_path).dig("cloudflare", "api_token")
+      assert_nil YAML.safe_load_file(config_path).dig("exposure", "cloudflare", "api_token")
+      assert_nil YAML.safe_load_file(secrets_path).dig("exposure", "cloudflare", "api_token")
     end
   end
 
@@ -37,7 +36,7 @@ class CloudflareModuleTest < Minitest::Test
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
       credentials_path = File.join(dir, "cloudflared", "credentials.json")
-      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      File.write(config_path, { "exposure" => { "cloudflare" => {} } }.to_yaml)
       calls = []
       shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
         [true, cmd == "hostname -s" ? "dev-6\n" : "", ""]
@@ -53,7 +52,7 @@ class CloudflareModuleTest < Minitest::Test
           "tunnel" => {
             "id" => nil,
             "hostname" => "dev.example.com",
-            "hostname_matrix" => "matrix.example.com",
+            "hostname_journal" => "matrix.example.com",
             "hostname_viewer" => "viewer.example.com",
             "hostname_hello" => "hello.example.com",
           },
@@ -88,7 +87,7 @@ class CloudflareModuleTest < Minitest::Test
       assert_equal({ "name" => "dev-boxer-dev-6", "config_src" => "local" }, create_call[:body])
       assert_equal "tunnel-123", JSON.parse(File.read(credentials_path))["TunnelID"]
       assert_equal 0o600, File.stat(credentials_path).mode & 0o777
-      assert_equal "tunnel-123", YAML.safe_load_file(config_path).dig("cloudflare", "tunnel", "id")
+      assert_equal "tunnel-123", YAML.safe_load_file(config_path).dig("exposure", "cloudflare", "tunnel", "id")
     end
   end
 
@@ -99,10 +98,11 @@ class CloudflareModuleTest < Minitest::Test
       home = File.join(dir, "home")
       FileUtils.mkdir_p(home)
 
-      mod = DevBoxer::Modules::Cloudflare.new(
+      mod = DevBoxer::Exposure::Cloudflare.new(
         config: DevBoxer::Config.from_hash(
           "user" => { "name" => "dev" },
-          "cloudflare" => { "zone_api_token" => "zone-token" },
+          "journal" => { "mode" => "bundled" },
+          "exposure" => { "mode" => "cloudflare", "cloudflare" => { "zone_api_token" => "zone-token" } },
         ),
         log: DevBoxer::Log.new(io: StringIO.new, color: false),
         shell: DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
@@ -133,7 +133,7 @@ class CloudflareModuleTest < Minitest::Test
           "tunnel" => {
             "id" => "tunnel-123",
             "hostname" => "dev.example.com",
-            "hostname_matrix" => "matrix.example.com",
+            "hostname_journal" => "matrix.example.com",
             "hostname_viewer" => "viewer.example.com",
             "hostname_hello" => "hello.example.com",
           },
@@ -167,7 +167,7 @@ class CloudflareModuleTest < Minitest::Test
         "zone_name" => "example.com",
         "tunnel" => {
           "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
+          "hostname_journal" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
           "hostname_hello" => nil,
         },
@@ -191,7 +191,7 @@ class CloudflareModuleTest < Minitest::Test
         "tunnel" => {
           "id" => "tunnel-123",
           "hostname" => "dev.example.com",
-          "hostname_matrix" => nil,
+          "hostname_journal" => nil,
           "hostname_viewer" => nil,
         },
       ),
@@ -229,7 +229,7 @@ class CloudflareModuleTest < Minitest::Test
         "tunnel" => {
           "id" => "tunnel-123",
           "hostname" => "dev.example.com",
-          "hostname_matrix" => nil,
+          "hostname_journal" => nil,
           "hostname_viewer" => nil,
         },
       ),
@@ -269,14 +269,14 @@ class CloudflareModuleTest < Minitest::Test
 
   def test_manual_dns_prints_required_cname_records
     log_io = StringIO.new
-    mod = DevBoxer::Modules::Cloudflare.new(
+    mod = DevBoxer::Exposure::Cloudflare.new(
       config: DevBoxer::Config.from_hash(cloudflare_config(
         "zone_api_token" => nil,
         "dns" => { "create_manually" => true },
         "tunnel" => {
           "id" => "tunnel-123",
           "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
+          "hostname_journal" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
           "hostname_hello" => "hello.example.com",
         },
@@ -306,7 +306,7 @@ class CloudflareModuleTest < Minitest::Test
         "zone_name" => "example.com",
         "tunnel" => {
           "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
+          "hostname_journal" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
           "hostname_hello" => "hello.example.com",
         },
@@ -316,7 +316,29 @@ class CloudflareModuleTest < Minitest::Test
     assert_equal ["*.example.com"], mod.send(:access_protected_destinations)
   end
 
-  def test_access_bypass_destinations_defaults_to_matrix_and_public_wildcard
+  def test_summary_lines_list_access_destinations_when_enabled
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config("access" => { "enabled" => true }),
+    )
+
+    summary = mod.summary_lines.join("\n")
+    assert_includes summary, "Cloudflare Access protects: *.example.com"
+    refute_includes summary, "IMPORTANT: set up Cloudflare Access"
+  end
+
+  def test_summary_lines_warn_when_access_disabled
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config("access" => { "enabled" => false }),
+    )
+
+    assert_includes mod.summary_lines.join("\n"), "IMPORTANT: set up Cloudflare Access"
+  end
+
+  def test_access_bypass_destinations_defaults_to_journal_and_public_wildcard
     mod = build_cloudflare_module(
       config_path: "/tmp/config.yml",
       secrets_path: "/tmp/secrets.yml",
@@ -324,7 +346,7 @@ class CloudflareModuleTest < Minitest::Test
         "zone_name" => "example.com",
         "tunnel" => {
           "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
+          "hostname_journal" => "matrix.example.com",
         },
       ),
     )
@@ -338,7 +360,7 @@ class CloudflareModuleTest < Minitest::Test
       secrets_path: "/tmp/secrets.yml",
       config_hash: cloudflare_config(
         "zone_name" => "example.com",
-        "tunnel" => { "hostname_matrix" => "matrix.example.com" },
+        "tunnel" => { "hostname_journal" => "matrix.example.com" },
         "access" => {
           "bypass_hostnames" => ["status.example.com", "public-*.example.com"],
         },
@@ -349,13 +371,13 @@ class CloudflareModuleTest < Minitest::Test
                  mod.send(:access_bypass_destinations)
   end
 
-  def test_access_bypass_destinations_omits_matrix_when_unset
+  def test_access_bypass_destinations_omits_journal_when_unset
     mod = build_cloudflare_module(
       config_path: "/tmp/config.yml",
       secrets_path: "/tmp/secrets.yml",
       config_hash: cloudflare_config(
         "zone_name" => "example.com",
-        "tunnel" => { "hostname_matrix" => nil },
+        "tunnel" => { "hostname_journal" => nil },
       ),
     )
 
@@ -368,12 +390,12 @@ class CloudflareModuleTest < Minitest::Test
       secrets_path: "/tmp/secrets.yml",
       config_hash: cloudflare_config(
         "zone_name" => "example.com",
-        "tunnel" => { "hostname_matrix" => "matrix.example.com" },
+        "tunnel" => { "hostname_journal" => "matrix.example.com" },
         "access" => { "bypass_hostnames" => [] },
       ),
     )
 
-    # An explicit empty list means "no extras" — just matrix, no public-* default.
+    # An explicit empty list means "no extras" — just the journal hostname, no public-* default.
     assert_equal ["matrix.example.com"], mod.send(:access_bypass_destinations)
   end
 
@@ -411,7 +433,7 @@ class CloudflareModuleTest < Minitest::Test
       secrets_path: "/tmp/secrets.yml",
       config_hash: cloudflare_config(
         "zone_name" => "example.com",
-        "tunnel" => { "hostname_matrix" => "matrix.example.com" },
+        "tunnel" => { "hostname_journal" => "matrix.example.com" },
         "access" => {
           "enabled" => true,
           "account_id" => "account-123",
@@ -438,7 +460,7 @@ class CloudflareModuleTest < Minitest::Test
       config_hash: cloudflare_config(
         "tunnel" => {
           "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
+          "hostname_journal" => "matrix.example.com",
           "hostname_viewer" => "viewer.example.com",
           "hostname_hello" => "hello.example.com",
         },
@@ -451,11 +473,23 @@ class CloudflareModuleTest < Minitest::Test
     assert_includes ingress, "service: http://localhost:9822"
   end
 
+  def test_ingress_omits_journal_hostname_when_journal_external
+    mod = build_cloudflare_module(
+      config_path: "/tmp/config.yml",
+      secrets_path: "/tmp/secrets.yml",
+      config_hash: cloudflare_config.merge(
+        "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" },
+      ),
+    )
+
+    refute_includes mod.send(:render_ingress), "localhost:9810"
+  end
+
   def test_configure_access_updates_existing_apps_in_place
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
-      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      File.write(config_path, { "exposure" => { "cloudflare" => {} } }.to_yaml)
       calls = []
       mod = build_cloudflare_module(
         config_path: config_path,
@@ -491,7 +525,7 @@ class CloudflareModuleTest < Minitest::Test
 
   def test_configure_access_does_not_need_bypass_app_when_no_bypass_destinations_configured
     # Edge case: operator explicitly disabled the bypass app (bypass_hostnames: []
-    # AND no matrix hostname). The bypass app shouldn't be required and the
+    # AND no journal hostname). The bypass app shouldn't be required and the
     # absence of bypass_app_id mustn't force a permanent setup-token requirement.
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
@@ -506,7 +540,7 @@ class CloudflareModuleTest < Minitest::Test
           "tunnel" => {
             "id" => "tunnel-123",
             "hostname" => "dev.example.com",
-            "hostname_matrix" => nil,
+            "hostname_journal" => nil,
             "hostname_viewer" => "viewer.example.com",
             "hostname_hello" => "hello.example.com",
           },
@@ -565,7 +599,7 @@ class CloudflareModuleTest < Minitest::Test
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")
       secrets_path = File.join(dir, "secrets.yml")
-      File.write(config_path, { "cloudflare" => { "enabled" => true } }.to_yaml)
+      File.write(config_path, { "exposure" => { "cloudflare" => {} } }.to_yaml)
       calls = []
       mod = build_cloudflare_module(
         config_path: config_path,
@@ -603,7 +637,7 @@ class CloudflareModuleTest < Minitest::Test
       assert_equal "bypass", bypass_post[:body].dig("policies", 0, "decision")
       assert_equal [{ "everyone" => {} }], bypass_post[:body].dig("policies", 0, "include")
 
-      persisted = YAML.safe_load_file(config_path).dig("cloudflare", "access")
+      persisted = YAML.safe_load_file(config_path).dig("exposure", "cloudflare", "access")
       assert_equal "protected-app-123", persisted["app_id"]
       assert_equal "bypass-app-456", persisted["bypass_app_id"]
     end
@@ -653,17 +687,19 @@ class CloudflareModuleTest < Minitest::Test
     )
 
     error = assert_raises(RuntimeError) do
-      mod.send(:prompt_for_manual_tunnel_setup)
+      mod.stub(:interactive?, false) do
+        mod.send(:prompt_for_manual_tunnel_setup)
+      end
     end
 
-    assert_includes error.message, "cloudflare.tunnel.create_manually is true"
-    refute_includes error.message, "no one-time cloudflare.api_token"
+    assert_includes error.message, "exposure.cloudflare.tunnel.create_manually is true"
+    refute_includes error.message, "no one-time exposure.cloudflare.api_token"
   end
 
   private
 
-  def build_cloudflare_module(config_path:, secrets_path:, config_hash: { "cloudflare" => { "api_token" => "admin-token" } }, log_io: StringIO.new, shell: nil)
-    DevBoxer::Modules::Cloudflare.new(
+  def build_cloudflare_module(config_path:, secrets_path:, config_hash: default_config_hash, log_io: StringIO.new, shell: nil)
+    DevBoxer::Exposure::Cloudflare.new(
       config: DevBoxer::Config.from_hash(config_hash),
       log: DevBoxer::Log.new(io: log_io, color: false),
       shell: shell || DevBoxer::Shell.new(runner: ->(_cmd, _opts = {}) { [true, "", ""] }),
@@ -673,21 +709,30 @@ class CloudflareModuleTest < Minitest::Test
     )
   end
 
+  def default_config_hash
+    {
+      "journal" => { "mode" => "bundled" },
+      "exposure" => { "mode" => "cloudflare", "cloudflare" => { "api_token" => "admin-token" } },
+    }
+  end
+
   def cloudflare_config(overrides = {})
-    DevBoxer::Config.deep_merge({
-      "user" => { "name" => "dev" },
-      "cloudflare" => {
-        "zone_name" => "example.com",
-        "zone_api_token" => "zone-token",
-        "api_token" => "admin-token",
-        "tunnel" => {
-          "id" => "tunnel-123",
-          "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
-          "hostname_viewer" => "viewer.example.com",
-          "hostname_hello" => "hello.example.com",
-        },
+    cloudflare = DevBoxer::Config.deep_merge({
+      "zone_name" => "example.com",
+      "zone_api_token" => "zone-token",
+      "api_token" => "admin-token",
+      "tunnel" => {
+        "id" => "tunnel-123",
+        "hostname" => "dev.example.com",
+        "hostname_journal" => "matrix.example.com",
+        "hostname_viewer" => "viewer.example.com",
+        "hostname_hello" => "hello.example.com",
       },
-    }, { "cloudflare" => overrides })
+    }, overrides)
+    {
+      "user" => { "name" => "dev" },
+      "journal" => { "mode" => "bundled" },
+      "exposure" => { "mode" => "cloudflare", "cloudflare" => cloudflare },
+    }
   end
 end

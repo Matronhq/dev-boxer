@@ -10,7 +10,6 @@ You are running on a Dev Boxer remote development server. Use this file as local
 - SSH: key-only auth on port `{{SSH_PORT}}`
 - Desktop: optional XFCE/XRDP; run `/home/{{USERNAME}}/setup-desktop` if the user asks for a GUI
 - Main tunnel hostname: `{{CF_HOSTNAME_MAIN}}`
-- Matrix homeserver hostname: `{{CF_HOSTNAME_MATRIX}}`
 - File viewer hostname: `{{CF_HOSTNAME_VIEWER}}`
 - Hello-world smoke test hostname: `{{CF_HOSTNAME_HELLO}}`
 
@@ -78,7 +77,6 @@ This box may have a zone-scoped Cloudflare DNS API token at `/home/{{USERNAME}}/
 The main tunnel hostnames are:
 
 - `{{CF_HOSTNAME_MAIN}}`
-- `{{CF_HOSTNAME_MATRIX}}`
 - `{{CF_HOSTNAME_VIEWER}}`
 - `{{CF_HOSTNAME_HELLO}}`
 
@@ -120,22 +118,22 @@ Configured in `~/.claude/mcp-config.json`. Use it for UI testing, screenshots, b
 
 ### ask-user MCP
 
-Use this when you need clarification, secrets, or confirmation from the user during a Matrix bridge session.
+Use this when you need clarification, secrets, or confirmation from the user during a Matron bridge session.
 
 ## Dev Boxer Services
 
 Core services installed by Dev Boxer:
 
-- `claude-matrix-bridge.service`: Matrix-to-Claude bridge
-- `claude-matrix-file-viewer.service`: file viewer for shared Matrix artifacts
+- `matron-bridge.service`: Matron-to-Claude bridge
+- `matron-viewer.service`: file viewer for shared session artifacts
 - `cloudflared-tunnel.service`: Cloudflare Tunnel for public hostnames
 - `dev-boxer-hello-world.service`: hello-world smoke-test page
 
 Check service status:
 
 ```bash
-sudo systemctl status claude-matrix-bridge.service
-sudo systemctl status claude-matrix-file-viewer.service
+sudo systemctl status matron-bridge.service
+sudo systemctl status matron-viewer.service
 sudo systemctl status cloudflared-tunnel.service
 sudo systemctl status dev-boxer-hello-world.service
 ```
@@ -143,8 +141,8 @@ sudo systemctl status dev-boxer-hello-world.service
 Follow service logs:
 
 ```bash
-sudo journalctl -u claude-matrix-bridge.service -f
-sudo journalctl -u claude-matrix-file-viewer.service -f
+sudo journalctl -u matron-bridge.service -f
+sudo journalctl -u matron-viewer.service -f
 sudo journalctl -u cloudflared-tunnel.service -f
 sudo journalctl -u dev-boxer-hello-world.service -f
 ```

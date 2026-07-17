@@ -100,5 +100,16 @@ module DevBoxer
       end
       false
     end
+
+    # Like wait_for_url, but accepts ANY HTTP status — for endpoints that
+    # are up-but-authenticated (matron-journal's /metrics 401s without a
+    # token). curl without -f exits 0 on any HTTP response.
+    def wait_for_http(url, timeout: 30)
+      timeout.times do
+        return true if sh("curl -s -o /dev/null #{Shellwords.escape(url)}")
+        sleep 1
+      end
+      false
+    end
   end
 end

@@ -54,7 +54,7 @@ class ModulesShapeTest < Minitest::Test
 
   def test_all_eleven_modules_present
     names = @modules.map(&:module_name).sort
-    assert_equal %w[browsers claude cloudflare desktop desktop-apps dev-tools docker hello-world matrix-bridge security users], names
+    assert_equal %w[browsers claude desktop desktop-apps dev-tools docker exposure hello-world matron security users], names
   end
 
   def test_template_vars_are_passed_as_explicit_hashes

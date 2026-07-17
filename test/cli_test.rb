@@ -106,7 +106,39 @@ class CLITest < Minitest::Test
 
       refute status.success?, "expected nonzero exit for incomplete config"
       assert_match(/Config is incomplete/, err)
-      assert_match(/cloudflare\.enabled/, err)
+      assert_match(/exposure\.mode/, err)
+    end
+  end
+
+  def test_non_interactive_with_complete_config_runs_without_prompts
+    Dir.mktmpdir do |dir|
+      cfg = File.join(dir, "config.yml")
+      File.write(cfg, {
+        "user" => { "name" => "dev", "ssh_public_key" => "ssh-ed25519 AAAATEST t@e", "rdp_password" => "x" },
+        "ssh" => { "port" => 2222 },
+        "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" },
+        "exposure" => { "mode" => "ip" },
+        "hello_world" => { "port" => 9820 },
+      }.to_yaml)
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+
+      out, err, status = run_setup("--non-interactive", "--config", cfg, "--modules-dir", mods_dir)
+      assert status.success?, "expected exit 0\nstdout: #{out}\nstderr: #{err}"
+    end
+  end
+
+  def test_non_interactive_with_incomplete_config_exits_2_listing_missing_keys
+    Dir.mktmpdir do |dir|
+      cfg = File.join(dir, "config.yml")
+      File.write(cfg, "user:\n  name: dev\n")
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+
+      _out, err, status = run_setup("--non-interactive", "--config", cfg, "--modules-dir", mods_dir)
+      assert_equal 2, status.exitstatus
+      assert_match(/journal\.mode is required/, err)
+      assert_match(/exposure\.mode is required/, err)
     end
   end
 end

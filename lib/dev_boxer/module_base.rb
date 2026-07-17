@@ -19,13 +19,14 @@ module DevBoxer
 
     attr_reader :config, :log, :shell, :templates_dir, :config_path, :secrets_path
 
-    def initialize(config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil)
+    def initialize(config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil, interactive: true)
       @config = config
       @log = log
       @shell = shell
       @templates_dir = templates_dir
       @config_path = config_path
       @secrets_path = secrets_path
+      @interactive = interactive
     end
 
     def module_name
@@ -42,6 +43,15 @@ module DevBoxer
 
     private
 
+    def interactive? = @interactive
+
+    def exposure
+      @exposure ||= DevBoxer::Exposure.for(
+        config: config, shell: shell, log: log, templates_dir: templates_dir,
+        config_path: config_path, secrets_path: secrets_path, interactive: interactive?,
+      )
+    end
+
     def template_path(name)
       raise "templates_dir not set" unless templates_dir
       File.join(templates_dir, name)
@@ -56,13 +66,5 @@ module DevBoxer
     def ok(msg)        = log.ok(msg)
     def skip(msg)      = log.skip(msg)
     def warn(msg)      = log.warn(msg)
-
-    def cloudflare_hello_hostname
-      configured = config.cloudflare&.tunnel&.hostname_hello
-      return configured unless configured.to_s.empty?
-
-      zone_name = config.cloudflare&.zone_name
-      zone_name.to_s.empty? ? nil : "hello.#{zone_name}"
-    end
   end
 end

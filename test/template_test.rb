@@ -42,7 +42,6 @@ class TemplateTest < Minitest::Test
       "USERNAME" => "dev",
       "SSH_PORT" => 2222,
       "CF_HOSTNAME_MAIN" => "dev.example.com",
-      "CF_HOSTNAME_MATRIX" => "matrix.example.com",
       "CF_HOSTNAME_VIEWER" => "viewer.example.com",
       "CF_HOSTNAME_HELLO" => "hello.example.com",
       "CF_ZONE_NAME" => "example.com",
@@ -68,7 +67,7 @@ class TemplateTest < Minitest::Test
     assert_includes rendered, "Subdomain naming controls access"
     assert_includes rendered, "`public-<name>.example.com`"
     assert_includes rendered, "cloudflareaccess.com/cdn-cgi/access/login"
-    assert_includes rendered, "confirmation from the user during a Matrix bridge session"
+    assert_includes rendered, "confirmation from the user during a Matron bridge session"
     assert_includes rendered, "## Dev Boxer Services"
     assert_includes rendered, "dev-boxer-hello-world.service"
     assert_includes rendered, "Check service status:"

@@ -157,6 +157,7 @@ runner = DevBoxer::Runner.new(
   templates_dir: options[:templates_dir],
   config_path: options[:config],
   secrets_path: DevBoxer::Config.secrets_path_for(options[:config]),
+  interactive: interactive && !options[:non_interactive],
 )
 
 begin

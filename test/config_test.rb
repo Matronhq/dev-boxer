@@ -155,9 +155,11 @@ class ConfigTest < Minitest::Test
   end
 
   def test_validation_accepts_tunnel_id_without_setup_token
-    config = DevBoxer::Config.from_hash(valid_public_config("cloudflare" => {
-      "api_token" => nil,
-      "tunnel" => { "id" => "existing-tunnel-id" },
+    config = DevBoxer::Config.from_hash(valid_public_config("exposure" => {
+      "cloudflare" => {
+        "api_token" => nil,
+        "tunnel" => { "id" => "existing-tunnel-id" },
+      },
     }))
 
     assert_empty DevBoxer::Config.validation_errors(config)
@@ -165,19 +167,19 @@ class ConfigTest < Minitest::Test
 
   def test_validation_requires_setup_token_until_tunnel_exists_unless_manual
     hash = valid_public_config
-    hash["cloudflare"].delete("api_token")
-    hash["cloudflare"]["tunnel"].delete("id")
+    hash["exposure"]["cloudflare"].delete("api_token")
+    hash["exposure"]["cloudflare"]["tunnel"].delete("id")
 
     errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
 
-    assert_includes errors, "cloudflare.api_token is required until cloudflare.tunnel.id exists, unless cloudflare.tunnel.create_manually is true"
+    assert_includes errors, "exposure.cloudflare.api_token is required until exposure.cloudflare.tunnel.id exists, unless exposure.cloudflare.tunnel.create_manually is true"
   end
 
   def test_validation_allows_manual_tunnel_setup_without_setup_token
     hash = valid_public_config
-    hash["cloudflare"].delete("api_token")
-    hash["cloudflare"]["tunnel"].delete("id")
-    hash["cloudflare"]["tunnel"]["create_manually"] = true
+    hash["exposure"]["cloudflare"].delete("api_token")
+    hash["exposure"]["cloudflare"]["tunnel"].delete("id")
+    hash["exposure"]["cloudflare"]["tunnel"]["create_manually"] = true
 
     assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
   end
@@ -193,42 +195,46 @@ class ConfigTest < Minitest::Test
 
   def test_validation_requires_zone_name_for_dns_setup
     hash = valid_public_config
-    hash["cloudflare"].delete("zone_name")
+    hash["exposure"]["cloudflare"].delete("zone_name")
 
     errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
 
-    assert_includes errors, "cloudflare.zone_name is required"
+    assert_includes errors, "exposure.cloudflare.zone_name is required"
   end
 
   def test_validation_requires_zone_token_unless_dns_is_manual
     hash = valid_public_config
-    hash["cloudflare"].delete("zone_api_token")
+    hash["exposure"]["cloudflare"].delete("zone_api_token")
 
     errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
 
-    assert_includes errors, "cloudflare.zone_api_token is required unless cloudflare.dns.create_manually is true"
+    assert_includes errors, "exposure.cloudflare.zone_api_token is required unless exposure.cloudflare.dns.create_manually is true"
   end
 
   def test_validation_requires_access_setup_token_until_app_exists
-    hash = valid_public_config("cloudflare" => {
-      "access" => {
-        "enabled" => true,
-        "allowed_email_domains" => ["example.com"],
+    hash = valid_public_config("exposure" => {
+      "cloudflare" => {
+        "access" => {
+          "enabled" => true,
+          "allowed_email_domains" => ["example.com"],
+        },
       },
     })
-    hash["cloudflare"].delete("api_token")
+    hash["exposure"]["cloudflare"].delete("api_token")
 
     errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
 
-    assert_includes errors, "cloudflare.api_token is required until cloudflare.access.app_id exists"
+    assert_includes errors, "exposure.cloudflare.api_token is required until exposure.cloudflare.access.app_id exists"
   end
 
   def test_validation_allows_access_app_without_token_after_setup
-    hash = valid_public_config("cloudflare" => {
-      "access" => {
-        "enabled" => true,
-        "app_id" => "app-123",
-        "allowed_email_domains" => ["example.com"],
+    hash = valid_public_config("exposure" => {
+      "cloudflare" => {
+        "access" => {
+          "enabled" => true,
+          "app_id" => "app-123",
+          "allowed_email_domains" => ["example.com"],
+        },
       },
     })
 
@@ -236,41 +242,108 @@ class ConfigTest < Minitest::Test
   end
 
   def test_validation_allows_manual_dns_without_zone_token
-    hash = valid_public_config("cloudflare" => {
-      "zone_api_token" => nil,
-      "dns" => { "create_manually" => true },
-    })
-
-    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
-  end
-
-  def test_validation_accepts_external_mode_with_imported_bot_creds
-    hash = valid_public_config("matrix" => {
-      "mode" => "external",
-      "homeserver_url" => "https://matrix.example.com",
-      "bot_user_id" => "@box4:matrix.example.com",
-      "bot_password" => "pw",
-      "bot_recovery_key" => "EsTm 4uK4",
-      "bridge_room_id" => "!abc:matrix.example.com",
-    })
-
-    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
-  end
-
-  def test_validation_accepts_bots_map_under_matrix
-    hash = valid_public_config("matrix" => {
-      "bots" => {
-        "box4" => {
-          "bot_user_id" => "@box4:matrix.example.com",
-          "bot_password" => "pw",
-          "bot_recovery_key" => "EsTm 4uK4",
-          "bridge_room_id" => "!abc:matrix.example.com",
-          "created_at" => "2026-05-02T12:34:56Z",
-        },
+    hash = valid_public_config("exposure" => {
+      "cloudflare" => {
+        "zone_api_token" => nil,
+        "dns" => { "create_manually" => true },
       },
     })
 
     assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
+  def test_validation_rejects_retired_matrix_section
+    hash = valid_public_config
+    hash["matrix"] = { "mode" => "bundled" }
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_equal 1, errors.grep(/matrix/).length
+    assert_match(/retired/, errors.grep(/matrix/).first)
+    assert_match(/Upgrading from a Matrix-era install/, errors.grep(/matrix/).first)
+  end
+
+  def test_validation_requires_journal_mode
+    hash = valid_public_config
+    hash.delete("journal")
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "journal.mode is required"
+  end
+
+  def test_validation_rejects_unknown_journal_mode
+    hash = valid_public_config("journal" => { "mode" => "sideways" })
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "journal.mode must be bundled or external"
+  end
+
+  def test_validation_requires_url_for_external_journal
+    hash = valid_public_config("journal" => { "mode" => "external" })
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "journal.url is required when journal.mode is external"
+  end
+
+  def test_validation_rejects_non_ws_journal_url
+    hash = valid_public_config("journal" => { "mode" => "external", "url" => "https://chat.example.com" })
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "journal.url must be a ws:// or wss:// URL"
+  end
+
+  def test_validation_external_journal_does_not_require_journal_hostname
+    hash = valid_public_config("journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" })
+    hash["exposure"]["cloudflare"]["tunnel"].delete("hostname_journal")
+
+    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
+  def test_validation_bundled_journal_requires_journal_hostname_in_cloudflare_mode
+    hash = valid_public_config
+    hash["exposure"]["cloudflare"]["tunnel"].delete("hostname_journal")
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "exposure.cloudflare.tunnel.hostname_journal is required when the journal is bundled"
+  end
+
+  def test_validation_requires_exposure_mode
+    hash = valid_public_config
+    hash.delete("exposure")
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "exposure.mode is required"
+  end
+
+  def test_validation_rejects_unknown_exposure_mode
+    hash = valid_public_config
+    hash["exposure"] = { "mode" => "carrier-pigeon" }
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "exposure.mode must be cloudflare or ip"
+  end
+
+  def test_validation_ip_mode_accepts_minimal_config
+    hash = valid_public_config
+    hash["exposure"] = { "mode" => "ip" }
+
+    assert_empty DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+  end
+
+  def test_validation_ip_mode_rejects_bad_port
+    hash = valid_public_config
+    hash["exposure"] = { "mode" => "ip", "ip" => { "journal_port" => "loud" } }
+
+    errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
+
+    assert_includes errors, "exposure.ip.journal_port must be a number"
   end
 
   private
@@ -283,25 +356,23 @@ class ConfigTest < Minitest::Test
         "rdp_password" => "rdp-secret",
       },
       "ssh" => { "port" => 2222 },
-      "matrix" => {
-        "mode" => "bundled",
-        "server_domain" => "matrix.example.com",
-        "user_username" => "dev",
-      },
-      "cloudflare" => {
-        "enabled" => true,
-        "zone_name" => "example.com",
-        "api_token" => "admin-token",
-        "zone_api_token" => "zone-token",
-        "tunnel" => {
-          "hostname" => "dev.example.com",
-          "hostname_matrix" => "matrix.example.com",
-          "hostname_viewer" => "viewer.example.com",
-          "hostname_hello" => "hello.example.com",
-          "create_manually" => false,
+      "journal" => { "mode" => "bundled" },
+      "exposure" => {
+        "mode" => "cloudflare",
+        "cloudflare" => {
+          "zone_name" => "example.com",
+          "api_token" => "admin-token",
+          "zone_api_token" => "zone-token",
+          "tunnel" => {
+            "hostname" => "dev.example.com",
+            "hostname_journal" => "chat.example.com",
+            "hostname_viewer" => "viewer.example.com",
+            "hostname_hello" => "hello.example.com",
+            "create_manually" => false,
+          },
         },
       },
-      "hello_world" => { "port" => 9810 },
+      "hello_world" => { "port" => 9820 },
     }, overrides)
   end
 end

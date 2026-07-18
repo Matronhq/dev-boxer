@@ -98,7 +98,7 @@ class HelloWorldTest < Minitest::Test
       # Inner command is Shellwords-escaped, so spaces appear as "\ ".
       # MATRON_DB is how the CLI locates the preapprove key — dropping it
       # would break authentication even with the runuser wrapper intact.
-      assert_includes link_cmd, "MATRON_DB="
+      assert_includes link_cmd, "MATRON_DB\\="
       assert_includes link_cmd, "link-code\\ dan\\ --server-url\\ https://203.0.113.7:8443"
 
       summary = output.string

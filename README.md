@@ -6,11 +6,11 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment — M
 
 | Project | Description |
 |---------|-------------|
-| [Matron Desktop](https://github.com/matronhq/matron-desktop) | Desktop client |
-| [Matron Web](https://github.com/matronhq/matron-web) | Web client |
-| [Matron iOS](https://github.com/matronhq/matron-apple) | iOS client |
-| [matron-journal](https://github.com/Matronhq/matron-journal) | Sync server |
-| [matron-bridge](https://github.com/Matronhq/matron-bridge) | Runs Claude Code sessions and connects them to the journal |
+| [matron-apple](https://github.com/Matronhq/matron-apple) | Native iPhone and Mac apps |
+| [matron-desktop](https://github.com/Matronhq/matron-desktop) | Desktop client for Windows and Linux |
+| [matron-web](https://github.com/Matronhq/matron-web) | Browser client |
+| [matron-journal](https://github.com/Matronhq/matron-journal) | Sync server for the Matron apps |
+| [matron-bridge](https://github.com/Matronhq/matron-bridge) | Runs Claude Code / Codex sessions and connects them to the journal |
 | **Dev Boxer** | One-command dev environment setup (this repo) |
 
 ## What you get

@@ -203,4 +203,10 @@ class JournalEnrollmentTest < DevBoxer::Testing::ModuleTestCase
     assert_equal "https://203.0.113.7:8443", DevBoxer::JournalEnrollment.https_base("wss://203.0.113.7:8443/ws")
     assert_equal "http://127.0.0.1:9810", DevBoxer::JournalEnrollment.https_base("ws://127.0.0.1:9810/ws")
   end
+
+  def test_matron_admin_command_wraps_runuser_matron_with_db_env
+    cmd = DevBoxer::JournalEnrollment.matron_admin_command("user add dan")
+    inner = "cd /opt/matron-journal && MATRON_DB=/opt/matron-journal/data/matron.db npx matron-admin user add dan"
+    assert_equal "runuser -u matron -- sh -c #{Shellwords.escape(inner)}", cmd
+  end
 end

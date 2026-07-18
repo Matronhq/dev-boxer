@@ -99,7 +99,7 @@ module DevBoxer
       end
 
       def matron_admin(args)
-        as_matron("cd #{JOURNAL_DIR} && MATRON_DB=#{JOURNAL_DIR}/data/matron.db npx matron-admin #{args}")
+        JournalEnrollment.matron_admin_command(args)
       end
 
       def ensure_journal_user

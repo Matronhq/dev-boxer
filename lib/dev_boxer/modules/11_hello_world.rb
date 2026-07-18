@@ -1,4 +1,5 @@
 require "yaml"
+require "shellwords"
 
 module DevBoxer
   module Modules
@@ -67,10 +68,12 @@ module DevBoxer
           info "under Settings -> Devices once the bridge connects."
         else
           secrets = merged_config_hash
+          journal_user = secrets.dig("journal", "username") || username
           info "Open the Matron app (iOS / desktop / web) and add this server:"
           info "  Server:   #{exposure.journal_public_url}"
-          info "  Username: #{secrets.dig('journal', 'username') || username}"
+          info "  Username: #{journal_user}"
           info "  Password: #{secrets.dig('journal', 'user_password') || '(missing from secrets.yml)'}"
+          print_first_phone_qr(journal_user)
         end
         # Single end-of-run connection summary (modules 09/10 no longer repeat
         # it). The journal URL was just printed above as "Server:", so skip
@@ -81,6 +84,22 @@ module DevBoxer
         end
         info ""
         info "If the agent token is ever revoked, re-enroll with: sudo bin/enroll"
+      end
+
+      # Prints matron-admin link-code's ANSI QR: scanning it signs the first
+      # phone straight into the journal account (pre-approved link code, no
+      # approve tap). Best-effort — on any failure the username/password
+      # printed above still work.
+      def print_first_phone_qr(journal_user)
+        server = JournalEnrollment.https_base(exposure.journal_public_url)
+        out = shell.sh!(JournalEnrollment.matron_admin_command(
+          "link-code #{Shellwords.escape(journal_user)} --server-url #{Shellwords.escape(server)}"
+        ))
+        info ""
+        info "Or scan this QR with the Matron app to sign the first phone in (valid ~10 minutes):"
+        out.each_line { |line| info line.chomp }
+      rescue Shell::Error => e
+        warn "Couldn't mint a sign-in QR (#{e.message.lines.first&.strip}) — sign in with the username/password above."
       end
 
       def merged_config_hash

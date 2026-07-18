@@ -100,4 +100,16 @@ class ShellTest < Minitest::Test
     sh = DevBoxer::Shell.new
     assert_includes sh.sh!("command -v sh"), "sh"
   end
+
+  def test_wait_for_http_accepts_any_http_status
+    recorded = []
+    shell = DevBoxer::Shell.new(runner: lambda { |cmd, _opts = {}|
+      recorded << cmd
+      [true, "", ""]  # curl exit 0 == got an HTTP response (even 401)
+    })
+
+    assert shell.wait_for_http("http://127.0.0.1:9810/metrics", timeout: 1)
+    assert_match(/curl -s -o \/dev\/null/, recorded.first)
+    refute_match(/curl -sf/, recorded.first)
+  end
 end

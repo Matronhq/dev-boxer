@@ -115,10 +115,10 @@ No API key required — it queries public documentation sources.
 
 ## 4. Bridge MCP Config
 
-The Matrix bridge runs Claude Code as a subprocess and passes it an MCP config file. To add servers available inside bridge-started sessions, edit:
+matron-bridge runs Claude Code as a subprocess and passes it an MCP config file. To add servers available inside bridge-started sessions, edit:
 
 ```
-~/claude-matrix-bridge/mcp-config-generated.json
+~/matron-bridge/mcp-config-generated.json
 ```
 
 The format is the same `mcpServers` JSON used in `~/.claude/settings.json`:
@@ -128,9 +128,9 @@ The format is the same `mcpServers` JSON used in `~/.claude/settings.json`:
   "mcpServers": {
     "ask-user": {
       "command": "node",
-      "args": ["/home/youruser/claude-matrix-bridge/ask-user.js"],
+      "args": ["/home/youruser/matron-bridge/ask-user.js"],
       "env": {
-        "MATRIX_BRIDGE_API_PORT": "9802"
+        "BRIDGE_API_URL": "http://127.0.0.1:9802"
       }
     },
     "my-extra-server": {
@@ -144,7 +144,7 @@ The format is the same `mcpServers` JSON used in `~/.claude/settings.json`:
 After editing, restart the bridge service for the changes to take effect:
 
 ```bash
-sudo systemctl restart claude-matrix-bridge
+sudo systemctl restart matron-bridge
 ```
 
 Note: `mcp-config-generated.json` is regenerated if you re-run `setup.sh`. Keep a backup of any custom additions, or re-apply them after setup.

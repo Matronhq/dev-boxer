@@ -15,20 +15,20 @@ module DevBoxer
       def run
         section "Hello world smoke-test service"
 
-        port = config.hello_world&.port || 9810
+        port = hello_port
         deploy_doc_root
         deploy_unit(port)
         shell.sh!("systemctl daemon-reload")
         shell.systemctl(:enable, "dev-boxer-hello-world")
         shell.systemctl(:restart, "dev-boxer-hello-world")
         ok "Hello-world service running on http://localhost:#{port}"
-        print_matrix_login_instructions
+        print_matron_login_instructions
       end
 
       private
 
       def username = config.user.name
-      def home_dir = "/home/#{username}"
+      def hello_port = config.hello_world&.port || 9820
 
       def deploy_doc_root
         FileUtils.mkdir_p(DOC_ROOT)
@@ -55,81 +55,38 @@ module DevBoxer
         UNIT
       end
 
-      def print_matrix_login_instructions
-        details = matrix_login_details
-        return unless details
-
+      def print_matron_login_instructions
         info ""
         info "=========================================="
-        info "  Matrix bridge — first login"
+        info "  Matron — first login"
         info "=========================================="
-        if details[:mode] == "external"
-          info "Open Element (web/desktop) and sign in to your existing account:"
-          info "  Homeserver URL: #{details[:homeserver_url]}"
-          info "  User ID: #{details[:user_id]}"
-          info "  Password: (use your existing #{details[:server_domain]} account password)"
-          info "  Secure Backup recovery key: (use your existing recovery key)"
+        if config.journal&.mode == "external"
+          info "This box's bridge is connected to your existing journal:"
+          info "  Server: #{config.journal&.url}"
+          info "Open the Matron app with your existing account — this box appears"
+          info "under Settings -> Devices once the bridge connects."
         else
-          info "Open Matron:"
-          info "  URL: #{details[:homeserver_url]}"
-          info "  User ID: #{details[:user_id]}"
-          info "  Password: #{details[:password] || '(missing from secrets.yml)'}"
-          info "  Secure Backup recovery key: #{details[:recovery_key] || '(not found; check ~/recovery-key.txt if still present)'}"
+          secrets = merged_config_hash
+          info "Open the Matron app (iOS / desktop / web) and add this server:"
+          info "  Server:   #{exposure.journal_public_url}"
+          info "  Username: #{secrets.dig('journal', 'username') || username}"
+          info "  Password: #{secrets.dig('journal', 'user_password') || '(missing from secrets.yml)'}"
+        end
+        # Single end-of-run connection summary (modules 09/10 no longer repeat
+        # it). The journal URL was just printed above as "Server:", so skip
+        # summary_lines' duplicate "Journal (Matron apps):" entry.
+        exposure.summary_lines.each do |line|
+          next if line.start_with?("Journal (Matron apps):")
+          info line
         end
         info ""
-        info "After login, open the 'Claude Code Bridge' room and send !start."
-      end
-
-      def matrix_login_details
-        hash = merged_config_hash
-        matrix = hash["matrix"] || {}
-        return nil if matrix["mode"] == "disabled"
-
-        mode = matrix["mode"] || "bundled"
-        server_domain = matrix["server_domain"] || "your-domain"
-        user_username = matrix["user_username"] || username
-
-        homeserver_url =
-          if mode == "external"
-            # In external mode the homeserver lives elsewhere; matrix.homeserver_url
-            # is the only correct URL. cloudflare.tunnel.hostname_matrix points at
-            # a local Matron container that doesn't exist in this mode.
-            matrix["homeserver_url"] || "https://#{server_domain}"
-          else
-            matrix_hostname = hash.dig("cloudflare", "tunnel", "hostname_matrix") || server_domain
-            public_url(matrix_hostname)
-          end
-
-        {
-          mode: mode,
-          server_domain: server_domain,
-          homeserver_url: homeserver_url,
-          user_id: "@#{user_username}:#{server_domain}",
-          password: matrix["user_password"],
-          recovery_key: matrix_recovery_key,
-        }
+        info "If the agent token is ever revoked, re-enroll with: sudo bin/enroll"
       end
 
       def merged_config_hash
         base = config.respond_to?(:to_h) ? config.to_h : {}
         return base unless secrets_path && File.exist?(secrets_path)
-
         Config.deep_merge(base, YAML.safe_load_file(secrets_path) || {})
-      end
-
-      def public_url(hostname)
-        value = hostname.to_s
-        value.start_with?("http://", "https://") ? value : "https://#{value}"
-      end
-
-      def matrix_recovery_key
-        path = "#{home_dir}/recovery-key.txt"
-        return nil unless File.exist?(path)
-
-        File.readlines(path)
-          .map(&:strip)
-          .reject { |line| line.empty? || line.start_with?("#") }
-          .last
       end
     end
   end

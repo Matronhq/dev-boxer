@@ -180,7 +180,7 @@ Connect your RDP client to `localhost:3389`.
 
 1. Open the Matron app (iOS, desktop, or web)
 2. Add the journal using the `wss://` URL from setup's connection summary (`Journal (Matron apps): ...` — e.g. `wss://chat.yourdomain.com/ws` in Cloudflare mode, `wss://<ip>:8443/ws` in IP mode)
-3. Sign in: bundled mode uses the journal username/password setup printed and stored in `secrets.yml`; external mode uses your existing account on that journal
+3. Sign in: in bundled mode, either scan the QR printed at the end of setup (signs the first phone in directly) or use the journal username/password setup printed and stored in `secrets.yml`; external mode uses your existing account on that journal
 4. Open a chat with the agent this box registered (matron-bridge) and start talking to Claude Code
 
 ## Upgrading from a Matrix-era install

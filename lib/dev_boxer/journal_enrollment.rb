@@ -31,6 +31,14 @@ module DevBoxer
       base
     end
 
+    # Full root-shell command for one matron-admin invocation: cd into the
+    # checkout, point at the live DB, run as the matron user (root would
+    # leave root-owned SQLite WAL files behind and break the service).
+    def self.matron_admin_command(args)
+      cmd = "cd #{JOURNAL_DIR} && MATRON_DB=#{JOURNAL_DIR}/data/matron.db npx matron-admin #{args}"
+      "runuser -u matron -- sh -c #{Shellwords.escape(cmd)}"
+    end
+
     # Any HTTP response (including 401 from /metrics) means the journal is
     # reachable; only transport/TLS failures return an error string.
     def self.probe(https_base, ca_file: nil)
@@ -109,13 +117,11 @@ module DevBoxer
 
     def bundled? = (config.journal&.mode || "bundled") == "bundled"
 
-    # Run matron-admin as the matron user — as root it would create
-    # SQLite -wal/-shm files owned by root and break the service.
     def mint_local_token
       user = config.journal&.username || config.user.name
-      cmd = "cd #{JOURNAL_DIR} && MATRON_DB=#{JOURNAL_DIR}/data/matron.db " \
-            "npx matron-admin agent add #{Shellwords.escape(user)} #{Shellwords.escape(agent_name)}"
-      out = shell.sh!("runuser -u matron -- sh -c #{Shellwords.escape(cmd)}")
+      out = shell.sh!(self.class.matron_admin_command(
+        "agent add #{Shellwords.escape(user)} #{Shellwords.escape(agent_name)}"
+      ))
       token = out[/token: (\S+)/, 1]
       raise NotEnrolled, "matron-admin agent add did not print a token:\n#{out}" if token.to_s.empty?
       write_token(token)

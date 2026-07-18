@@ -152,6 +152,7 @@ class HelloWorldTest < Minitest::Test
 
     summary = output.string
     assert_includes summary, "Couldn't mint a sign-in QR"
+    assert_includes summary, "unknown command: link-code" # stderr reason, not the escaped command
     assert_includes summary, "bin/enroll" # instructions continue past the failure
   end
 

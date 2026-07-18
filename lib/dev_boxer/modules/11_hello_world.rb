@@ -99,7 +99,10 @@ module DevBoxer
         info "Or scan this QR with the Matron app to sign the first phone in (valid ~10 minutes):"
         out.each_line { |line| info line.chomp }
       rescue Shell::Error => e
-        warn "Couldn't mint a sign-in QR (#{e.message.lines.first&.strip}) — sign in with the username/password above."
+        # The first message line is the escaped command; the actual failure
+        # reason lives in the captured stderr section.
+        reason = e.message[/--- stderr ---\n(.+)/, 1]&.strip || e.message.lines.first&.strip
+        warn "Couldn't mint a sign-in QR (#{reason}) — sign in with the username/password above."
       end
 
       def merged_config_hash

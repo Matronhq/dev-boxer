@@ -74,6 +74,7 @@ module DevBoxer
           info "  Username: #{journal_user}"
           info "  Password: #{secrets.dig('journal', 'user_password') || '(missing from secrets.yml)'}"
           print_first_phone_qr(journal_user)
+          print_link_later_hints(journal_user)
         end
         # Single end-of-run connection summary (modules 09/10 no longer repeat
         # it). The journal URL was just printed above as "Server:", so skip
@@ -91,10 +92,7 @@ module DevBoxer
       # approve tap). Best-effort — on any failure the username/password
       # printed above still work.
       def print_first_phone_qr(journal_user)
-        server = JournalEnrollment.https_base(exposure.journal_public_url)
-        out = shell.sh!(JournalEnrollment.matron_admin_command(
-          "link-code #{Shellwords.escape(journal_user)} --server-url #{Shellwords.escape(server)}"
-        ))
+        out = shell.sh!(JournalEnrollment.matron_admin_command(link_code_args(journal_user)))
         info ""
         info "Or scan this QR with the Matron app to sign the first phone in (valid ~10 minutes):"
         out.each_line { |line| info line.chomp }
@@ -103,6 +101,45 @@ module DevBoxer
         # reason lives in the captured stderr section.
         reason = e.message[/--- stderr ---\n(.+)/, 1]&.strip || e.message.lines.first&.strip
         warn "Couldn't mint a sign-in QR (#{reason}) — sign in with the username/password above."
+      end
+
+      # Copy-paste commands for linking a phone AFTER provisioning: a fresh
+      # terminal QR, and a 24-hour PNG for handing to someone else. Printed
+      # even when the at-provision QR mint failed — that is exactly the
+      # situation where a re-mint hint is needed. The remote command comes
+      # from JournalEnrollment.matron_admin_command so these lines can never
+      # drift from what the live mint actually runs.
+      def print_link_later_hints(journal_user)
+        mint = JournalEnrollment.matron_admin_command(link_code_args(journal_user))
+        png = JournalEnrollment.matron_admin_command("#{link_code_args(journal_user)} --expires 24h --png /tmp/matron-link.png")
+        host = link_later_host
+        info ""
+        info "Link a phone later:"
+        info "  Mint a fresh sign-in QR in your terminal (valid 10 minutes):"
+        info "    ssh root@#{host} #{Shellwords.escape(mint)}"
+        info "  Or mint a 24-hour QR image to send to someone — it signs them"
+        info "  straight in, so treat the file like a password:"
+        info "    ssh root@#{host} #{Shellwords.escape(png)}"
+        info "    scp root@#{host}:/tmp/matron-link.png . && ssh root@#{host} rm /tmp/matron-link.png"
+      end
+
+      # The one place the link-code invocation is assembled — the live QR
+      # mint (print_first_phone_qr) and the printed hints both use it, so
+      # the hint lines can never drift from what actually runs.
+      def link_code_args(journal_user)
+        server = JournalEnrollment.https_base(exposure.journal_public_url)
+        "link-code #{Shellwords.escape(journal_user)} --server-url #{Shellwords.escape(server)}"
+      end
+
+      # Best-effort SSH host for the hint lines. hostname -f rather than the
+      # exposure hostname: in cloudflare mode the public hostname fronts an
+      # HTTP-only tunnel you cannot ssh to, and modules must not branch on
+      # the exposure mode (see lib/dev_boxer/exposure.rb).
+      def link_later_host
+        h = shell.sh!("hostname -f").strip
+        h.empty? ? "<this-box>" : h
+      rescue Shell::Error
+        "<this-box>"
       end
 
       def merged_config_hash

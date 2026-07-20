@@ -8,7 +8,7 @@ Type=simple
 User={{USERNAME}}
 WorkingDirectory=/home/{{USERNAME}}/matron-bridge
 EnvironmentFile=/home/{{USERNAME}}/matron-bridge/.env
-ExecStart=/usr/bin/node /home/{{USERNAME}}/matron-bridge/viewer/server.js
+ExecStart=/usr/bin/node /home/{{USERNAME}}/matron-bridge/viewer/start.js
 Restart=always
 RestartSec=5
 

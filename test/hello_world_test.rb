@@ -175,6 +175,72 @@ class HelloWorldTest < Minitest::Test
     assert_empty recorded.select { |c| c.include?("link-code") }
   end
 
+  def test_bundled_summary_prints_link_later_hints
+    Dir.mktmpdir do |dir|
+      secrets_path = File.join(dir, "secrets.yml")
+      File.write(secrets_path, { "journal" => { "username" => "dan", "user_password" => "journal-pass" } }.to_yaml)
+      output = StringIO.new
+      runner = lambda do |cmd, _opts = {}|
+        if cmd.include?("hostname -f")
+          [true, "box1.example.com\n", ""]
+        elsif cmd.include?("link-code")
+          [true, "qr\n", ""]
+        else
+          [true, "", ""]
+        end
+      end
+      mod = build_module(
+        secrets_path: secrets_path,
+        output: output,
+        runner: runner,
+        config_hash: {
+          "user" => { "name" => "dev" },
+          "journal" => { "mode" => "bundled" },
+          "exposure" => { "mode" => "ip", "ip" => { "address" => "203.0.113.7" } },
+        },
+      )
+
+      mod.send(:print_matron_login_instructions)
+
+      summary = output.string
+      assert_includes summary, "Link a phone later"
+      # Both hint lines wrap the real matron-admin command in ssh to this box.
+      ssh_lines = summary.lines.select { |l| l.include?("ssh root@box1.example.com") }
+      assert_equal 3, ssh_lines.count, summary # re-mint, png mint, and the rm in the scp line
+      # The remote command is the same runuser/MATRON_DB wrapper the live QR
+      # mint uses (Shellwords-escaped for the ssh hop, hence \-escapes).
+      assert_includes summary, "runuser"
+      assert_includes summary, "link-code"
+      assert_includes summary, "--expires"
+      assert_includes summary, "24h"
+      assert_includes summary, "/tmp/matron-link.png"
+      assert_includes summary, "scp root@box1.example.com:/tmp/matron-link.png ."
+    end
+  end
+
+  def test_link_later_hints_fall_back_when_hostname_fails
+    output = StringIO.new
+    runner = lambda do |cmd, _opts = {}|
+      # sh! raises Shell::Error itself when the runner reports failure —
+      # returning [false, ...] exercises the real error path.
+      next [false, "", "boom"] if cmd.include?("hostname -f")
+      [true, "", ""]
+    end
+    mod = build_module(
+      output: output,
+      runner: runner,
+      config_hash: {
+        "user" => { "name" => "dev" },
+        "journal" => { "mode" => "bundled" },
+        "exposure" => { "mode" => "ip", "ip" => { "address" => "203.0.113.7" } },
+      },
+    )
+
+    mod.send(:print_matron_login_instructions)
+
+    assert_includes output.string, "ssh root@<this-box>"
+  end
+
   private
 
   def build_module(output:, secrets_path: nil, config_hash: default_config,

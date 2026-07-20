@@ -138,7 +138,7 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
       assert File.exist?(File.join(dir, "matron-bridge.service"))
       assert File.exist?(File.join(dir, "matron-viewer.service"))
       assert_includes File.read(File.join(dir, "matron-bridge.service")), "/home/dev/matron-bridge/index.js"
-      assert_includes File.read(File.join(dir, "matron-viewer.service")), "viewer/server.js"
+      assert_includes File.read(File.join(dir, "matron-viewer.service")), "viewer/start.js"
       assert_recorded(/systemctl restart matron-bridge/)
       assert_recorded(/systemctl restart matron-viewer/)
     end

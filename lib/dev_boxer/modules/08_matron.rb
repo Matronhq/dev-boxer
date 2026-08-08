@@ -204,6 +204,10 @@ module DevBoxer
           "JOURNAL_WS_URL" => journal_ws_url,
           "JOURNAL_TOKEN_FILE" => token_file,
           "USERNAME" => username,
+          # The bridge's single-user identity: ALLOWED_USER_IDS[0] is the
+          # sender for !start/!resume — without it every command bounces
+          # with "Cannot determine sender."
+          "ALLOWED_USER_IDS" => "@#{username}:#{enrollment.agent_name}",
           "HMAC_SECRET" => hmac_secret,
           "VIEWER_BASE_URL" => exposure.viewer_base_url,
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,

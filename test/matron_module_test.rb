@@ -38,6 +38,33 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  # Without ALLOWED_USER_IDS the bridge has no sender identity and answers
+  # every !start/!resume with "Cannot determine sender."
+  def test_bridge_env_vars_sets_allowed_user_ids_from_user_and_agent_name
+    Dir.mktmpdir do |dir|
+      mod = build_matron(
+        { "journal" => { "agent_name" => "dev-z" } },
+        secrets_path: File.join(dir, "secrets.yml"),
+      )
+
+      assert_equal "@dev:dev-z", mod.send(:bridge_env_vars, "/t")["ALLOWED_USER_IDS"]
+    end
+  end
+
+  def test_allowed_user_ids_agent_name_falls_back_to_hostname
+    Dir.mktmpdir do |dir|
+      respond("hostname -s", success: true, stdout: "dev-6\n")
+      mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))
+
+      assert_equal "@dev:dev-6", mod.send(:bridge_env_vars, "/t")["ALLOWED_USER_IDS"]
+    end
+  end
+
+  def test_bridge_env_template_renders_allowed_user_ids
+    template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
+    assert_includes template, "ALLOWED_USER_IDS={{ALLOWED_USER_IDS}}"
+  end
+
   def test_bridge_env_vars_external_uses_journal_url_and_ca_line
     Dir.mktmpdir do |dir|
       mod = build_matron(

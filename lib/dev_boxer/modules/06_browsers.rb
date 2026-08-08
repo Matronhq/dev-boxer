@@ -26,12 +26,18 @@ module DevBoxer
           skip "Google Chrome already installed"
           return
         end
+        # Google publishes amd64 debs only — adding the repo on any other
+        # arch makes apt_update 404 and aborts the whole run.
+        arch = shell.sh!("dpkg --print-architecture").strip
+        unless arch == "amd64"
+          warn "Google Chrome has no arm64 Linux build; skipping Chrome (Firefox still installs)"
+          return
+        end
         info "Installing Google Chrome"
         shell.sh!(
           "curl -fsSL https://dl.google.com/linux/linux_signing_key.pub " \
           "| gpg --dearmor --yes -o /usr/share/keyrings/google-chrome.gpg"
         )
-        arch = shell.sh!("dpkg --print-architecture").strip
         repo = "deb [arch=#{arch} signed-by=/usr/share/keyrings/google-chrome.gpg] " \
                "https://dl.google.com/linux/chrome/deb/ stable main\n"
         shell.write_file("/etc/apt/sources.list.d/google-chrome.list", repo)

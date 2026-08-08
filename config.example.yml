@@ -7,6 +7,12 @@ user:
 ssh:
   port: 2222
 
+# Optional: a GitHub fine-grained PAT so the dev user can clone private repos
+# without an interactive `gh auth login` mid-setup. Put it in secrets.yml
+# (gitignored, mode 0600), not here.
+# github:
+#   token: github_pat_...
+
 desktop:
   enabled: false          # optional; run ~/setup-desktop after setup if you want XFCE/XRDP
 
@@ -82,3 +88,13 @@ exposure:
 
 hello_world:
   port: 9820             # local "hello world" smoke-test service (9810 belongs to the journal)
+
+# monitoring:
+#   node_exporter: true    # Prometheus node_exporter on 127.0.0.1:9100; set false to skip
+
+# Optional: send-only Postfix relay via Resend, plus fail2ban email alerts.
+# Put resend_api_key in secrets.yml, not here.
+# email:
+#   resend_api_key: re_...
+#   alert_email: you@example.com          # where fail2ban alerts go
+#   from_address: devbox@example.com

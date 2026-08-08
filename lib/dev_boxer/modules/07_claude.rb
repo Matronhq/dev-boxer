@@ -140,6 +140,10 @@ module DevBoxer
       # if the package was already installed, leaving the MCP server unregistered
       # if a previous run was interrupted between the two steps.
       def register_chrome_devtools_mcp_server
+        unless shell.command_exists?("google-chrome-stable")
+          warn "Chrome not installed (no arm64 build); skipping chrome-devtools MCP registration"
+          return
+        end
         if shell.sh("su - #{username} -c 'claude mcp list 2>/dev/null' | grep -q chrome-devtools")
           skip "chrome-devtools MCP server already registered"
           return

@@ -11,11 +11,19 @@ module DevBoxer
       content.gsub(PLACEHOLDER) { vars[$1].to_s }
     end
 
+    # A caller that asks for a mode gets SecureFile, which creates the file at
+    # that mode instead of writing first and tightening after. matron-bridge.env
+    # carries HMAC_SECRET and is rendered with mode 0o600; a plain File.write
+    # would expose it at the umask default on a first run, and at whatever the
+    # existing file's mode happens to be on every run after that.
     def self.render_to(path, output, vars, mode: nil)
       content = render(path, vars)
-      FileUtils.mkdir_p(File.dirname(output))
-      File.write(output, content)
-      File.chmod(mode, output) if mode
+      if mode
+        SecureFile.write(output, content, mode)
+      else
+        FileUtils.mkdir_p(File.dirname(output))
+        File.write(output, content)
+      end
       content
     end
   end

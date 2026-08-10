@@ -30,10 +30,10 @@ class TemplateTest < Minitest::Test
     end
   end
 
-  # Asserting the final mode proves nothing — File.chmod reaches 0600 with or
-  # without the umask guard. Stubbing chmod out leaves the umask as the only
-  # thing that can have restricted the file, which is precisely the state a
-  # crash between File.write and File.chmod would leave on disk.
+  # Asserting the final mode proves nothing — File.chmod reaches 0600 whether
+  # or not the file was created that way. Stubbing chmod out leaves creation
+  # as the only thing that can have restricted the file, which is precisely
+  # the state a crash mid-write would leave on disk.
   def test_render_to_never_creates_a_secret_bearing_file_world_readable
     Dir.mktmpdir do |dir|
       tpl = "#{dir}/in.env"
@@ -53,39 +53,54 @@ class TemplateTest < Minitest::Test
     end
   end
 
-  # Without the ensure, a template that fails to write would leave the process
-  # umask at 0o077 for the rest of the run, silently tightening every file a
-  # later module creates.
-  def test_render_to_restores_the_process_umask_when_the_write_fails
+  # The case a umask guard cannot reach: an interrupted earlier run leaves the
+  # target at 0644, and File.write over an existing file keeps that mode. Every
+  # run after the first would rewrite the secret into a world-readable file.
+  def test_render_to_replaces_an_existing_world_readable_target
     Dir.mktmpdir do |dir|
       tpl = "#{dir}/in.env"
-      File.write(tpl, "X={{Y}}")
+      File.write(tpl, "HMAC_SECRET={{SECRET}}\n")
+      out = "#{dir}/out.env"
+      File.write(out, "HMAC_SECRET=stale\n")
+      File.chmod(0o644, out)
 
-      previous = File.umask(0o022)
-      begin
-        assert_raises(Errno::EACCES, Errno::ENOENT) do
-          DevBoxer::Template.render_to(tpl, "/proc/nope/out.env", { "Y" => "1" }, mode: 0o600)
-        end
-        assert_equal 0o022, File.umask
-      ensure
-        File.umask(previous)
+      File.stub(:chmod, nil) do
+        DevBoxer::Template.render_to(tpl, out, { "SECRET" => "s3cret" }, mode: 0o600)
       end
+
+      assert_equal 0o600, File.stat(out).mode & 0o777
+      assert_equal "HMAC_SECRET=s3cret\n", File.read(out)
     end
   end
 
-  def test_render_to_leaves_the_umask_alone_for_ordinary_files
+  # rename(2) is atomic, so a failure must leave the previous secret in place
+  # rather than a truncated file — and must not strand the temporary copy,
+  # which holds the same secret.
+  def test_render_to_leaves_the_target_intact_when_the_write_fails
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.env"
+      File.write(tpl, "HMAC_SECRET={{SECRET}}\n")
+      out = "#{dir}/out.env"
+      File.write(out, "HMAC_SECRET=previous\n")
+
+      File.stub(:rename, ->(*) { raise Errno::EIO }) do
+        assert_raises(Errno::EIO) do
+          DevBoxer::Template.render_to(tpl, out, { "SECRET" => "s3cret" }, mode: 0o600)
+        end
+      end
+
+      assert_equal "HMAC_SECRET=previous\n", File.read(out)
+      assert_empty Dir.glob("#{dir}/.*.tmp"), "temporary copy of the secret left behind"
+    end
+  end
+
+  def test_render_to_leaves_unmoded_renders_on_the_plain_write_path
     Dir.mktmpdir do |dir|
       tpl = "#{dir}/in.txt"
-      File.write(tpl, "hi")
-      previous = File.umask(0o022)
-      begin
-        File.stub(:chmod, nil) do
-          DevBoxer::Template.render_to(tpl, "#{dir}/out.txt", {}, mode: 0o644)
-        end
-        assert_equal 0o644, File.stat("#{dir}/out.txt").mode & 0o777
-      ensure
-        File.umask(previous)
-      end
+      File.write(tpl, "hi {{NAME}}")
+      out = "#{dir}/out.txt"
+      DevBoxer::Template.render_to(tpl, out, { "NAME" => "dan" })
+      assert_equal "hi dan", File.read(out)
     end
   end
 

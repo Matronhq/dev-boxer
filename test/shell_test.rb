@@ -85,6 +85,25 @@ class ShellTest < Minitest::Test
     end
   end
 
+  # /etc/postfix/sasl_passwd goes through here carrying the Resend API key.
+  # See the matching template_test case for why chmod is stubbed out.
+  def test_write_file_never_creates_a_secret_bearing_file_world_readable
+    Dir.mktmpdir do |dir|
+      path = "#{dir}/sasl_passwd"
+
+      previous = File.umask(0o000)
+      begin
+        File.stub(:chmod, nil) do
+          @sh.write_file(path, "[smtp.resend.com]:587 resend:re_key\n", mode: 0o600)
+        end
+      ensure
+        File.umask(previous)
+      end
+
+      assert_equal 0o600, File.stat(path).mode & 0o777
+    end
+  end
+
   def test_sh_passes_stdin_through_runner
     captured_opts = nil
     runner = lambda do |_cmd, opts = {}|

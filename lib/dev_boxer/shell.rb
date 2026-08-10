@@ -82,9 +82,17 @@ module DevBoxer
       raise Error, "interactive command failed: su - #{user} -c #{cmd}"
     end
 
+    # Same umask rule as Template.render_to: /etc/postfix/sasl_passwd is
+    # written here with mode 0o600 and holds the Resend API key, so it must
+    # not exist world-readable even for the moment before File.chmod runs.
     def write_file(path, content, mode: nil, owner: nil)
       FileUtils.mkdir_p(File.dirname(path))
-      File.write(path, content)
+      old_umask = mode == 0o600 ? File.umask(0o077) : nil
+      begin
+        File.write(path, content)
+      ensure
+        File.umask(old_umask) if old_umask
+      end
       File.chmod(mode, path) if mode
       sh!("chown #{Shellwords.escape(owner)} #{Shellwords.escape(path)}") if owner
     end

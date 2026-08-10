@@ -30,6 +30,65 @@ class TemplateTest < Minitest::Test
     end
   end
 
+  # Asserting the final mode proves nothing — File.chmod reaches 0600 with or
+  # without the umask guard. Stubbing chmod out leaves the umask as the only
+  # thing that can have restricted the file, which is precisely the state a
+  # crash between File.write and File.chmod would leave on disk.
+  def test_render_to_never_creates_a_secret_bearing_file_world_readable
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.env"
+      File.write(tpl, "HMAC_SECRET={{SECRET}}\n")
+      out = "#{dir}/out.env"
+
+      previous = File.umask(0o000)
+      begin
+        File.stub(:chmod, nil) do
+          DevBoxer::Template.render_to(tpl, out, { "SECRET" => "s3cret" }, mode: 0o600)
+        end
+      ensure
+        File.umask(previous)
+      end
+
+      assert_equal 0o600, File.stat(out).mode & 0o777
+    end
+  end
+
+  # Without the ensure, a template that fails to write would leave the process
+  # umask at 0o077 for the rest of the run, silently tightening every file a
+  # later module creates.
+  def test_render_to_restores_the_process_umask_when_the_write_fails
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.env"
+      File.write(tpl, "X={{Y}}")
+
+      previous = File.umask(0o022)
+      begin
+        assert_raises(Errno::EACCES, Errno::ENOENT) do
+          DevBoxer::Template.render_to(tpl, "/proc/nope/out.env", { "Y" => "1" }, mode: 0o600)
+        end
+        assert_equal 0o022, File.umask
+      ensure
+        File.umask(previous)
+      end
+    end
+  end
+
+  def test_render_to_leaves_the_umask_alone_for_ordinary_files
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "hi")
+      previous = File.umask(0o022)
+      begin
+        File.stub(:chmod, nil) do
+          DevBoxer::Template.render_to(tpl, "#{dir}/out.txt", {}, mode: 0o644)
+        end
+        assert_equal 0o644, File.stat("#{dir}/out.txt").mode & 0o777
+      ensure
+        File.umask(previous)
+      end
+    end
+  end
+
   def test_raises_when_template_missing
     assert_raises(DevBoxer::Template::NotFound) do
       DevBoxer::Template.render("/no/such/template", {})

@@ -65,6 +65,51 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_includes template, "ALLOWED_USER_IDS={{ALLOWED_USER_IDS}}"
   end
 
+  def test_bridge_env_template_carries_the_openai_key_line
+    template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
+    assert_includes template, "{{OPENAI_API_KEY_LINE}}"
+  end
+
+  # No key configured is the norm, not an error: the bridge falls back to
+  # first-message titles. The line must render away entirely rather than
+  # leaving a bare OPENAI_API_KEY=, which would read as a configured-but-
+  # empty key.
+  def test_openai_key_line_is_empty_when_unconfigured
+    Dir.mktmpdir do |dir|
+      mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))
+
+      assert_equal "", mod.send(:bridge_env_vars, "/t")["OPENAI_API_KEY_LINE"]
+    end
+  end
+
+  def test_openai_key_line_renders_from_bridge_secret
+    Dir.mktmpdir do |dir|
+      mod = build_matron(
+        { "bridge" => { "openai_api_key" => "sk-test-123" } },
+        secrets_path: File.join(dir, "secrets.yml"),
+      )
+
+      assert_equal "OPENAI_API_KEY=sk-test-123", mod.send(:bridge_env_vars, "/t")["OPENAI_API_KEY_LINE"]
+    end
+  end
+
+  # The rendered .env must be a single OPENAI_API_KEY= line and nothing else —
+  # a stray blank-line artifact is harmless, a duplicated key is not.
+  def test_rendered_env_contains_the_key_exactly_once
+    Dir.mktmpdir do |dir|
+      mod = build_matron(
+        { "bridge" => { "openai_api_key" => "sk-test-123" } },
+        secrets_path: File.join(dir, "secrets.yml"),
+      )
+      vars = mod.send(:bridge_env_vars, "/t")
+
+      rendered = DevBoxer::Template.render(File.join(TEMPLATES_DIR, "matron-bridge.env"), vars)
+
+      assert_equal 1, rendered.lines.count { |l| l.start_with?("OPENAI_API_KEY=") }
+      assert_includes rendered, "OPENAI_API_KEY=sk-test-123"
+    end
+  end
+
   def test_bridge_env_vars_external_uses_journal_url_and_ca_line
     Dir.mktmpdir do |dir|
       mod = build_matron(

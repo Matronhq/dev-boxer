@@ -211,6 +211,7 @@ module DevBoxer
           "HMAC_SECRET" => hmac_secret,
           "VIEWER_BASE_URL" => exposure.viewer_base_url,
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,
+          "OPENAI_API_KEY_LINE" => openai_api_key_line,
         }
       end
 
@@ -229,6 +230,17 @@ module DevBoxer
       def node_extra_ca_line
         ca = config.journal&.ca_file
         ca.to_s.empty? ? "" : "NODE_EXTRA_CA_CERTS=#{ca}"
+      end
+
+      # Optional: the bridge titles conversations and writes rolling TOC
+      # summaries through an LLM, preferring OpenAI when a key is set and
+      # falling back to Gemini. With neither, sessions still work — titles
+      # just keep the first-message fallback — so this stays a whole-line
+      # placeholder that renders to nothing when unset, exactly like
+      # NODE_EXTRA_CA_LINE. Absent means "summarisation off", not "broken".
+      def openai_api_key_line
+        key = config.bridge&.openai_api_key
+        key.to_s.empty? ? "" : "OPENAI_API_KEY=#{key}"
       end
 
       def write_mcp_config

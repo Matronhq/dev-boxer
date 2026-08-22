@@ -211,6 +211,14 @@ module DevBoxer
           "HMAC_SECRET" => hmac_secret,
           "VIEWER_BASE_URL" => exposure.viewer_base_url,
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,
+          # /sleep: the host command the bridge runs to stop this box on
+          # demand. Empty by default and never guessed — whether stopping the
+          # box is reversible is a property of the surrounding infrastructure
+          # (an orchestrator that starts it again on demand), which dev-boxer
+          # cannot see. The deployer that knows sets it; everyone else gets a
+          # /sleep that politely says it is not configured.
+          "MATRON_SLEEP_COMMAND" => config.bridge&.sleep_command.to_s,
+          "MATRON_SLEEP_WAKE_HINT" => config.bridge&.sleep_wake_hint.to_s,
         }
       end
 

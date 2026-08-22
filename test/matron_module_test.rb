@@ -65,6 +65,41 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_includes template, "ALLOWED_USER_IDS={{ALLOWED_USER_IDS}}"
   end
 
+  # /sleep stops the whole box, and whether that is reversible depends on the
+  # deployment (here: the host's vm-wake starts a stopped guest again). Only a
+  # deployer knows, so dev-boxer ships the key empty and never guesses.
+  def test_bridge_env_vars_sleep_command_is_empty_by_default
+    Dir.mktmpdir do |dir|
+      mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))
+
+      vars = mod.send(:bridge_env_vars, "/t")
+
+      assert_equal "", vars["MATRON_SLEEP_COMMAND"]
+      assert_equal "", vars["MATRON_SLEEP_WAKE_HINT"]
+    end
+  end
+
+  def test_bridge_env_vars_sleep_command_from_config
+    Dir.mktmpdir do |dir|
+      mod = build_matron(
+        { "bridge" => { "sleep_command" => "sudo systemctl poweroff",
+                        "sleep_wake_hint" => "you message this chat" } },
+        secrets_path: File.join(dir, "secrets.yml"),
+      )
+
+      vars = mod.send(:bridge_env_vars, "/t")
+
+      assert_equal "sudo systemctl poweroff", vars["MATRON_SLEEP_COMMAND"]
+      assert_equal "you message this chat", vars["MATRON_SLEEP_WAKE_HINT"]
+    end
+  end
+
+  def test_bridge_env_template_renders_sleep_keys
+    template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
+    assert_includes template, "MATRON_SLEEP_COMMAND={{MATRON_SLEEP_COMMAND}}"
+    assert_includes template, "MATRON_SLEEP_WAKE_HINT={{MATRON_SLEEP_WAKE_HINT}}"
+  end
+
   def test_bridge_env_vars_external_uses_journal_url_and_ca_line
     Dir.mktmpdir do |dir|
       mod = build_matron(

@@ -280,6 +280,14 @@ module DevBoxer
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,
           "WHISPER_MODEL_LINE" => whisper_model_line,
           "OPENAI_API_KEY_LINE" => openai_api_key_line,
+          # /sleep: the host command the bridge runs to stop this box on
+          # demand. Empty by default and never guessed — whether stopping the
+          # box is reversible is a property of the surrounding infrastructure
+          # (an orchestrator that starts it again on demand), which dev-boxer
+          # cannot see. The deployer that knows sets it; everyone else gets a
+          # /sleep that politely says it is not configured.
+          "MATRON_SLEEP_COMMAND" => config.bridge&.sleep_command.to_s,
+          "MATRON_SLEEP_WAKE_HINT" => config.bridge&.sleep_wake_hint.to_s,
         }
       end
 

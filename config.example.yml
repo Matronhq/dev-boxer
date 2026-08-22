@@ -47,6 +47,20 @@ journal:
   # ./secrets.yml (gitignored, mode 0600) — that password is your Matron
   # app login. The agent token lives in /etc/matron/agent-token, not here.
 
+# Optional matron-bridge settings.
+bridge:
+  # The /sleep command: what this box runs to stop itself on demand, after a
+  # confirmation button in chat. Empty (the default) disables /sleep, which
+  # then replies that it is not configured.
+  #
+  # Only set this where something can start the box again. On a VM whose host
+  # starts it when a chat message arrives, `sudo systemctl poweroff` is a nap.
+  # On a laptop, or a VPS with nothing watching it, the same line means the box
+  # is gone and nothing — including the bridge you would ask — can bring it
+  # back. dev-boxer cannot tell which one you have, so it never guesses.
+  sleep_command: null      # e.g. "sudo systemctl poweroff" (needs passwordless sudo)
+  sleep_wake_hint: null    # e.g. "you message this chat" — shown on the confirmation card
+
 # How this box is reached from the internet.
 exposure:
   mode: cloudflare         # cloudflare (own domain, trusted cert)

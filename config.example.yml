@@ -47,6 +47,19 @@ journal:
   # ./secrets.yml (gitignored, mode 0600) — that password is your Matron
   # app login. The agent token lives in /etc/matron/agent-token, not here.
 
+# The matron-bridge process on this box.
+bridge:
+  # Voice notes sent from the Matron apps are transcribed locally with
+  # ffmpeg + whisper.cpp. Setup builds whisper.cpp from source and downloads
+  # the model (small is ~470 MB), which adds a few minutes to a first run —
+  # set enabled: false to skip it and lose only voice notes. A failed build
+  # never aborts setup; re-run ~/matron-bridge/setup/install-whisper.sh later.
+  voice_notes:
+    enabled: true
+    model: small           # tiny | base | small | medium | large (bigger = better, slower, more RAM)
+  # bridge.hmac_secret is generated into secrets.yml on first run; it signs
+  # the file-viewer links, so don't set it here.
+
 # How this box is reached from the internet.
 exposure:
   mode: cloudflare         # cloudflare (own domain, trusted cert)

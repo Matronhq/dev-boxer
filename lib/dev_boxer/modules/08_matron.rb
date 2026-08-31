@@ -21,6 +21,10 @@ module DevBoxer
       JOURNAL_DIR  = JournalEnrollment::JOURNAL_DIR
       JOURNAL_LOCAL_HTTP = "http://127.0.0.1:9810".freeze
       JOURNAL_LOCAL_WS   = "ws://127.0.0.1:9810/ws".freeze
+      # Where the bridge's own installer puts whisper.cpp, and the model the
+      # bridge falls back to when WHISPER_MODEL_PATH is unset.
+      WHISPER_SUBDIR = ".local/share/whisper-cpp".freeze
+      DEFAULT_WHISPER_MODEL = "small".freeze
 
       def run
         section "Matron chat stack"
@@ -37,6 +41,7 @@ module DevBoxer
 
         token_file = enrollment.resolve!
         install_bridge
+        install_voice_notes
         write_bridge_env(token_file)
         write_mcp_config
         install_systemd_units
@@ -189,6 +194,62 @@ module DevBoxer
         ok "GitHub CLI authenticated for #{username}"
       end
 
+      # ----- voice notes -----
+
+      # The bridge transcribes voice notes by shelling out to ffmpeg and
+      # whisper.cpp. Neither arrives with its npm dependencies, so a box
+      # provisioned without this step looks healthy until someone actually
+      # sends a voice note — the bridge answers every one of them with
+      # "Could not transcribe that voice note" (the underlying `spawn ffmpeg
+      # ENOENT` only ever reaches the service log).
+      #
+      # The bridge ships the installer, so it stays the single source of
+      # truth for the whisper.cpp version, build flags and install paths;
+      # we only choose the model and honour the operator's opt-out.
+      #
+      # Best-effort by design: a failed build or model download costs voice
+      # notes, never the bridge, so a low-memory or slow-network box still
+      # finishes setup with a working chat stack.
+      def install_voice_notes
+        unless voice_notes_enabled?
+          skip "Voice-note transcription disabled (bridge.voice_notes.enabled: false)"
+          return
+        end
+        if file_exists?(whisper_bin) && file_exists?(whisper_model_path)
+          skip "Whisper #{whisper_model} model already installed"
+          return
+        end
+
+        info "Installing ffmpeg + whisper.cpp (#{whisper_model} model) for voice notes — builds from source, takes a few minutes"
+        shell.run_as_user(
+          username,
+          "WHISPER_MODEL=#{Shellwords.escape(whisper_model)} bash #{bridge_dir}/setup/install-whisper.sh",
+        )
+        ok "Voice-note transcription ready"
+      rescue Shell::Error => e
+        warn "Whisper install failed — voice notes will not transcribe until you re-run " \
+             "`#{bridge_dir}/setup/install-whisper.sh` as #{username}: #{e.message.lines.first&.strip}"
+      end
+
+      def voice_notes_enabled? = config.bridge&.voice_notes&.enabled != false
+      def whisper_model = config.bridge&.voice_notes&.model || DEFAULT_WHISPER_MODEL
+      def whisper_dir = "#{home_dir}/#{WHISPER_SUBDIR}"
+      def whisper_bin = "#{whisper_dir}/build/bin/whisper-cli"
+      def whisper_model_path = "#{whisper_dir}/models/ggml-#{whisper_model}.bin"
+
+      # Via shell rather than File.exist? so module tests can drive the
+      # already-installed / not-yet-installed branches without a real
+      # /home/<user> tree.
+      def file_exists?(path) = shell.sh("test -f #{Shellwords.escape(path)}")
+
+      # The bridge already defaults to the small model at this exact path, so
+      # this line only strictly matters when the operator picks another model
+      # — but writing it always keeps .env honest about which model the box
+      # actually built.
+      def whisper_model_line
+        voice_notes_enabled? ? "WHISPER_MODEL_PATH=#{whisper_model_path}" : ""
+      end
+
       def write_bridge_env(token_file)
         info "Generating bridge .env"
         render_template("matron-bridge.env", "#{bridge_dir}/.env", bridge_env_vars(token_file), mode: 0o600)
@@ -211,6 +272,7 @@ module DevBoxer
           "HMAC_SECRET" => hmac_secret,
           "VIEWER_BASE_URL" => exposure.viewer_base_url,
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,
+          "WHISPER_MODEL_LINE" => whisper_model_line,
         }
       end
 

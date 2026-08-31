@@ -152,6 +152,97 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  # Voice notes were the bug this covers: the bridge shells out to ffmpeg and
+  # whisper-cli, dev-boxer installed neither, and the failure surfaced only as
+  # "Could not transcribe that voice note" the first time someone sent one.
+  def test_install_voice_notes_runs_the_bridge_installer_when_absent
+    respond("test -f /home/dev/.local/share/whisper-cpp/build/bin/whisper-cli", success: false)
+    mod = build_matron
+
+    mod.send(:install_voice_notes)
+
+    # Shellwords-escaped inside the `su - dev -c` wrapper, so `=` and spaces
+    # arrive backslashed.
+    assert_recorded(%r{WHISPER_MODEL\\=small.*setup/install-whisper\.sh})
+  end
+
+  def test_install_voice_notes_passes_the_configured_model
+    respond("test -f /home/dev/.local/share/whisper-cpp/build/bin/whisper-cli", success: false)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "model" => "medium" } } })
+
+    mod.send(:install_voice_notes)
+
+    assert_recorded(/WHISPER_MODEL\\=medium/)
+  end
+
+  # Idempotent re-runs must not rebuild whisper.cpp or re-download the model.
+  def test_install_voice_notes_skips_when_binary_and_model_present
+    respond_default(success: true)
+    mod = build_matron
+
+    mod.send(:install_voice_notes)
+
+    refute_recorded(/install-whisper\.sh/)
+  end
+
+  # A binary from an earlier run plus a missing model (interrupted download)
+  # must still converge, not report "already installed".
+  def test_install_voice_notes_reinstalls_when_model_missing
+    respond("test -f /home/dev/.local/share/whisper-cpp/models/ggml-small.bin", success: false)
+    mod = build_matron
+
+    mod.send(:install_voice_notes)
+
+    assert_recorded(/install-whisper\.sh/)
+  end
+
+  def test_install_voice_notes_can_be_disabled
+    respond_default(success: false)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:install_voice_notes)
+
+    refute_recorded(/install-whisper\.sh/)
+  end
+
+  # Opting out must not leave `WHISPER_MODEL_PATH=` (empty) in .env pointing
+  # the bridge at a model nothing installed.
+  def test_bridge_env_vars_omits_whisper_line_when_voice_notes_disabled
+    Dir.mktmpdir do |dir|
+      mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } },
+                         secrets_path: File.join(dir, "secrets.yml"))
+
+      assert_equal "", mod.send(:bridge_env_vars, "/t")["WHISPER_MODEL_LINE"]
+    end
+  end
+
+  # Voice notes are a nice-to-have; a whisper build that OOMs or times out on
+  # a small box must not take the whole chat stack down with it.
+  def test_install_voice_notes_failure_warns_instead_of_aborting_setup
+    respond_default(success: false)
+    mod = build_matron
+
+    mod.send(:install_voice_notes)
+
+    assert_match(/Whisper install failed/, @log_io.string)
+    assert_match(%r{setup/install-whisper\.sh}, @log_io.string)
+  end
+
+  def test_bridge_env_vars_points_the_bridge_at_the_installed_model
+    Dir.mktmpdir do |dir|
+      mod = build_matron({ "bridge" => { "voice_notes" => { "model" => "medium" } } },
+                         secrets_path: File.join(dir, "secrets.yml"))
+
+      assert_equal "WHISPER_MODEL_PATH=/home/dev/.local/share/whisper-cpp/models/ggml-medium.bin",
+                   mod.send(:bridge_env_vars, "/t")["WHISPER_MODEL_LINE"]
+    end
+  end
+
+  def test_bridge_env_template_renders_whisper_model_line
+    template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
+    assert_includes template, "{{WHISPER_MODEL_LINE}}"
+  end
+
   def test_systemd_units_are_matron_named
     Dir.mktmpdir do |dir|
       respond_default(success: true)

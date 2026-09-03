@@ -30,6 +30,23 @@ class DockerModuleTest < Minitest::Test
     assert_equal "24h", mod.send(:prune_until)
   end
 
+  def test_prune_script_exempts_keep_labelled_images
+    mod = build_module("docker" => { "prune" => { "interval" => 2, "keep_until" => 4 } })
+    written = {}
+    File.stub(:write, ->(path, content) { written[path] = content }) do
+      File.stub(:chmod, ->(_mode, _path) { 1 }) do
+        mod.send(:write_prune_script)
+      end
+    end
+
+    script = written.fetch("/usr/local/bin/docker-prune.sh")
+    # Locally built images that a box cannot re-pull (yearbook-app's php-fpm
+    # and its sidecars) carry com.yearbook.keep=true; pruning them while their
+    # container happens to be stopped costs a 15-minute rebuild and, for the
+    # editor sidecar, a dead editor until someone notices.
+    assert_includes script, 'docker image prune -a -f --filter "until=4h" --filter "label!=com.yearbook.keep=true"'
+  end
+
   private
 
   def build_module(config_hash)

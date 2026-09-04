@@ -112,7 +112,7 @@ Setup runs 10 modules by default, in order; the optional desktop module (03) bri
 | 05 | `dev-tools`    | Node.js 22, Git, Python, uv, GitHub CLI |
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
-| 08 | `matron`       | matron-journal (bundled mode) + matron-bridge, agent enrollment |
+| 08 | `matron`       | matron-journal (bundled mode) + matron-bridge, agent enrollment, voice-note transcription (ffmpeg + whisper.cpp; `bridge.voice_notes`) |
 | 09 | `exposure`     | Cloudflare Tunnel or IP + self-signed TLS, per `exposure.mode` |
 | 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |
 | 11 | `hello-world`  | `localhost:9820` tunnel smoke-test service |

@@ -228,6 +228,19 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_match(%r{setup/install-whisper\.sh}, @log_io.string)
   end
 
+  # The recovery command is only useful if it reinstates the *configured*
+  # model. The installer defaults to small while .env points at whatever was
+  # configured, so a bare re-run would leave the bridge reading a model path
+  # nothing wrote — voice notes still broken, with setup reporting success.
+  def test_install_voice_notes_failure_warning_names_the_configured_model
+    respond_default(success: false)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "model" => "medium" } } })
+
+    mod.send(:install_voice_notes)
+
+    assert_match(%r{WHISPER_MODEL=medium bash \S*/setup/install-whisper\.sh}, @log_io.string)
+  end
+
   def test_bridge_env_vars_points_the_bridge_at_the_installed_model
     Dir.mktmpdir do |dir|
       mod = build_matron({ "bridge" => { "voice_notes" => { "model" => "medium" } } },

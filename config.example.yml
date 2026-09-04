@@ -53,7 +53,9 @@ bridge:
   # ffmpeg + whisper.cpp. Setup builds whisper.cpp from source and downloads
   # the model (small is ~470 MB), which adds a few minutes to a first run —
   # set enabled: false to skip it and lose only voice notes. A failed build
-  # never aborts setup; re-run ~/matron-bridge/setup/install-whisper.sh later.
+  # never aborts setup; re-run it later as the dev user, passing the model you
+  # configured below (the installer's own default is small):
+  #   WHISPER_MODEL=small bash ~/matron-bridge/setup/install-whisper.sh
   voice_notes:
     enabled: true
     model: small           # tiny | base | small | medium | large (bigger = better, slower, more RAM)

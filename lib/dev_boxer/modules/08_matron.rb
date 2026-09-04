@@ -221,14 +221,20 @@ module DevBoxer
         end
 
         info "Installing ffmpeg + whisper.cpp (#{whisper_model} model) for voice notes — builds from source, takes a few minutes"
-        shell.run_as_user(
-          username,
-          "WHISPER_MODEL=#{Shellwords.escape(whisper_model)} bash #{bridge_dir}/setup/install-whisper.sh",
-        )
+        shell.run_as_user(username, whisper_install_cmd)
         ok "Voice-note transcription ready"
       rescue Shell::Error => e
         warn "Whisper install failed — voice notes will not transcribe until you re-run " \
-             "`#{bridge_dir}/setup/install-whisper.sh` as #{username}: #{e.message.lines.first&.strip}"
+             "`#{whisper_install_cmd}` as #{username}: #{e.message.lines.first&.strip}"
+      end
+
+      # Both the install and the recovery advice have to carry WHISPER_MODEL.
+      # The installer defaults to `small` while .env points WHISPER_MODEL_PATH
+      # at the configured model, so a bare re-run on a non-default box installs
+      # a model the bridge never reads — and voice notes stay broken in exactly
+      # the case the operator is trying to fix.
+      def whisper_install_cmd
+        "WHISPER_MODEL=#{Shellwords.escape(whisper_model)} bash #{bridge_dir}/setup/install-whisper.sh"
       end
 
       def voice_notes_enabled? = config.bridge&.voice_notes&.enabled != false

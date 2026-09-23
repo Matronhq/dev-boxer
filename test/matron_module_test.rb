@@ -65,6 +65,33 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_includes template, "ALLOWED_USER_IDS={{ALLOWED_USER_IDS}}"
   end
 
+  # mcp-config-generated.json is left world-readable: nothing secret may be
+  # in its render input, let alone its output.
+  def test_mcp_config_render_input_carries_no_secrets
+    Dir.mktmpdir do |dir|
+      mod = build_matron(
+        { "bridge" => { "openai_api_key" => "sk-test-123" } },
+        secrets_path: File.join(dir, "secrets.yml"),
+      )
+
+      assert_equal({ "USERNAME" => "dev" }, mod.send(:mcp_config_vars))
+      template = File.read(File.join(TEMPLATES_DIR, "mcp-config.json"))
+      assert_equal ["USERNAME"], template.scan(DevBoxer::Template::PLACEHOLDER).flatten.uniq,
+                   "mcp-config.json grew a placeholder; add it to mcp_config_vars only if it is not a secret"
+    end
+  end
+
+  def test_bridge_env_is_written_private
+    Dir.mktmpdir do |dir|
+      mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))
+      mod.define_singleton_method(:bridge_dir) { dir }
+
+      mod.send(:write_bridge_env, "/t")
+
+      assert_equal 0o600, File.stat(File.join(dir, ".env")).mode & 0o777
+    end
+  end
+
   def test_bridge_env_template_carries_the_openai_key_line
     template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
     assert_includes template, "{{OPENAI_API_KEY_LINE}}"

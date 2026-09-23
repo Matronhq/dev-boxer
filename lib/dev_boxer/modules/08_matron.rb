@@ -258,7 +258,7 @@ module DevBoxer
 
       def write_bridge_env(token_file)
         info "Generating bridge .env"
-        render_template("matron-bridge.env", "#{bridge_dir}/.env", bridge_env_vars(token_file), mode: 0o600)
+        render_private_template("matron-bridge.env", "#{bridge_dir}/.env", bridge_env_vars(token_file))
         shell.sh!("chown #{username}:#{username} #{bridge_dir}/.env")
         ok "Bridge .env generated"
       end
@@ -282,6 +282,8 @@ module DevBoxer
           "OPENAI_API_KEY_LINE" => openai_api_key_line,
         }
       end
+
+      def mcp_config_vars = { "USERNAME" => username }
 
       def journal_ws_url
         journal_mode == "bundled" ? JOURNAL_LOCAL_WS : config.journal.url
@@ -313,7 +315,9 @@ module DevBoxer
 
       def write_mcp_config
         info "Generating bridge MCP config"
-        render_template("mcp-config.json", "#{bridge_dir}/mcp-config-generated.json", bridge_env_vars)
+        # Only what the template uses: this file is world-readable, so the
+        # secrets in bridge_env_vars must not even be in its render input.
+        render_template("mcp-config.json", "#{bridge_dir}/mcp-config-generated.json", mcp_config_vars)
         shell.sh!("chown #{username}:#{username} #{bridge_dir}/mcp-config-generated.json")
         ok "Bridge MCP config generated"
       end

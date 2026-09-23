@@ -12,13 +12,19 @@ module DevBoxer
     end
 
     def self.render_to(path, output, vars, mode: nil)
+      return render_private_to(path, output, vars, mode: mode) if mode
       content = render(path, vars)
       FileUtils.mkdir_p(File.dirname(output))
-      if mode
-        write_restricted(output, content, mode)
-      else
-        File.write(output, content)
-      end
+      File.write(output, content)
+      content
+    end
+
+    # For renders that carry secrets. Kept separate from render_to so a
+    # secret never flows anywhere near its plain File.write.
+    def self.render_private_to(path, output, vars, mode: 0o600)
+      content = render(path, vars)
+      FileUtils.mkdir_p(File.dirname(output))
+      write_restricted(output, content, mode)
       content
     end
 

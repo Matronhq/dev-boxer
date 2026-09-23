@@ -65,19 +65,21 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_includes template, "ALLOWED_USER_IDS={{ALLOWED_USER_IDS}}"
   end
 
-  # mcp-config-generated.json is left world-readable: nothing secret may be
-  # in its render input, let alone its output.
-  def test_mcp_config_render_input_carries_no_secrets
+  # mcp-config-generated.json and the unit files are world-readable: nothing
+  # secret may be in their render input, let alone their output.
+  def test_public_bridge_files_render_input_carries_no_secrets
     Dir.mktmpdir do |dir|
       mod = build_matron(
         { "bridge" => { "openai_api_key" => "sk-test-123" } },
         secrets_path: File.join(dir, "secrets.yml"),
       )
 
-      assert_equal({ "USERNAME" => "dev" }, mod.send(:mcp_config_vars))
-      template = File.read(File.join(TEMPLATES_DIR, "mcp-config.json"))
-      assert_equal ["USERNAME"], template.scan(DevBoxer::Template::PLACEHOLDER).flatten.uniq,
-                   "mcp-config.json grew a placeholder; add it to mcp_config_vars only if it is not a secret"
+      assert_equal({ "USERNAME" => "dev" }, mod.send(:public_render_vars))
+      %w[mcp-config.json matron-bridge.service matron-viewer.service].each do |name|
+        template = File.read(File.join(TEMPLATES_DIR, name))
+        assert_equal ["USERNAME"], template.scan(DevBoxer::Template::PLACEHOLDER).flatten.uniq,
+                     "#{name} grew a placeholder; add it to public_render_vars only if it is not a secret"
+      end
     end
   end
 

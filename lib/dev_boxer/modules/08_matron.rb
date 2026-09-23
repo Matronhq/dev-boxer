@@ -283,7 +283,9 @@ module DevBoxer
         }
       end
 
-      def mcp_config_vars = { "USERNAME" => username }
+      # Render input for the world-readable bridge files (MCP config, unit
+      # files). Everything they need is non-secret.
+      def public_render_vars = { "USERNAME" => username }
 
       def journal_ws_url
         journal_mode == "bundled" ? JOURNAL_LOCAL_WS : config.journal.url
@@ -315,17 +317,19 @@ module DevBoxer
 
       def write_mcp_config
         info "Generating bridge MCP config"
-        # Only what the template uses: this file is world-readable, so the
-        # secrets in bridge_env_vars must not even be in its render input.
-        render_template("mcp-config.json", "#{bridge_dir}/mcp-config-generated.json", mcp_config_vars)
+        # World-readable, so the secrets in bridge_env_vars must not even be
+        # in its render input.
+        render_template("mcp-config.json", "#{bridge_dir}/mcp-config-generated.json", public_render_vars)
         shell.sh!("chown #{username}:#{username} #{bridge_dir}/mcp-config-generated.json")
         ok "Bridge MCP config generated"
       end
 
       def install_systemd_units
         info "Installing systemd services"
-        render_template("matron-bridge.service", "#{unit_dir}/matron-bridge.service", bridge_env_vars)
-        render_template("matron-viewer.service", "#{unit_dir}/matron-viewer.service", bridge_env_vars)
+        # Unit files are world-readable: render them from the username only,
+        # never from bridge_env_vars (which carries the .env secrets).
+        render_template("matron-bridge.service", "#{unit_dir}/matron-bridge.service", public_render_vars)
+        render_template("matron-viewer.service", "#{unit_dir}/matron-viewer.service", public_render_vars)
         shell.sh!("systemctl daemon-reload")
         shell.systemctl(:enable, "matron-bridge")
         shell.systemctl(:enable, "matron-viewer")

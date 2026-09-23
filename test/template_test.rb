@@ -30,6 +30,51 @@ class TemplateTest < Minitest::Test
     end
   end
 
+  # A mode-restricted render (the bridge .env: HMAC_SECRET, OPENAI_API_KEY)
+  # must never put the secret in a file anyone else can read, not even for
+  # the moment between the write and a chmod. Every byte of the content must
+  # land in a file that already has the requested mode.
+  def test_render_to_with_mode_never_exposes_content_at_a_wider_mode
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "SECRET={{S}}")
+      out = "#{dir}/out.env"
+      seen = []
+      spy = TracePoint.new(:c_call) do |tp|
+        next unless tp.method_id == :write && tp.defined_class == IO.singleton_class
+        seen << :bare_write
+      end
+      old_umask = File.umask(0o022)
+      begin
+        spy.enable { DevBoxer::Template.render_to(tpl, out, { "S" => "hunter2" }, mode: 0o600) }
+      ensure
+        File.umask(old_umask)
+      end
+      assert_empty seen, "File.write creates the file at the umask default, before chmod"
+      assert_equal "SECRET=hunter2", File.read(out)
+      assert_equal 0o600, File.stat(out).mode & 0o777
+    end
+  end
+
+  # Re-rendering over an existing, wider file (an .env from an older run, or
+  # one a user created by hand at 0644) must not write the new secret into it
+  # first and tighten it afterwards.
+  def test_render_to_with_mode_replaces_a_wider_existing_file
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "SECRET={{S}}")
+      out = "#{dir}/out.env"
+      File.write(out, "old")
+      File.chmod(0o644, out)
+      old_inode = File.stat(out).ino
+      DevBoxer::Template.render_to(tpl, out, { "S" => "hunter2" }, mode: 0o600)
+      assert_equal "SECRET=hunter2", File.read(out)
+      assert_equal 0o600, File.stat(out).mode & 0o777
+      refute_equal old_inode, File.stat(out).ino, "secret must not be written into the 0644 inode"
+      assert_equal ["out.env"], Dir.children(dir).reject { |f| f == "in.txt" }, "no temp file left behind"
+    end
+  end
+
   def test_raises_when_template_missing
     assert_raises(DevBoxer::Template::NotFound) do
       DevBoxer::Template.render("/no/such/template", {})

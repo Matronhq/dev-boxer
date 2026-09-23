@@ -61,6 +61,12 @@ module DevBoxer
       Template.render_to(template_path(template_name), output_path, vars, mode: mode)
     end
 
+    # Secret-bearing output (0600 unless told otherwise); see
+    # Template.render_private_to.
+    def render_private_template(template_name, output_path, vars, mode: 0o600)
+      Template.render_private_to(template_path(template_name), output_path, vars, mode: mode)
+    end
+
     def section(title) = log.section(title)
     def info(msg)      = log.info(msg)
     def ok(msg)        = log.ok(msg)

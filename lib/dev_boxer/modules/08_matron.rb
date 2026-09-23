@@ -258,7 +258,7 @@ module DevBoxer
 
       def write_bridge_env(token_file)
         info "Generating bridge .env"
-        render_template("matron-bridge.env", "#{bridge_dir}/.env", bridge_env_vars(token_file), mode: 0o600)
+        render_private_template("matron-bridge.env", "#{bridge_dir}/.env", bridge_env_vars(token_file))
         shell.sh!("chown #{username}:#{username} #{bridge_dir}/.env")
         ok "Bridge .env generated"
       end
@@ -279,8 +279,13 @@ module DevBoxer
           "VIEWER_BASE_URL" => exposure.viewer_base_url,
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,
           "WHISPER_MODEL_LINE" => whisper_model_line,
+          "OPENAI_API_KEY_LINE" => openai_api_key_line,
         }
       end
+
+      # Render input for the world-readable bridge files (MCP config, unit
+      # files). Everything they need is non-secret.
+      def public_render_vars = { "USERNAME" => username }
 
       def journal_ws_url
         journal_mode == "bundled" ? JOURNAL_LOCAL_WS : config.journal.url
@@ -299,17 +304,32 @@ module DevBoxer
         ca.to_s.empty? ? "" : "NODE_EXTRA_CA_CERTS=#{ca}"
       end
 
+      # Optional: the bridge titles conversations and writes rolling TOC
+      # summaries through an LLM, preferring OpenAI when a key is set and
+      # falling back to Gemini. With neither, sessions still work — titles
+      # just keep the first-message fallback — so this stays a whole-line
+      # placeholder that renders to nothing when unset, exactly like
+      # NODE_EXTRA_CA_LINE. Absent means "summarisation off", not "broken".
+      def openai_api_key_line
+        key = config.bridge&.openai_api_key
+        key.to_s.empty? ? "" : "OPENAI_API_KEY=#{key}"
+      end
+
       def write_mcp_config
         info "Generating bridge MCP config"
-        render_template("mcp-config.json", "#{bridge_dir}/mcp-config-generated.json", bridge_env_vars)
+        # World-readable, so the secrets in bridge_env_vars must not even be
+        # in its render input.
+        render_template("mcp-config.json", "#{bridge_dir}/mcp-config-generated.json", public_render_vars)
         shell.sh!("chown #{username}:#{username} #{bridge_dir}/mcp-config-generated.json")
         ok "Bridge MCP config generated"
       end
 
       def install_systemd_units
         info "Installing systemd services"
-        render_template("matron-bridge.service", "#{unit_dir}/matron-bridge.service", bridge_env_vars)
-        render_template("matron-viewer.service", "#{unit_dir}/matron-viewer.service", bridge_env_vars)
+        # Unit files are world-readable: render them from the username only,
+        # never from bridge_env_vars (which carries the .env secrets).
+        render_template("matron-bridge.service", "#{unit_dir}/matron-bridge.service", public_render_vars)
+        render_template("matron-viewer.service", "#{unit_dir}/matron-viewer.service", public_render_vars)
         shell.sh!("systemctl daemon-reload")
         shell.systemctl(:enable, "matron-bridge")
         shell.systemctl(:enable, "matron-viewer")

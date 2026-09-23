@@ -77,16 +77,29 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
   def test_openai_key_line_is_empty_when_unconfigured
     Dir.mktmpdir do |dir|
       mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))
+      vars = mod.send(:bridge_env_vars, "/t")
 
-      assert_equal "", mod.send(:bridge_env_vars, "/t")["OPENAI_API_KEY_LINE"]
+      assert_equal "", vars["OPENAI_API_KEY_LINE"]
+      rendered = DevBoxer::Template.render(File.join(TEMPLATES_DIR, "matron-bridge.env"), vars)
+      refute_match(/^OPENAI_API_KEY=/, rendered)
     end
   end
 
-  def test_openai_key_line_renders_from_bridge_secret
+  # Production path: Chef merges the key into /opt/dev-boxer/secrets.yml
+  # (never config.yml), and Config.load folds secrets.yml over config.yml.
+  def test_openai_key_line_renders_from_secrets_yml
     Dir.mktmpdir do |dir|
-      mod = build_matron(
-        { "bridge" => { "openai_api_key" => "sk-test-123" } },
-        secrets_path: File.join(dir, "secrets.yml"),
+      config_path = File.join(dir, "config.yml")
+      secrets_path = File.join(dir, "secrets.yml")
+      File.write(config_path, base_config.to_yaml)
+      File.write(secrets_path, { "bridge" => { "openai_api_key" => "sk-test-123" } }.to_yaml)
+
+      mod = DevBoxer::Modules::Matron.new(
+        config: DevBoxer::Config.load(config_path),
+        log: @log,
+        shell: @shell,
+        templates_dir: TEMPLATES_DIR,
+        secrets_path: secrets_path,
       )
 
       assert_equal "OPENAI_API_KEY=sk-test-123", mod.send(:bridge_env_vars, "/t")["OPENAI_API_KEY_LINE"]

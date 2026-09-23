@@ -269,6 +269,10 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
       assert File.exist?(File.join(dir, "matron-bridge.service"))
       assert File.exist?(File.join(dir, "matron-viewer.service"))
       assert_includes File.read(File.join(dir, "matron-bridge.service")), "/home/dev/matron-bridge/index.js"
+      # The bridge reconnects on its own; ordering it after network-online
+      # would add the DHCP wait (~2.5 s) to every dev-VM wake.
+      assert_includes File.read(File.join(dir, "matron-bridge.service")), "After=network.target\n"
+      refute_match(/^(After|Wants)=.*network-online/, File.read(File.join(dir, "matron-bridge.service")))
       assert_includes File.read(File.join(dir, "matron-viewer.service")), "viewer/start.js"
       assert_recorded(/systemctl restart matron-bridge/)
       assert_recorded(/systemctl restart matron-viewer/)

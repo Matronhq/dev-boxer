@@ -77,4 +77,61 @@ class DevToolsModuleTest < Minitest::Test
            "should not re-login when gh auth status already succeeds")
     assert_includes output.string, "GitHub CLI already authenticated"
   end
+
+  # `version_output` is what `gh --version` prints before the apt install,
+  # `version_after` what it prints once the install has run.
+  def gh_install_run(version_output:, gh_present: true, version_after: "gh version 2.101.0 (2026-09-15)\n")
+    recorded = []
+    installed = false
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      recorded << cmd
+      installed = true if cmd.include?("apt-get install")
+      next [gh_present || installed, "", ""] if cmd.start_with?("command -v gh")
+      next [true, installed ? version_after : version_output, ""] if cmd == "gh --version"
+      next [true, "amd64\n", ""] if cmd.include?("dpkg --print-architecture")
+      [true, "", ""]
+    })
+    shell.define_singleton_method(:write_file) { |path, _content, **| recorded << "write_file #{path}" }
+    output = StringIO.new
+    mod = DevBoxer::Modules::DevTools.new(
+      config: DevBoxer::Config.from_hash("user" => { "name" => "dev" }),
+      log: DevBoxer::Log.new(io: output, color: false),
+      shell: shell,
+    )
+    mod.send(:install_github_cli)
+    [recorded, output.string]
+  end
+
+  def test_skips_gh_install_when_version_supports_attach
+    recorded, output = gh_install_run(version_output: "gh version 2.99.0 (2026-09-01)\n")
+
+    refute(recorded.any? { |c| c.include?("apt-get install") }, "should not reinstall a current gh")
+    assert_includes output, "GitHub CLI 2.99.0 already installed"
+  end
+
+  def test_upgrades_gh_older_than_attach_support
+    recorded, output = gh_install_run(version_output: "gh version 2.97.0 (2026-07-31)\n")
+
+    assert(recorded.any? { |c| c.include?("apt-get update") }, "should refresh apt before upgrading")
+    assert(recorded.any? { |c| c.include?("apt-get install") && c.include?("gh") }, "should upgrade gh")
+    assert_includes output, "Upgrading GitHub CLI 2.97.0"
+  end
+
+  def test_installs_gh_when_absent
+    recorded, output = gh_install_run(version_output: "", gh_present: false)
+
+    assert(recorded.any? { |c| c.include?("apt-get install") && c.include?("gh") }, "should install gh")
+    assert_includes output, "Installing GitHub CLI"
+  end
+
+  def test_fails_when_an_older_gh_still_wins_on_path_after_upgrade
+    error = assert_raises(DevBoxer::Shell::Error) do
+      gh_install_run(
+        version_output: "gh version 2.97.0 (2026-07-31)\n",
+        version_after: "gh version 2.97.0 (2026-07-31)\n",
+      )
+    end
+
+    assert_includes error.message, "gh on PATH is 2.97.0 after install"
+  end
 end

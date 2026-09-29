@@ -78,12 +78,16 @@ class DevToolsModuleTest < Minitest::Test
     assert_includes output.string, "GitHub CLI already authenticated"
   end
 
-  def gh_install_run(version_output:, gh_present: true)
+  # `version_output` is what `gh --version` prints before the apt install,
+  # `version_after` what it prints once the install has run.
+  def gh_install_run(version_output:, gh_present: true, version_after: "gh version 2.101.0 (2026-09-15)\n")
     recorded = []
+    installed = false
     shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
       recorded << cmd
-      next [gh_present, "", ""] if cmd.start_with?("command -v gh")
-      next [true, version_output, ""] if cmd == "gh --version"
+      installed = true if cmd.include?("apt-get install")
+      next [gh_present || installed, "", ""] if cmd.start_with?("command -v gh")
+      next [true, installed ? version_after : version_output, ""] if cmd == "gh --version"
       next [true, "amd64\n", ""] if cmd.include?("dpkg --print-architecture")
       [true, "", ""]
     })
@@ -116,8 +120,18 @@ class DevToolsModuleTest < Minitest::Test
   def test_installs_gh_when_absent
     recorded, output = gh_install_run(version_output: "", gh_present: false)
 
-    refute_includes recorded, "gh --version"
     assert(recorded.any? { |c| c.include?("apt-get install") && c.include?("gh") }, "should install gh")
     assert_includes output, "Installing GitHub CLI"
+  end
+
+  def test_fails_when_an_older_gh_still_wins_on_path_after_upgrade
+    error = assert_raises(DevBoxer::Shell::Error) do
+      gh_install_run(
+        version_output: "gh version 2.97.0 (2026-07-31)\n",
+        version_after: "gh version 2.97.0 (2026-07-31)\n",
+      )
+    end
+
+    assert_includes error.message, "gh on PATH is 2.97.0 after install"
   end
 end

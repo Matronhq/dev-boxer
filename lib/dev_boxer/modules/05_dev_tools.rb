@@ -88,7 +88,15 @@ module DevBoxer
 
         shell.apt_update
         shell.apt_install("gh")
-        ok "GitHub CLI installed"
+
+        # A gh earlier on PATH than the apt one (e.g. /usr/local/bin/gh) is
+        # untouched by the install and would still be the one that runs.
+        resolved = installed_gh_version
+        unless resolved && resolved >= Gem::Version.new(MIN_GH_VERSION)
+          raise Shell::Error, "gh on PATH is #{resolved || 'missing'} after install; " \
+                              "need #{MIN_GH_VERSION} or later (check `command -v gh`)"
+        end
+        ok "GitHub CLI #{resolved} installed"
       end
 
       # The installed gh version, or nil when gh is absent.

@@ -60,12 +60,21 @@ module DevBoxer
         ok "uv installed"
       end
 
+      # `gh --attach` (image and video upload on issues, PRs and comments)
+      # arrived in 2.99.0. An older gh is upgraded rather than skipped.
+      MIN_GH_VERSION = "2.99.0"
+
       def install_github_cli
-        if shell.command_exists?("gh")
-          skip "GitHub CLI already installed"
+        installed = installed_gh_version
+        if installed && installed >= Gem::Version.new(MIN_GH_VERSION)
+          skip "GitHub CLI #{installed} already installed"
           return
         end
-        info "Installing GitHub CLI"
+        if installed
+          info "Upgrading GitHub CLI #{installed} (need #{MIN_GH_VERSION} or later)"
+        else
+          info "Installing GitHub CLI"
+        end
         shell.sh!(
           "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg " \
           "| dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg"
@@ -80,6 +89,14 @@ module DevBoxer
         shell.apt_update
         shell.apt_install("gh")
         ok "GitHub CLI installed"
+      end
+
+      # The installed gh version, or nil when gh is absent.
+      def installed_gh_version
+        return nil unless shell.command_exists?("gh")
+        version = shell.sh!("gh --version")[/\Agh version (\d+\.\d+\.\d+)/, 1]
+        raise Shell::Error, "could not read a version from `gh --version`" unless version
+        Gem::Version.new(version)
       end
 
       # Configure `gh` + git's credential helper for the dev user using the PAT

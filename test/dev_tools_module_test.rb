@@ -77,4 +77,47 @@ class DevToolsModuleTest < Minitest::Test
            "should not re-login when gh auth status already succeeds")
     assert_includes output.string, "GitHub CLI already authenticated"
   end
+
+  def gh_install_run(version_output:, gh_present: true)
+    recorded = []
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      recorded << cmd
+      next [gh_present, "", ""] if cmd.start_with?("command -v gh")
+      next [true, version_output, ""] if cmd == "gh --version"
+      next [true, "amd64\n", ""] if cmd.include?("dpkg --print-architecture")
+      [true, "", ""]
+    })
+    shell.define_singleton_method(:write_file) { |path, _content, **| recorded << "write_file #{path}" }
+    output = StringIO.new
+    mod = DevBoxer::Modules::DevTools.new(
+      config: DevBoxer::Config.from_hash("user" => { "name" => "dev" }),
+      log: DevBoxer::Log.new(io: output, color: false),
+      shell: shell,
+    )
+    mod.send(:install_github_cli)
+    [recorded, output.string]
+  end
+
+  def test_skips_gh_install_when_version_supports_attach
+    recorded, output = gh_install_run(version_output: "gh version 2.99.0 (2026-09-01)\n")
+
+    refute(recorded.any? { |c| c.include?("apt-get install") }, "should not reinstall a current gh")
+    assert_includes output, "GitHub CLI 2.99.0 already installed"
+  end
+
+  def test_upgrades_gh_older_than_attach_support
+    recorded, output = gh_install_run(version_output: "gh version 2.97.0 (2026-07-31)\n")
+
+    assert(recorded.any? { |c| c.include?("apt-get update") }, "should refresh apt before upgrading")
+    assert(recorded.any? { |c| c.include?("apt-get install") && c.include?("gh") }, "should upgrade gh")
+    assert_includes output, "Upgrading GitHub CLI 2.97.0"
+  end
+
+  def test_installs_gh_when_absent
+    recorded, output = gh_install_run(version_output: "", gh_present: false)
+
+    refute_includes recorded, "gh --version"
+    assert(recorded.any? { |c| c.include?("apt-get install") && c.include?("gh") }, "should install gh")
+    assert_includes output, "Installing GitHub CLI"
+  end
 end

@@ -202,9 +202,6 @@ module DevBoxer
           docker network prune -f >> "$LOG" 2>&1
           docker builder prune -f --filter "until=#{prune_until}" >> "$LOG" 2>&1
 
-          if command -v ctr &>/dev/null; then
-            ctr -n moby images prune --all >> "$LOG" 2>&1 || true
-          fi
           docker system df >> "$LOG" 2>&1
           log "Docker cleanup completed"
         SH

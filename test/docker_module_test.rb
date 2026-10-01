@@ -45,6 +45,9 @@ class DockerModuleTest < Minitest::Test
     # container happens to be stopped costs a 15-minute rebuild and, for the
     # editor sidecar, a dead editor until someone notices.
     assert_includes script, 'docker image prune -a -f --filter "until=4h" --filter "label!=com.yearbook.keep=true"'
+    # ctr's prune takes no filters: it would delete the kept images (and
+    # every other unused one, whatever its age) behind docker's back.
+    refute_includes script, "ctr "
   end
 
   private

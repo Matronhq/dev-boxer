@@ -197,14 +197,11 @@ module DevBoxer
 
           log "Starting Docker cleanup"
           docker container prune -f >> "$LOG" 2>&1
-          docker image prune -a -f --filter "until=#{prune_until}" >> "$LOG" 2>&1
+          docker image prune -a -f --filter "until=#{prune_until}" --filter "label!=com.yearbook.keep=true" >> "$LOG" 2>&1
           docker volume prune -f >> "$LOG" 2>&1
           docker network prune -f >> "$LOG" 2>&1
           docker builder prune -f --filter "until=#{prune_until}" >> "$LOG" 2>&1
 
-          if command -v ctr &>/dev/null; then
-            ctr -n moby images prune --all >> "$LOG" 2>&1 || true
-          fi
           docker system df >> "$LOG" 2>&1
           log "Docker cleanup completed"
         SH

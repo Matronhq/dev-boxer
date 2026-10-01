@@ -82,10 +82,17 @@ module DevBoxer
       raise Error, "interactive command failed: su - #{user} -c #{cmd}"
     end
 
+    # Same rule as Template.render_to: /etc/postfix/sasl_passwd is written
+    # here with mode 0o600 and holds the Resend API key, so it must never
+    # exist at a broader mode — not on creation, and not because an earlier
+    # run left the target at 0644.
     def write_file(path, content, mode: nil, owner: nil)
-      FileUtils.mkdir_p(File.dirname(path))
-      File.write(path, content)
-      File.chmod(mode, path) if mode
+      if mode
+        SecureFile.write(path, content, mode)
+      else
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, content)
+      end
       sh!("chown #{Shellwords.escape(owner)} #{Shellwords.escape(path)}") if owner
     end
 

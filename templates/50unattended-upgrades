@@ -1,0 +1,14 @@
+// Unattended upgrades config — deployed by dev-boxer
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}:${distro_codename}-updates";
+};
+
+Unattended-Upgrade::AutoFixInterruptedDpkg "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+
+// Email notifications (only if configured)
+// MAIL_CONFIG_PLACEHOLDER

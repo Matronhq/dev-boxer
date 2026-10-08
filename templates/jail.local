@@ -1,0 +1,14 @@
+# Fail2ban config — deployed by dev-boxer
+[DEFAULT]
+bantime = 300
+findtime = 600
+maxretry = 6
+ignoreip = 127.0.0.1/8
+backend = polling
+
+[sshd]
+enabled = true
+port = {{SSH_PORT}}
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 6

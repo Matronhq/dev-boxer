@@ -1,0 +1,133 @@
+# Dev Boxer config — copy to config.yml and edit.
+
+user:
+  name: dev
+  ssh_public_key: "ssh-ed25519 AAAAC3Nz... user@laptop"
+
+ssh:
+  port: 2222
+
+# Optional: a GitHub fine-grained PAT so the dev user can clone private repos
+# without an interactive `gh auth login` mid-setup. Put it in secrets.yml
+# (gitignored, mode 0600), not here.
+# github:
+#   token: github_pat_...
+
+desktop:
+  enabled: false          # optional; run ~/setup-desktop after setup if you want XFCE/XRDP
+
+docker:
+  # Optional: relocate Docker + containerd storage to a separate volume.
+  data_root: null         # e.g. "/secure/docker"
+  containerd_root: null   # auto-derived from data_root if nil
+  prune:
+    interval: 2h
+    keep_until: 4h
+
+claude:
+  experience_level: intermediate  # beginner | intermediate | advanced
+  plugins:
+    - superpowers
+    - context7
+    - serena
+
+# Where the matron-journal server lives. The journal is the sync service the
+# Matron apps (iOS/desktop/web) talk to; the bridge on this box publishes
+# Claude's output into it.
+journal:
+  mode: bundled            # bundled (install it here) | external (use an existing one)
+  url: null                # external only: wss://chat.example.com/ws
+  token_file: null         # external only: path to a pre-provisioned agent token
+                           #   (mint on the journal host: matron-admin agent add <user> <name>)
+                           #   Leave null to pair from the Matron app during setup instead.
+  ca_file: null            # external only: pinned cert when that journal is self-signed
+  agent_name: null         # how this box appears in the app; default: hostname -s
+  username: null           # bundled only: journal user to create; default: user.name
+  # Bundled mode writes journal.username + journal.user_password to
+  # ./secrets.yml (gitignored, mode 0600) — that password is your Matron
+  # app login. The agent token lives in /etc/matron/agent-token, not here.
+
+# The matron-bridge process on this box.
+bridge:
+  # Voice notes sent from the Matron apps are transcribed locally with
+  # ffmpeg + whisper.cpp. Setup builds whisper.cpp from source and downloads
+  # the model (small is ~470 MB), which adds a few minutes to a first run —
+  # set enabled: false to skip it and lose only voice notes. A failed build
+  # never aborts setup; re-run it later as the dev user, passing the model you
+  # configured below (the installer's own default is small):
+  #   WHISPER_MODEL=small bash ~/matron-bridge/setup/install-whisper.sh
+  voice_notes:
+    enabled: true
+    model: small           # tiny | base | small | medium | large (bigger = better, slower, more RAM)
+  # bridge.hmac_secret is generated into secrets.yml on first run; it signs
+  # the file-viewer links, so don't set it here.
+
+  # The /sleep command: what this box runs to stop itself on demand, after a
+  # confirmation button in chat. Empty (the default) disables /sleep, which
+  # then replies that it is not configured.
+  #
+  # Only set this where something can start the box again. On a VM whose host
+  # starts it when a chat message arrives, `sudo systemctl poweroff` is a nap.
+  # On a laptop, or a VPS with nothing watching it, the same line means the box
+  # is gone and nothing — including the bridge you would ask — can bring it
+  # back. dev-boxer cannot tell which one you have, so it never guesses.
+  sleep_command: null      # e.g. "sudo systemctl poweroff" (needs passwordless sudo)
+  sleep_wake_hint: null    # e.g. "you message this chat" — shown on the confirmation card
+
+  # Default Claude model for fresh sessions when none is picked (New Chat
+  # picker, /start without --model). An alias (fable, opus, sonnet, haiku) or
+  # a full claude-* name. Empty leaves the bridge's own default (fable).
+  # Resumed sessions keep their model; Codex is unaffected.
+  default_model: null      # e.g. "opus"
+
+# How this box is reached from the internet.
+exposure:
+  mode: cloudflare         # cloudflare (own domain, trusted cert)
+                           # | ip (no domain; self-signed cert apps must accept)
+  ip:
+    address: null          # default: auto-detected from `hostname -I`
+    journal_port: 8443     # wss://<ip>:8443/ws (bundled journal only)
+    viewer_port: 8444      # https://<ip>:8444 file viewer
+    hello_port: 8445       # https://<ip>:8445 smoke test
+  cloudflare:
+    zone_name: example.com
+    # zone_api_token is written to secrets.yml by the first-run wizard.
+    # Optional api_token is used once for tunnel + Access setup, then wiped.
+    dns:
+      create_manually: false
+    tunnel:
+      hostname: dev.example.com
+      hostname_journal: chat.example.com   # omitted when journal.mode is external
+      hostname_viewer: viewer.example.com
+      hostname_hello: hello.example.com
+      create_manually: false
+      config_managed_locally: false   # if true, don't overwrite /etc/cloudflared/config.yml
+    access:
+      enabled: true
+      account_id: null              # optional override; otherwise derived from zone_name
+      app_id: null                  # persisted after the protected Access app is created
+      app_name: Dev Boxer
+      # Two Access apps: "Dev Boxer" protects *.<zone_name> (allow policy);
+      # "Dev Boxer Public" bypasses the journal + bypass_hostnames (bypass
+      # policy) so Matron apps and public-* subdomains skip the login wall.
+      bypass_app_id: null
+      bypass_app_name: Dev Boxer Public
+      bypass_hostnames:
+        - public-*.example.com
+      session_duration: 24h
+      allowed_emails: []
+      allowed_email_domains:
+        - example.com
+
+hello_world:
+  port: 9820             # local "hello world" smoke-test service (9810 belongs to the journal)
+
+# monitoring:
+#   node_exporter: true    # Prometheus node_exporter on 127.0.0.1:9100; set false to skip
+
+# Optional: send-only Postfix relay via Resend, plus fail2ban email alerts.
+# Put resend_api_key in secrets.yml, not here.
+# email:
+#   resend_api_key: re_...
+#   alert_email: you@example.com          # where fail2ban alerts go
+#   from_address: devbox@example.com

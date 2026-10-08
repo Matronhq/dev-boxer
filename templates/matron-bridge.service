@@ -1,0 +1,20 @@
+[Unit]
+Description=Matron Bridge
+# network.target, not network-online.target: the bridge has its own
+# reconnect loop for the journal websocket, so it does not need to wait for
+# DHCP to finish. On a dev VM that wait is ~2.5 s of a cold boot (measured:
+# bridge up at 2.9 s instead of 5.4 s after kernel start).
+After=network.target
+
+[Service]
+Type=simple
+User={{USERNAME}}
+WorkingDirectory=/home/{{USERNAME}}/matron-bridge
+EnvironmentFile=/home/{{USERNAME}}/matron-bridge/.env
+ExecStart=/usr/bin/node /home/{{USERNAME}}/matron-bridge/index.js
+Restart=always
+RestartSec=5
+Environment=PATH=/home/{{USERNAME}}/.local/bin:/home/{{USERNAME}}/.claude/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target

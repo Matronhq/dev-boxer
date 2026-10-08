@@ -1,0 +1,123 @@
+require_relative "test_helper"
+require "tmpdir"
+
+class TemplateTest < Minitest::Test
+  def test_render_substitutes_double_brace_placeholders
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "Port {{SSH_PORT}}\nUser {{USERNAME}}\n")
+      out = DevBoxer::Template.render(tpl, "SSH_PORT" => 2222, "USERNAME" => "alice")
+      assert_equal "Port 2222\nUser alice\n", out
+    end
+  end
+
+  def test_missing_variable_substitutes_empty_string
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "X={{MISSING}}")
+      out = DevBoxer::Template.render(tpl, {})
+      assert_equal "X=", out
+    end
+  end
+
+  def test_render_to_writes_file
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "hi {{NAME}}")
+      out = "#{dir}/out.txt"
+      DevBoxer::Template.render_to(tpl, out, { "NAME" => "alice" })
+      assert_equal "hi alice", File.read(out)
+    end
+  end
+
+  # A mode-restricted render (the bridge .env: HMAC_SECRET, OPENAI_API_KEY)
+  # must never put the secret in a file anyone else can read, not even for
+  # the moment between the write and a chmod. Every byte of the content must
+  # land in a file that already has the requested mode.
+  def test_render_to_with_mode_never_exposes_content_at_a_wider_mode
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "SECRET={{S}}")
+      out = "#{dir}/out.env"
+      seen = []
+      spy = TracePoint.new(:c_call) do |tp|
+        next unless tp.method_id == :write && tp.defined_class == IO.singleton_class
+        seen << :bare_write
+      end
+      old_umask = File.umask(0o022)
+      begin
+        spy.enable { DevBoxer::Template.render_to(tpl, out, { "S" => "hunter2" }, mode: 0o600) }
+      ensure
+        File.umask(old_umask)
+      end
+      assert_empty seen, "File.write creates the file at the umask default, before chmod"
+      assert_equal "SECRET=hunter2", File.read(out)
+      assert_equal 0o600, File.stat(out).mode & 0o777
+    end
+  end
+
+  # Re-rendering over an existing, wider file (an .env from an older run, or
+  # one a user created by hand at 0644) must not write the new secret into it
+  # first and tighten it afterwards.
+  def test_render_to_with_mode_replaces_a_wider_existing_file
+    Dir.mktmpdir do |dir|
+      tpl = "#{dir}/in.txt"
+      File.write(tpl, "SECRET={{S}}")
+      out = "#{dir}/out.env"
+      File.write(out, "old")
+      File.chmod(0o644, out)
+      old_inode = File.stat(out).ino
+      DevBoxer::Template.render_to(tpl, out, { "S" => "hunter2" }, mode: 0o600)
+      assert_equal "SECRET=hunter2", File.read(out)
+      assert_equal 0o600, File.stat(out).mode & 0o777
+      refute_equal old_inode, File.stat(out).ino, "secret must not be written into the 0644 inode"
+      assert_equal ["out.env"], Dir.children(dir).reject { |f| f == "in.txt" }, "no temp file left behind"
+    end
+  end
+
+  def test_raises_when_template_missing
+    assert_raises(DevBoxer::Template::NotFound) do
+      DevBoxer::Template.render("/no/such/template", {})
+    end
+  end
+
+  def test_claude_md_template_is_agent_facing
+    template = File.expand_path("../templates/CLAUDE.md.template", __dir__)
+    rendered = DevBoxer::Template.render(template, {
+      "USERNAME" => "dev",
+      "SSH_PORT" => 2222,
+      "CF_HOSTNAME_MAIN" => "dev.example.com",
+      "CF_HOSTNAME_VIEWER" => "viewer.example.com",
+      "CF_HOSTNAME_HELLO" => "hello.example.com",
+      "CF_ZONE_NAME" => "example.com",
+      "USER_EXPERIENCE_GUIDANCE" => "The user selected intermediate mode.",
+    })
+
+    assert_includes rendered, "Use this file as local context for coding sessions on this machine."
+    assert_includes rendered, "Make new projects under `/home/dev/projects`"
+    assert_includes rendered, "create a private GitHub repository with `gh` as early as practical"
+    assert_includes rendered, "When the user asks for a new web-based project"
+    assert_includes rendered, "Share the live URL with the user as soon as there is a minimal working page"
+    assert_includes rendered, "When the user asks you to clone or work on an existing project"
+    assert_includes rendered, "If it runs a local web server, start it on a stable local port"
+    assert_includes rendered, "Commit changes on a branch, push that branch when useful, and open a pull request"
+    assert_includes rendered, "For new GitHub projects, set up lightweight CI with GitHub Actions"
+    assert_includes rendered, "Run the relevant test and lint commands before reporting work as complete"
+    assert_includes rendered, "On the first prompt in a fresh session outside an existing project directory"
+    assert_includes rendered, "create a new web project with a live private URL or work on an existing repository"
+    assert_includes rendered, "If the session starts inside a project/repo, skip this opener"
+    assert_includes rendered, "Hello-world smoke test hostname: `hello.example.com`"
+    assert_includes rendered, "Cloudflare zone: `example.com`"
+    assert_includes rendered, "create a proxied CNAME to the existing Cloudflare Tunnel target"
+    assert_includes rendered, "Subdomain naming controls access"
+    assert_includes rendered, "`public-<name>.example.com`"
+    assert_includes rendered, "cloudflareaccess.com/cdn-cgi/access/login"
+    assert_includes rendered, "confirmation from the user during a Matron bridge session"
+    assert_includes rendered, "## Dev Boxer Services"
+    assert_includes rendered, "dev-boxer-hello-world.service"
+    assert_includes rendered, "Check service status:"
+    assert_includes rendered, "Follow service logs:"
+    refute_includes rendered, "Bridge Commands"
+    refute_includes rendered, "`!start"
+  end
+end

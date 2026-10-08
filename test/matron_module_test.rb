@@ -23,6 +23,37 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     )
   end
 
+  def test_claude_summary_is_opt_in_and_private
+    Dir.mktmpdir do |dir|
+      mod = build_matron({"bridge" => {"summary_anthropic_api_key" => "test-claude"}}, secrets_path: File.join(dir, "secrets.yml"))
+      vars = mod.send(:bridge_env_vars, "/t")
+      assert_equal "SUMMARY_PROVIDER=legacy", vars["SUMMARY_PROVIDER_LINE"]
+      assert_equal "SUMMARY_ANTHROPIC_API_KEY=test-claude", vars["SUMMARY_ANTHROPIC_API_KEY_LINE"]
+      refute_includes mod.send(:public_render_vars).values, "test-claude"
+      mod.define_singleton_method(:bridge_dir) { dir }
+      mod.send(:write_bridge_env, "/t")
+      rendered = File.read(File.join(dir, ".env"))
+      assert_includes rendered, "SUMMARY_ANTHROPIC_API_KEY=test-claude"
+      refute_match(/^ANTHROPIC_API_KEY=/, rendered)
+      assert_equal 0o600, File.stat(File.join(dir, ".env")).mode & 0o777
+    end
+  end
+
+  def test_claude_summary_selection_and_missing_key
+    mod = build_matron({"bridge" => {"summary_provider" => "anthropic", "hmac_secret" => "test-hmac"}})
+    vars = mod.send(:bridge_env_vars, "/t")
+    assert_equal "SUMMARY_PROVIDER=anthropic", vars["SUMMARY_PROVIDER_LINE"]
+    assert_equal "", vars["SUMMARY_ANTHROPIC_API_KEY_LINE"]
+  end
+
+  def test_claude_summary_rejects_invalid_settings_without_echoing_the_key
+    mod = build_matron({"bridge" => {"summary_provider" => "typo"}})
+    assert_raises(RuntimeError) { mod.send(:summary_provider_line) }
+    mod = build_matron({"bridge" => {"summary_anthropic_api_key" => "private\nINJECT=1"}})
+    error = assert_raises(RuntimeError) { mod.send(:summary_anthropic_api_key_line) }
+    refute_includes error.message, "private"
+  end
+
   def test_bridge_env_vars_bundled_uses_loopback_ws_and_viewer_from_exposure
     Dir.mktmpdir do |dir|
       mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))

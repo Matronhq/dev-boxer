@@ -49,10 +49,11 @@ journal:
 
 # The matron-bridge process on this box.
 bridge:
-  # Opt in only after validating Haiku 5.5 and the Console billing org.
-  # Put bridge.summary_anthropic_api_key in secrets.yml, never this file.
-  # legacy preserves OpenAI/Gemini. Adding a key alone does not switch.
-  summary_provider: legacy
+  # Summary provider order; unset uses the bridge default
+  # (anthropic,openai,gemini), skipping any provider without a key, so
+  # bridge.summary_anthropic_api_key is what turns Claude on. Put that key in
+  # secrets.yml, never this file.
+  # summary_providers: openai,gemini
   # Voice notes sent from the Matron apps are transcribed locally with
   # ffmpeg + whisper.cpp. Setup builds whisper.cpp from source and downloads
   # the model (small is ~470 MB), which adds a few minutes to a first run —

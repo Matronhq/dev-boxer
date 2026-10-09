@@ -47,7 +47,7 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
   end
 
   def test_claude_summary_rejects_invalid_settings_without_echoing_the_key
-    %w[legacy openai,openai anthropic,typo].each do |order|
+    %w[legacy openai,openai anthropic,typo openai, ,openai].each do |order|
       mod = build_matron({"bridge" => {"summary_providers" => order}})
       assert_raises(RuntimeError) { mod.send(:summary_providers_line) }
     end

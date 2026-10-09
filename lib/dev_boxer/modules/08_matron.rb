@@ -339,7 +339,7 @@ module DevBoxer
       def summary_providers_line
         order = config.bridge&.summary_providers.to_s.delete(" ")
         return "" if order.empty?
-        names = order.split(",")
+        names = order.split(",", -1)
         unless names.any? && names.uniq == names && (names - %w[anthropic openai gemini]).empty?
           raise "bridge.summary_providers must be a comma-separated order of anthropic, openai, gemini"
         end

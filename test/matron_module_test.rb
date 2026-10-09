@@ -23,6 +23,39 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     )
   end
 
+  def test_claude_summary_key_is_private_and_order_defaults_to_the_bridge
+    Dir.mktmpdir do |dir|
+      mod = build_matron({"bridge" => {"summary_anthropic_api_key" => "test-claude"}}, secrets_path: File.join(dir, "secrets.yml"))
+      vars = mod.send(:bridge_env_vars, "/t")
+      assert_equal "", vars["SUMMARY_PROVIDERS_LINE"]
+      assert_equal "SUMMARY_ANTHROPIC_API_KEY=test-claude", vars["SUMMARY_ANTHROPIC_API_KEY_LINE"]
+      refute_includes mod.send(:public_render_vars).values, "test-claude"
+      mod.define_singleton_method(:bridge_dir) { dir }
+      mod.send(:write_bridge_env, "/t")
+      rendered = File.read(File.join(dir, ".env"))
+      assert_includes rendered, "SUMMARY_ANTHROPIC_API_KEY=test-claude"
+      refute_match(/^ANTHROPIC_API_KEY=/, rendered)
+      assert_equal 0o600, File.stat(File.join(dir, ".env")).mode & 0o777
+    end
+  end
+
+  def test_claude_summary_order_override_and_missing_key
+    mod = build_matron({"bridge" => {"summary_providers" => "openai, gemini", "hmac_secret" => "test-hmac"}})
+    vars = mod.send(:bridge_env_vars, "/t")
+    assert_equal "SUMMARY_PROVIDERS=openai,gemini", vars["SUMMARY_PROVIDERS_LINE"]
+    assert_equal "", vars["SUMMARY_ANTHROPIC_API_KEY_LINE"]
+  end
+
+  def test_claude_summary_rejects_invalid_settings_without_echoing_the_key
+    %w[legacy openai,openai anthropic,typo openai, ,openai].each do |order|
+      mod = build_matron({"bridge" => {"summary_providers" => order}})
+      assert_raises(RuntimeError) { mod.send(:summary_providers_line) }
+    end
+    mod = build_matron({"bridge" => {"summary_anthropic_api_key" => "private\nINJECT=1"}})
+    error = assert_raises(RuntimeError) { mod.send(:summary_anthropic_api_key_line) }
+    refute_includes error.message, "private"
+  end
+
   def test_bridge_env_vars_bundled_uses_loopback_ws_and_viewer_from_exposure
     Dir.mktmpdir do |dir|
       mod = build_matron({}, secrets_path: File.join(dir, "secrets.yml"))

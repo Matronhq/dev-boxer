@@ -280,6 +280,8 @@ module DevBoxer
           "NODE_EXTRA_CA_LINE" => node_extra_ca_line,
           "WHISPER_MODEL_LINE" => whisper_model_line,
           "OPENAI_API_KEY_LINE" => openai_api_key_line,
+          "SUMMARY_PROVIDERS_LINE" => summary_providers_line,
+          "SUMMARY_ANTHROPIC_API_KEY_LINE" => summary_anthropic_api_key_line,
           # /sleep: the host command the bridge runs to stop this box on
           # demand. Empty by default and never guessed — whether stopping the
           # box is reversible is a property of the surrounding infrastructure
@@ -322,6 +324,26 @@ module DevBoxer
       def openai_api_key_line
         key = config.bridge&.openai_api_key
         key.to_s.empty? ? "" : "OPENAI_API_KEY=#{key}"
+      end
+
+      # Separate from ANTHROPIC_API_KEY so agent sessions retain their own
+      # authentication. Never log or interpolate the value into shell argv.
+      def summary_anthropic_api_key_line
+        key = config.bridge&.summary_anthropic_api_key.to_s
+        return "" if key.empty?
+        raise "Invalid bridge.summary_anthropic_api_key format" unless key.match?(/\A[A-Za-z0-9_-]+\z/)
+        "SUMMARY_ANTHROPIC_API_KEY=#{key}"
+      end
+
+      # Optional order override; unset leaves the bridge default in charge.
+      def summary_providers_line
+        order = config.bridge&.summary_providers.to_s.delete(" ")
+        return "" if order.empty?
+        names = order.split(",", -1)
+        unless names.any? && names.uniq == names && (names - %w[anthropic openai gemini]).empty?
+          raise "bridge.summary_providers must be a comma-separated order of anthropic, openai, gemini"
+        end
+        "SUMMARY_PROVIDERS=#{order}"
       end
 
       # Box-wide default Claude model for fresh sessions (New Chat picker with

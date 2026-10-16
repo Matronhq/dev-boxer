@@ -172,6 +172,23 @@ class WizardTest < Minitest::Test
     end
   end
 
+  def test_out_of_range_saved_ssh_port_is_not_offered_again
+    prompter = DevBoxer::Wizard::Prompter.new(
+      input: StringIO.new(["", "", "", "2224"].join("\n") + "\n"), output: (out = StringIO.new),
+    )
+    existing = { "user" => { "name" => "alice", "ssh_public_key" => DevBoxer::Testing::SSH_KEY_ALICE }, "ssh" => { "port" => 70_000 } }
+    fragment, = DevBoxer::Wizard::ServerLoginSection.new(prompter: prompter, existing: existing).collect({})
+
+    assert_equal 2224, fragment.dig("ssh", "port")
+    assert_includes out.string, "must be between 1 and 65535"
+  end
+
+  def test_ip_address_with_a_network_range_is_refused
+    assert_match(/network range/, DevBoxer::Wizard::ExposureSection.ip_address_problem("203.0.113.7/24"))
+    assert_nil DevBoxer::Wizard::ExposureSection.ip_address_problem("203.0.113.7")
+    assert_nil DevBoxer::Wizard::ExposureSection.ip_address_problem("2001:db8::7")
+  end
+
   def test_ip_external_run_writes_v2_config_that_validates
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")

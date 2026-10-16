@@ -60,6 +60,7 @@ module DevBoxer
 
       def self.ip_address_problem(value)
         return nil if Config.blank?(value)
+        return "#{value} is a network range; enter just the address, without /" if value.to_s.include?("/")
         IPAddr.new(value.to_s)
         nil
       rescue IPAddr::InvalidAddressError

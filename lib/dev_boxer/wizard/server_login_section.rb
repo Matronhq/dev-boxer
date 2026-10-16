@@ -29,10 +29,12 @@ module DevBoxer
           SshKeyCheck.problem(value)
         end
         explain_ssh_port
+        port_default = existing.dig("ssh", "port") || DEFAULT_SSH_PORT
         ssh_port = loop do
-          port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
+          port = ask_integer("SSH port", default: port_default)
           break port if port.between?(1, 65_535)
           say "The SSH port must be between 1 and 65535."
+          port_default = nil if port.to_s == port_default.to_s # don't offer a refused saved port again
         end
         rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 

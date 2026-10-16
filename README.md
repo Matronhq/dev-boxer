@@ -78,10 +78,22 @@ Register or transfer a domain with [Cloudflare Registrar](https://www.cloudflare
 
 We recommend giving the dev box its own domain. Dev Boxer can then create new subdomains for projects you make, alongside `dev`, `chat`, `viewer`, and `hello`. Low-cost domains such as `.uk` or `.us` often start around `$5-6/year`, depending on current registrar pricing.
 
-For first-run Cloudflare setup, Dev Boxer uses two tokens, both created at [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens):
+For first-run Cloudflare setup, Dev Boxer uses two API tokens (not the Global API Key), both created at [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens):
 
-- A zone-scoped DNS token with `Zone:Read` and `DNS:Edit`, scoped to only the domain you will use, e.g. `example.com`. This stays on the machine in `secrets.yml` so Dev Boxer can manage DNS records for `dev`, `chat`, `viewer`, `hello`, and new subdomains for projects you make. If you prefer not to keep a DNS token on the box, choose manual DNS setup and create the required proxied CNAME records yourself. With manual DNS, Cloudflare Access setup is manual too because Dev Boxer cannot derive the account from the zone token.
-- A temporary account setup token for initial tunnel and Access setup. It needs account permissions `Cloudflare One Connector: cloudflared: Edit`, `Access: Apps: Edit`, and `Access: Policies: Edit`. Dev Boxer stores it only in `secrets.yml`, uses it once, then wipes it after setup succeeds.
+| Token | Permissions | Resources | Kept? |
+| --- | --- | --- | --- |
+| Zone DNS token | Zone → `Zone: Read`, Zone → `DNS: Edit` | Specific zone: only your domain, e.g. `example.com` | Yes, in `secrets.yml` and `~/.cloudflare/token`, so Dev Boxer and your tools can manage DNS records for `dev`, `chat`, `viewer`, `hello` and new project subdomains |
+| One-time account setup token | Account → `Cloudflare One Connector: cloudflared: Edit` (`Cloudflare Tunnel: Edit` on older dashboards); plus Account → `Access: Apps: Edit` and `Access: Policies: Edit` if Dev Boxer creates the Access apps | The account that owns your domain | No: stored only in `secrets.yml` until the exposure step succeeds, then wiped |
+
+If you prefer not to keep a DNS token on the box, choose manual DNS setup and create the required proxied CNAME records yourself. With manual DNS, Cloudflare Access setup is manual too because Dev Boxer cannot derive the account from the zone token.
+
+Secret prompts echo a `*` for each character and then say how many characters arrived, so you can see a paste landed (and spot a double paste). Dev Boxer checks each token as soon as you enter it, and refuses it with the reason, before anything is set up:
+
+- **Shape:** 40 characters, or a `cfut_`/`cfat_` prefix followed by about 48. A token pasted twice, a Global API Key, or a value with spaces is refused.
+- **Live:** Cloudflare must report the token as active.
+- **Access:** the zone token must see your zone and its DNS records. The setup token must see tunnels in the zone's account, and Access apps too when Dev Boxer creates them.
+
+The exposure step checks any saved token again before it uses one. In an interactive run it asks for a new token when the saved one is refused, and saves the replacement.
 
 You can skip automatic tunnel and Access creation. Dev Boxer installs `cloudflared`, pauses, and prints the exact `cloudflared tunnel login` and `cloudflared tunnel create ...` commands to run in another root shell. It then asks for the resulting `TunnelID` and stores only that ID. If you skip automation, you can create the Cloudflare Access app manually later.
 
@@ -96,6 +108,20 @@ The wizard can optionally create two Cloudflare Zero Trust Access self-hosted ap
 - Bypass (no login): `chat.<domain>`, so Matron apps can reach the journal directly, plus `public-*.<domain>`, so any subdomain you deliberately name `public-…` is served without the SSO wall.
 
 Automated Access setup derives the Cloudflare account from the zone and reuses the one-time account setup token above. Dev Boxer persists the resulting Access app ID and removes the setup token after a successful run.
+
+Access is part of Cloudflare Zero Trust, which must be switched on once per Cloudflare account in the dashboard. API tokens cannot do this. Open **Zero Trust** in the dashboard sidebar, pick a team name, and choose the **Free** plan. If it is not on yet, the wizard and the exposure step show these steps and wait for you, before any tunnel or DNS work.
+
+#### If the exposure step stops
+
+Cloudflare errors are printed as one message that says which token was refused, what it needs, and what to do next. Fix the cause, then resume:
+
+```bash
+sudo ./setup.rb --from exposure
+```
+
+In a terminal, if Cloudflare refuses a token part-way through (for example, it has `Read` where it needs `Edit`), Dev Boxer asks for a replacement on the spot, saves it and carries on.
+
+Re-runs are safe. A tunnel or Access app that an earlier run created is found and reused, matching DNS records are left alone, and a refused saved token is asked for again.
 
 See [docs/cloudflare-access.md](docs/cloudflare-access.md) for a manual walkthrough, and [docs/exposure-modes.md](docs/exposure-modes.md) for how `cloudflare` compares to `ip` mode.
 

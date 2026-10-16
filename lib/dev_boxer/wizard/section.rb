@@ -15,9 +15,10 @@ module DevBoxer
       # Append validation errors for the keys this section owns.
       def self.validate(hash, errors); end
 
-      def initialize(prompter:, existing:)
+      def initialize(prompter:, existing:, token_check: nil)
         @prompter = prompter
         @existing = existing
+        @token_check = token_check
       end
 
       # Returns [config_fragment, secrets_fragment]. `so_far` is the config
@@ -29,6 +30,8 @@ module DevBoxer
       private
 
       attr_reader :prompter, :existing
+
+      def token_check = (@token_check ||= CloudflareTokenCheck.new)
 
       def ask(...) = prompter.ask(...)
       def ask_integer(...) = prompter.ask_integer(...)

@@ -20,12 +20,13 @@ module DevBoxer
       MachineDefaultsSection,
     ].freeze
 
-    def self.run(config_path:, input: $stdin, output: $stdout, force: false)
-      new(config_path: config_path, input: input, output: output).run(force: force)
+    def self.run(config_path:, input: $stdin, output: $stdout, force: false, token_check: nil)
+      new(config_path: config_path, input: input, output: output, token_check: token_check).run(force: force)
     end
 
-    def initialize(config_path:, input: $stdin, output: $stdout)
+    def initialize(config_path:, input: $stdin, output: $stdout, token_check: nil)
       @config_path = config_path
+      @token_check = token_check
       @secrets_path = Config.secrets_path_for(config_path)
       @prompter = Prompter.new(input: input, output: output)
     end
@@ -69,7 +70,7 @@ module DevBoxer
           number += 1
           prompter.section_header("#{number}. #{klass.title}")
         end
-        fragment, secret_fragment = klass.new(prompter: prompter, existing: existing).collect(config)
+        fragment, secret_fragment = klass.new(prompter: prompter, existing: existing, token_check: @token_check).collect(config)
         config = Config.deep_merge(config, fragment || {})
         secrets = Config.deep_merge(secrets, secret_fragment || {})
       end

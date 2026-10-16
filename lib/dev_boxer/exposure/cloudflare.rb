@@ -1,5 +1,4 @@
 require "json"
-require "net/http"
 require "shellwords"
 require "uri"
 require "yaml"
@@ -7,20 +6,22 @@ require "yaml"
 module DevBoxer
   module Exposure
     class Cloudflare < Base
-      API_BASE = "https://api.cloudflare.com/client/v4".freeze
       CREDENTIALS_PATH = "/etc/cloudflared/credentials.json".freeze
+
+      RERUN_COMMAND = "sudo ./setup.rb --from exposure".freeze
 
       def setup!
         section "Cloudflare Tunnel"
 
-        install_cloudflared
-        create_tunnel
-        create_dns_routes
-        configure_cloudflare_access
-        deploy_tunnel_config
-        install_systemd_unit
-        write_user_credentials
-        cleanup_setup_token
+        begin
+          run_setup_steps
+        rescue CloudflareAPI::Error => e
+          retry if replaced_refused_token?(e)
+          raise SetupError, api_failure_message(e)
+        rescue CloudflareAPI::Unreachable => e
+          raise SetupError, "Could not reach the Cloudflare API: #{e.message}\n" \
+                            "Check this server's network connection, then re-run: #{RERUN_COMMAND}"
+        end
         ok "Cloudflare Tunnel setup complete"
       end
 
@@ -50,11 +51,27 @@ module DevBoxer
 
       private
 
+      # Every step is idempotent, so after a refused token is replaced the
+      # whole sequence simply runs again.
+      def run_setup_steps
+        check_saved_tokens
+        install_cloudflared
+        create_tunnel
+        create_dns_routes
+        configure_cloudflare_access
+        deploy_tunnel_config
+        install_systemd_unit
+        write_user_credentials
+        cleanup_setup_token
+      end
+
       def cf = config.exposure&.cloudflare
       def username = config.user.name
       def home_dir = "/home/#{username}"
-      def setup_token = cf&.api_token
-      def zone_token = cf&.zone_api_token
+      # A token re-entered during this run (see check_saved_tokens) wins
+      # over the saved one.
+      def setup_token = @setup_token || cf&.api_token
+      def zone_token = @zone_token || cf&.zone_api_token
       def zone_name = cf&.zone_name
       def dns_managed_manually? = cf&.dns&.create_manually == true
       def tunnel_managed_manually? = cf&.tunnel&.create_manually == true
@@ -72,7 +89,7 @@ module DevBoxer
       def config_managed_locally? = cf&.tunnel&.config_managed_locally
       def access_config = cf&.access
       def access_enabled? = access_config&.enabled == true
-      def cloudflare_account_id = cf&.account_id || access_config&.account_id || (zone_token.to_s.empty? ? nil : cloudflare_zone_account_id)
+      def cloudflare_account_id = @checked_account_id || cf&.account_id || access_config&.account_id || (zone_token.to_s.empty? ? nil : cloudflare_zone_account_id)
       def access_account_id = cloudflare_account_id
       def access_app_id = access_config&.app_id
       def access_app_name = access_config&.app_name || "Dev Boxer"
@@ -118,8 +135,10 @@ module DevBoxer
           return
         end
 
-        info "Creating Cloudflare tunnel"
         tunnel_name = "dev-boxer-#{shell.sh!('hostname -s').strip}"
+        return if reuse_unrecorded_tunnel(tunnel_name)
+
+        info "Creating Cloudflare tunnel"
         result = create_tunnel_via_api(tunnel_name)
         credentials = result["credentials_file"]
         raise "Cloudflare API did not return tunnel credentials" unless credentials.is_a?(Hash)
@@ -134,6 +153,37 @@ module DevBoxer
         # NB: cleanup_setup_token is intentionally NOT called here. `run()`
         # removes it only after DNS and optional Access setup complete, so a
         # partial first run remains easy to retry.
+      end
+
+      # A run that created the tunnel but stopped before saving its id would
+      # otherwise fail on re-run with "tunnel already exists". Reuse it when
+      # this server holds its credentials; otherwise say how to clear it.
+      def reuse_unrecorded_tunnel(tunnel_name)
+        account_id = cloudflare_account_id
+        return false if account_id.to_s.empty?
+
+        existing = cloudflare_api(
+          token: setup_token, method: :get, path: "/accounts/#{account_id}/cfd_tunnel",
+          query: { "name" => tunnel_name, "is_deleted" => "false" },
+        )
+        match = Array(existing).find { |tunnel| tunnel.is_a?(Hash) && tunnel["name"] == tunnel_name }
+        return false unless match
+
+        if credentials_tunnel_id == match["id"]
+          ok "Reusing existing tunnel #{tunnel_name} (id: #{match["id"]})"
+          persist_tunnel_id(match["id"])
+          return true
+        end
+
+        raise SetupError, "A Cloudflare tunnel named #{tunnel_name} already exists, but this server has no credentials for it.\n" \
+                          "Next step: delete it in the Zero Trust dashboard (Networks → Tunnels), then re-run: #{RERUN_COMMAND}"
+      end
+
+      def credentials_tunnel_id
+        return nil unless File.exist?(credentials_path)
+        JSON.parse(File.read(credentials_path))["TunnelID"]
+      rescue JSON::ParserError
+        nil
       end
 
       def create_tunnel_via_api(tunnel_name)
@@ -332,11 +382,20 @@ module DevBoxer
       end
 
       def upsert_access_app(app_id:, body:)
+        # An app created by a run that stopped before saving its id is found
+        # by name and updated, not created twice.
+        app_id = existing_access_app_id(body["name"]) if app_id.to_s.empty?
         if app_id.to_s.empty?
           cloudflare_api(token: setup_token, method: :post, path: "/accounts/#{access_account_id}/access/apps", body: body)
         else
           cloudflare_api(token: setup_token, method: :put, path: "/accounts/#{access_account_id}/access/apps/#{app_id}", body: body)
         end
+      end
+
+      def existing_access_app_id(name)
+        apps = cloudflare_api(token: setup_token, method: :get, path: "/accounts/#{access_account_id}/access/apps")
+        match = Array(apps).find { |app| app.is_a?(Hash) && app["name"] == name }
+        match && match["id"]
       end
 
       def access_protected_destinations
@@ -566,34 +625,164 @@ module DevBoxer
       end
 
       def cloudflare_api(token:, method:, path:, query: {}, body: nil)
-        uri = URI("#{API_BASE}#{path}")
-        uri.query = URI.encode_www_form(query) unless query.empty?
-        request = cloudflare_request(method, uri)
-        request["Authorization"] = "Bearer #{token}"
-        request["Content-Type"] = "application/json"
-        request.body = JSON.generate(body) if body
-
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
-          http.request(request)
-        end
-        parsed = JSON.parse(response.body)
-        return parsed["result"] if response.is_a?(Net::HTTPSuccess) && parsed["success"] != false
-
-        errors = Array(parsed["errors"]).map { |err| err["message"] }.reject(&:empty?).join("; ")
-        errors = response.body if errors.empty?
-        raise "Cloudflare API #{method.to_s.upcase} #{path} failed: #{errors}"
-      rescue JSON::ParserError
-        raise "Cloudflare API #{method.to_s.upcase} #{path} returned invalid JSON: #{response&.body}"
+        api_client.call(token: token, method: method, path: path, query: query, body: body)
+      rescue CloudflareAPI::Error => e
+        e.token_kind ||= token_kind(token)
+        raise
       end
 
-      def cloudflare_request(method, uri)
-        {
-          get: Net::HTTP::Get,
-          post: Net::HTTP::Post,
-          put: Net::HTTP::Put,
-          patch: Net::HTTP::Patch,
-          delete: Net::HTTP::Delete,
-        }.fetch(method).new(uri)
+      def api_client = (@api_client ||= CloudflareAPI::Client.new)
+      def token_check = (@token_check ||= CloudflareTokenCheck.new(client: api_client))
+
+      def token_kind(token)
+        return nil if token.to_s.empty?
+        return :setup if token == setup_token
+        return :zone if token == zone_token
+        nil
+      end
+
+      # Check the saved tokens before anything uses them, so a token that was
+      # mistyped, pasted twice or lacks a permission is caught here, with the
+      # reason, rather than as an API error half-way through. Interactive runs
+      # ask for a replacement and save it; others stop with the next step.
+      def check_saved_tokens
+        unless zone_token.to_s.empty?
+          result = checked_token(:zone) { |token| token_check.check_zone_token(token, zone_name: zone_name) }
+          @checked_account_id ||= result&.account_id
+        end
+
+        return if setup_token.to_s.empty? || !setup_token_needed?
+
+        account_id = cf&.account_id || access_config&.account_id || @checked_account_id
+        result = checked_token(:setup) do |token|
+          token_check.check_setup_token(token, account_id: account_id, needs_access: access_enabled?)
+        end
+        @checked_account_id ||= result&.account_id
+        wait_for_zero_trust(@checked_account_id || account_id) if result&.access_not_enabled
+      end
+
+      # Checked before any tunnel or DNS work, so a run never stops half-way
+      # on "Access is not enabled".
+      def wait_for_zero_trust(account_id)
+        unless interactive?
+          raise SetupError, [*CloudflareTokenCheck::ZERO_TRUST_STEPS,
+                             "Next step: do that, then re-run: #{RERUN_COMMAND}"].join("\n")
+        end
+
+        done = token_prompter.wait_until_done(CloudflareTokenCheck::ZERO_TRUST_STEPS, done_label: "Zero Trust switched on?") do
+          token_check.access_state(setup_token, account_id) == :ok
+        end
+        return ok("Cloudflare Zero Trust is on") if done
+
+        raise SetupError, "Stopped before creating the Access apps: Zero Trust is not switched on.\n" \
+                          "Next step: turn it on as above, then re-run: #{RERUN_COMMAND}\n" \
+                          "(To go without Access instead, set exposure.cloudflare.access.enabled: false in config.yml.)"
+      end
+
+      def setup_token_needed?
+        (tunnel_id.to_s.empty? && !tunnel_managed_manually?) || access_enabled?
+      end
+
+      TOKEN_DETAILS = {
+        zone: { label: "Cloudflare zone DNS API token", key: "zone_api_token",
+                needs: CloudflareTokenCheck::ZONE_TOKEN_PERMISSIONS },
+        setup: { label: "One-time Cloudflare account setup token", key: "api_token",
+                 needs: CloudflareTokenCheck::SETUP_TOKEN_PERMISSIONS },
+      }.freeze
+
+      def checked_token(kind, &check)
+        details = TOKEN_DETAILS.fetch(kind)
+        saved = kind == :zone ? zone_token : setup_token
+        result = check.call(saved)
+        if result.unreachable
+          warn "Could not check the saved #{details[:label]}: #{result.unreachable}"
+          return nil
+        end
+        if result.ok?
+          ok "#{details[:label]} accepted by Cloudflare"
+          return result
+        end
+
+        lines = ["The saved #{details[:label]} was refused:"]
+        lines.concat(result.problems.map { |problem| "  - #{problem}" })
+        unless interactive?
+          lines << "It needs:"
+          lines.concat(details[:needs].map { |need| "  - #{need}" })
+          lines << "Next step: put a working token in #{secrets_location(details[:key])}, then re-run: #{RERUN_COMMAND}"
+          raise SetupError, lines.join("\n")
+        end
+
+        lines.each { |line| warn line }
+        token, result = token_prompter.ask_checked_secret(
+          "#{details[:label]} (Enter to stop)", required: false, needs: details[:needs], &check
+        )
+        if token.nil?
+          raise SetupError, "Stopped: no working #{details[:label]}.\n" \
+                            "Next step: create one with the permissions above, then re-run: #{RERUN_COMMAND}"
+        end
+
+        save_token(kind, details[:key], token)
+        result
+      end
+
+      def token_prompter = (@token_prompter ||= Wizard::Prompter.new(input: $stdin, output: $stdout))
+
+      def save_token(kind, key, token)
+        kind == :zone ? @zone_token = token : @setup_token = token
+        @cloudflare_zone = nil
+        return unless secrets_path
+        Config.merge_into_file(secrets_path, { "exposure" => { "cloudflare" => { key => token } } })
+        ok "Saved the new token to #{secrets_path}"
+      end
+
+      def secrets_location(key)
+        "#{secrets_path || "secrets.yml"} (exposure.cloudflare.#{key})"
+      end
+
+      # A token can pass the read-only checks yet be refused a write (e.g. it
+      # has Read rather than Edit). In a terminal, ask for a replacement on
+      # the spot rather than stopping; the steps are then retried.
+      def replaced_refused_token?(error)
+        details = TOKEN_DETAILS[error.token_kind]
+        return false unless interactive? && error.auth_failure? && details
+        return false if CloudflareTokenCheck.access_not_enabled_error?(error)
+
+        warn "Cloudflare refused the #{details[:label]}: #{error.message}"
+        warn "It needs:"
+        details[:needs].each { |need| warn "  - #{need}" }
+        token, = token_prompter.ask_checked_secret("New #{details[:label]} (Enter to stop)", required: false) do |value|
+          if error.token_kind == :zone
+            token_check.check_zone_token(value, zone_name: zone_name)
+          else
+            token_check.check_setup_token(value, account_id: cloudflare_account_id, needs_access: access_enabled?)
+          end
+        end
+        return false if token.nil?
+
+        save_token(error.token_kind, details[:key], token)
+        true
+      end
+
+      def api_failure_message(error)
+        if CloudflareTokenCheck.access_not_enabled_error?(error)
+          return [*CloudflareTokenCheck::ZERO_TRUST_STEPS,
+                  "Next step: do that, then re-run: #{RERUN_COMMAND}. The tunnel and DNS routes made so far are reused."].join("\n")
+        end
+
+        details = TOKEN_DETAILS[error.token_kind]
+        unless error.auth_failure? && details
+          return "#{error.message}\nFix the cause above, then re-run: #{RERUN_COMMAND}"
+        end
+
+        lines = [
+          "Cloudflare refused the #{details[:label]} (#{error.http_method.to_s.upcase} #{error.path}: #{error.errors.map { |e| e["message"] }.compact.join("; ")}).",
+          "The token is wrong, was pasted twice, or lacks a permission. It needs:",
+          *details[:needs].map { |need| "  - #{need}" },
+          "Next step: create a token with those permissions and put it in #{secrets_location(details[:key])},",
+          "then re-run: #{RERUN_COMMAND}. Run in a terminal, Dev Boxer asks for a new token whenever Cloudflare refuses",
+          "the saved one. Every step is safe to re-run.",
+        ]
+        lines.join("\n")
       end
 
       def write_yaml_preserving_mode(path, data)

@@ -141,4 +141,36 @@ class CLITest < Minitest::Test
       assert_match(/exposure\.mode is required/, err)
     end
   end
+
+  def test_setup_error_prints_the_message_and_next_step_without_a_backtrace
+    Dir.mktmpdir do |dir|
+      cfg = File.join(dir, "config.yml")
+      File.write(cfg, {
+        "user" => { "name" => "dev", "ssh_public_key" => "ssh-ed25519 AAAATEST t@e", "rdp_password" => "x" },
+        "ssh" => { "port" => 2222 },
+        "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" },
+        "exposure" => { "mode" => "ip" },
+        "hello_world" => { "port" => 9820 },
+      }.to_yaml)
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+      File.write(File.join(mods_dir, "01_failing.rb"), <<~RUBY)
+        module DevBoxer
+          module Modules
+            class Failing < ModuleBase
+              module_name "failing"
+              module_order 1
+              def run = raise(DevBoxer::SetupError, "Cloudflare refused the token.\nNext step: re-run it.")
+            end
+          end
+        end
+      RUBY
+
+      out, err, status = run_setup("--non-interactive", "--config", cfg, "--modules-dir", mods_dir)
+
+      assert_equal 1, status.exitstatus
+      assert_match(/✗ Cloudflare refused the token\.\n    Next step: re-run it\./, out)
+      refute_match(/\.rb:\d+:in/, out + err)
+    end
+  end
 end

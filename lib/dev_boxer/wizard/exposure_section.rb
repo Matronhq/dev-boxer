@@ -98,7 +98,9 @@ module DevBoxer
 
         explain_base_domain
         base_domain = normalize_domain(ask("Base domain", default: default_base_domain(existing)))
-        manual_dns, zone_token = choose_dns_setup(existing, base_domain)
+        manual_dns, zone_token, account_id = choose_dns_setup(existing, base_domain)
+        account_id ||= existing.dig("exposure", "cloudflare", "account_id") ||
+                       existing.dig("exposure", "cloudflare", "access", "account_id")
 
         tunnel_id = existing.dig("exposure", "cloudflare", "tunnel", "id")
         manual_tunnel, access_config = choose_cloudflare_setup(existing, tunnel_id, manual_dns: manual_dns)
@@ -108,15 +110,22 @@ module DevBoxer
                               access_config: access_config, base_domain: base_domain,
                               journal_bundled: journal_bundled)
           explain_cloudflare_setup_token
-          setup_token = ask(
+          needs_access = access_config["enabled"] == true
+          setup_token, result = prompter.ask_checked_secret(
             "One-time Cloudflare account setup token",
             default: existing.dig("exposure", "cloudflare", "api_token"),
-            secret: true,
-          )
+            needs: CloudflareTokenCheck::SETUP_TOKEN_PERMISSIONS,
+          ) { |token| token_check.check_setup_token(token, account_id: account_id, needs_access: needs_access) }
+          account_id ||= result.account_id
+          if result.access_not_enabled && !wait_for_zero_trust(setup_token, account_id)
+            explain_manual_access_later
+            access_config = { "enabled" => false }
+          end
         end
 
         config = { "exposure" => { "mode" => "cloudflare", "cloudflare" => {
           "zone_name" => base_domain,
+          "account_id" => account_id,
           "dns" => { "create_manually" => manual_dns },
           "tunnel" => {
             "id" => tunnel_id,
@@ -133,6 +142,21 @@ module DevBoxer
         secret_fields = { "api_token" => setup_token, "zone_api_token" => zone_token }.compact
         secrets = secret_fields.empty? ? {} : { "exposure" => { "cloudflare" => secret_fields } }
         [config, secrets]
+      end
+
+      # Access needs Zero Trust switched on for the account, a one-time
+      # dashboard step. Returns false if the user chose to skip Access.
+      def wait_for_zero_trust(token, account_id)
+        say
+        prompter.wait_until_done(CloudflareTokenCheck::ZERO_TRUST_STEPS, done_label: "Zero Trust switched on?") do
+          token_check.access_state(token, account_id) == :ok
+        end
+      end
+
+      def explain_manual_access_later
+        say
+        say "Skipping the Access apps for now. Turn Zero Trust on later, then create the two Access apps from the dashboard (see docs/cloudflare-access.md), or re-run `sudo ./setup.rb --reconfigure`."
+        say
       end
 
       def explain_exposure_modes
@@ -155,15 +179,15 @@ module DevBoxer
       def choose_dns_setup(existing, base_domain)
         explain_cloudflare_zone_token(base_domain)
         if confirm("Let Dev Boxer manage DNS records for this domain?", default: true)
-          zone_token = ask(
+          zone_token, result = prompter.ask_checked_secret(
             "Cloudflare zone DNS API token",
             default: existing.dig("exposure", "cloudflare", "zone_api_token"),
-            secret: true,
-          )
-          [false, zone_token]
+            needs: CloudflareTokenCheck::ZONE_TOKEN_PERMISSIONS,
+          ) { |token| token_check.check_zone_token(token, zone_name: base_domain) }
+          [false, zone_token, result.account_id]
         else
           explain_manual_dns_setup(base_domain)
-          [true, nil]
+          [true, nil, nil]
         end
       end
 
@@ -337,10 +361,9 @@ module DevBoxer
         say
         say "One-time Cloudflare account setup token:"
         say "A one-time account-level Cloudflare API token used only to create the tunnel and the Access app."
-        say "Create a custom token at https://dash.cloudflare.com/?to=/:account/api-tokens with these account permissions:"
-        say "  - Cloudflare One Connector: cloudflared: Edit"
-        say "  - Access: Apps: Edit"
-        say "  - Access: Policies: Edit"
+        say "Create a custom token at https://dash.cloudflare.com/?to=/:account/api-tokens with:"
+        CloudflareTokenCheck::SETUP_TOKEN_PERMISSIONS.each { |permission| say "  - #{permission}" }
+        say "Dev Boxer checks the token with Cloudflare as soon as you paste it."
         say "Dev Boxer wipes it from secrets.yml as soon as setup finishes."
         say
       end

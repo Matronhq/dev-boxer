@@ -97,6 +97,9 @@ run_wizard = lambda do |force: false|
     exit 2
   end
   DevBoxer::Wizard.run(config_path: options[:config], force: force)
+rescue DevBoxer::Wizard::Prompter::InputClosed => e
+  warn e.message
+  exit 2
 end
 
 load_config = lambda do
@@ -170,4 +173,14 @@ begin
 rescue DevBoxer::Runner::UnknownModule => e
   warn e.message
   exit 1
+rescue DevBoxer::SetupError => e
+  # A failure the operator can fix: the message says how; a backtrace
+  # would only bury it.
+  lines = e.message.lines.map(&:chomp)
+  log.error(lines.shift)
+  lines.each { |line| log.info("    #{line}") }
+  exit 1
+rescue DevBoxer::Wizard::Prompter::InputClosed => e
+  warn e.message
+  exit 2
 end

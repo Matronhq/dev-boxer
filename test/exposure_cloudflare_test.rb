@@ -61,6 +61,7 @@ class ExposureCloudflareTest < Minitest::Test
       api = lambda do |token:, method:, path:, query: {}, body: nil|
         calls << { token: token, method: method, path: path, query: query, body: body }
         return [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }] if path == "/zones"
+        return [] if method == :get && path == "/accounts/account-123/cfd_tunnel"
         if path == "/accounts/account-123/cfd_tunnel"
           return {
             "id" => "tunnel-123",
@@ -81,7 +82,7 @@ class ExposureCloudflareTest < Minitest::Test
         end
       end
 
-      create_call = calls.find { |call| call[:path] == "/accounts/account-123/cfd_tunnel" }
+      create_call = calls.find { |call| call[:method] == :post && call[:path] == "/accounts/account-123/cfd_tunnel" }
       assert_equal "setup-token", create_call[:token]
       assert_equal :post, create_call[:method]
       assert_equal({ "name" => "dev-boxer-box-6", "config_src" => "local" }, create_call[:body])
@@ -617,6 +618,7 @@ class ExposureCloudflareTest < Minitest::Test
       api = lambda do |token:, method:, path:, query: {}, body: nil|
         calls << { token: token, method: method, path: path, query: query, body: body }
         return [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }] if path == "/zones"
+        return [] if method == :get
         { "id" => app_ids.shift }
       end
 
@@ -696,7 +698,227 @@ class ExposureCloudflareTest < Minitest::Test
     refute_includes error.message, "no one-time exposure.cloudflare.api_token"
   end
 
+  Transport = DevBoxer::Testing::FakeCloudflareTransport
+  AUTH_ERROR = Transport.failure(403, 10000, "Authentication error")
+  ZONES = [{ "id" => "zone-123", "name" => "example.com", "account" => { "id" => "account-123" } }].freeze
+
+  def test_saved_setup_token_that_is_refused_stops_non_interactive_runs_with_the_next_step
+    with_new_tunnel_module do |mod, dir|
+      check = DevBoxer::Testing::FakeTokenCheck.new(refuse: { "setup-token" => "Cloudflare does not recognise it" })
+      error = mod.stub(:token_check, check) do
+        mod.stub(:interactive?, false) do
+          assert_raises(DevBoxer::SetupError) { mod.send(:check_saved_tokens) }
+        end
+      end
+
+      assert_includes error.message, "The saved One-time Cloudflare account setup token was refused"
+      assert_includes error.message, "Cloudflare does not recognise it"
+      assert_includes error.message, "cloudflared: Edit"
+      assert_includes error.message, "#{dir}/secrets.yml (exposure.cloudflare.api_token)"
+      assert_includes error.message, "sudo ./setup.rb --from exposure"
+    end
+  end
+
+  def test_saved_setup_token_that_is_refused_is_asked_for_again_and_saved
+    with_new_tunnel_module do |mod, dir|
+      good = DevBoxer::Testing::SETUP_TOKEN
+      check = DevBoxer::Testing::FakeTokenCheck.new(refuse: { "setup-token" => "Cloudflare does not recognise it" })
+      prompter = DevBoxer::Wizard::Prompter.new(input: StringIO.new("#{good}\n"), output: StringIO.new)
+      mod.stub(:token_check, check) do
+        mod.stub(:token_prompter, prompter) do
+          mod.send(:check_saved_tokens)
+        end
+      end
+
+      assert_equal good, mod.send(:setup_token)
+      assert_equal good, YAML.safe_load_file(File.join(dir, "secrets.yml")).dig("exposure", "cloudflare", "api_token")
+      assert_equal "account-123", mod.send(:cloudflare_account_id)
+    end
+  end
+
+  def test_access_not_switched_on_stops_before_any_tunnel_or_dns_work
+    with_new_tunnel_module(access: { "enabled" => true, "allowed_emails" => ["alice@example.com"] }) do |mod, _dir|
+      check = DevBoxer::Testing::FakeTokenCheck.new(access_not_enabled: true)
+      error = mod.stub(:token_check, check) do
+        mod.stub(:interactive?, false) do
+          assert_raises(DevBoxer::SetupError) { mod.send(:check_saved_tokens) }
+        end
+      end
+
+      assert_includes error.message, "Cloudflare Access is not switched on"
+      assert_includes error.message, "Zero Trust"
+      assert_includes error.message, "sudo ./setup.rb --from exposure"
+    end
+  end
+
+  def test_setup_turns_a_rejected_token_into_a_clear_message
+    with_new_tunnel_module do |mod, dir|
+      transport = Transport.new(
+        "GET /zones" => ZONES,
+        "GET /accounts/account-123/cfd_tunnel" => [],
+        "POST /accounts/account-123/cfd_tunnel" => AUTH_ERROR,
+      )
+      error = run_setup_against(mod, dir, transport)
+
+      assert_includes error.message, "Cloudflare refused the One-time Cloudflare account setup token " \
+                                     "(POST /accounts/account-123/cfd_tunnel: Authentication error)"
+      assert_includes error.message, "cloudflared: Edit"
+      assert_includes error.message, "#{dir}/secrets.yml (exposure.cloudflare.api_token)"
+      assert_includes error.message, "re-run: sudo ./setup.rb --from exposure"
+    end
+  end
+
+  def test_token_refused_mid_run_is_replaced_in_a_terminal_and_the_steps_retried
+    with_new_tunnel_module do |mod, dir|
+      good = DevBoxer::Testing::SETUP_TOKEN
+      transport = Transport.new(
+        "GET /zones" => ZONES,
+        "GET /accounts/account-123/cfd_tunnel" => [],
+        "POST /accounts/account-123/cfd_tunnel" => lambda do |token|
+          next AUTH_ERROR unless token == good
+          { "id" => "tunnel-new", "credentials_file" => { "TunnelID" => "tunnel-new", "TunnelSecret" => "secret" } }
+        end,
+      )
+      prompter = DevBoxer::Wizard::Prompter.new(input: StringIO.new("#{good}\n"), output: StringIO.new)
+      steps = %i[create_dns_routes configure_cloudflare_access deploy_tunnel_config install_systemd_unit
+                 write_user_credentials cleanup_setup_token]
+      run_setup_steps_against(mod, dir, transport) do
+        mod.stub(:token_check, DevBoxer::Testing::FakeTokenCheck.new) do
+          mod.stub(:token_prompter, prompter) do
+            stub_all(mod, steps) { mod.setup! }
+          end
+        end
+      end
+
+      assert_equal 2, transport.calls.count { |call, _| call == "POST /accounts/account-123/cfd_tunnel" }
+      assert_equal good, YAML.safe_load_file(File.join(dir, "secrets.yml")).dig("exposure", "cloudflare", "api_token")
+      assert_equal "tunnel-new", YAML.safe_load_file(File.join(dir, "config.yml")).dig("exposure", "cloudflare", "tunnel", "id")
+    end
+  end
+
+  def test_setup_explains_access_not_enabled_from_the_api
+    with_new_tunnel_module(tunnel_id: "tunnel-123", access: { "enabled" => true, "allowed_emails" => ["alice@example.com"] }) do |mod, dir|
+      transport = Transport.new(
+        "GET /zones" => ZONES,
+        "GET /zones/zone-123/dns_records" => [],
+        "POST /zones/zone-123/dns_records" => {},
+        "GET /accounts/account-123/access/apps" => [],
+        "POST /accounts/account-123/access/apps" =>
+          Transport.failure(403, 12006, "access.api.error.not_enabled: Access is not enabled."),
+      )
+      error = run_setup_against(mod, dir, transport)
+
+      assert_includes error.message, "Cloudflare Access is not switched on"
+      assert_includes error.message, "tunnel and DNS routes made so far are reused"
+    end
+  end
+
+  def test_rerun_reuses_a_tunnel_created_but_not_recorded
+    with_new_tunnel_module do |mod, dir|
+      credentials_path = File.join(dir, "credentials.json")
+      File.write(credentials_path, JSON.generate("TunnelID" => "tunnel-old"))
+      transport = Transport.new(
+        "GET /zones" => ZONES,
+        "GET /accounts/account-123/cfd_tunnel" => [{ "id" => "tunnel-old", "name" => "dev-boxer-box-a" }],
+      )
+      mod.stub(:credentials_path, credentials_path) do
+        mod.stub(:api_client, -> { DevBoxer::CloudflareAPI::Client.new(transport: transport) }) do
+          mod.send(:create_tunnel)
+        end
+      end
+
+      refute_includes transport.calls.map(&:first), "POST /accounts/account-123/cfd_tunnel"
+      assert_equal "tunnel-old", YAML.safe_load_file(File.join(dir, "config.yml")).dig("exposure", "cloudflare", "tunnel", "id")
+    end
+  end
+
+  def test_rerun_with_a_foreign_tunnel_of_the_same_name_says_how_to_clear_it
+    with_new_tunnel_module do |mod, dir|
+      transport = Transport.new(
+        "GET /zones" => ZONES,
+        "GET /accounts/account-123/cfd_tunnel" => [{ "id" => "tunnel-other", "name" => "dev-boxer-box-a" }],
+      )
+      error = mod.stub(:credentials_path, File.join(dir, "missing.json")) do
+        mod.stub(:api_client, -> { DevBoxer::CloudflareAPI::Client.new(transport: transport) }) do
+          assert_raises(DevBoxer::SetupError) { mod.send(:create_tunnel) }
+        end
+      end
+
+      assert_includes error.message, "already exists, but this server has no credentials for it"
+    end
+  end
+
+  def test_access_app_created_but_not_recorded_is_updated_not_duplicated
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      File.write(config_path, { "exposure" => { "cloudflare" => {} } }.to_yaml)
+      mod = build_cloudflare_module(
+        config_path: config_path, secrets_path: File.join(dir, "secrets.yml"),
+        config_hash: cloudflare_config(
+          "api_token" => "setup-token",
+          "access" => { "enabled" => true, "allowed_emails" => ["alice@example.com"], "bypass_hostnames" => [] },
+        ),
+      )
+      transport = Transport.new(
+        "GET /zones" => ZONES,
+        "GET /accounts/account-123/access/apps" => [{ "id" => "app-old", "name" => "Dev Boxer" }],
+        "PUT /accounts/account-123/access/apps/app-old" => { "id" => "app-old" },
+        "POST /accounts/account-123/access/apps" => { "id" => "bypass-new" },
+      )
+      mod.stub(:api_client, -> { DevBoxer::CloudflareAPI::Client.new(transport: transport) }) do
+        mod.send(:configure_cloudflare_access)
+      end
+
+      # Only the bypass app (not found by name) is created.
+      assert_equal 1, transport.calls.count { |call, _| call == "POST /accounts/account-123/access/apps" }
+      assert_includes transport.calls.map(&:first), "PUT /accounts/account-123/access/apps/app-old"
+      assert_equal "app-old", YAML.safe_load_file(config_path).dig("exposure", "cloudflare", "access", "app_id")
+    end
+  end
+
   private
+
+  def with_new_tunnel_module(tunnel_id: nil, access: { "enabled" => false })
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.yml")
+      File.write(config_path, { "exposure" => { "cloudflare" => {} } }.to_yaml)
+      shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) { [true, cmd == "hostname -s" ? "box-a\n" : "", ""] })
+      mod = build_cloudflare_module(
+        config_path: config_path,
+        secrets_path: File.join(dir, "secrets.yml"),
+        shell: shell,
+        config_hash: cloudflare_config(
+          "api_token" => "setup-token",
+          "tunnel" => { "id" => tunnel_id },
+          "access" => access,
+        ),
+      )
+      yield mod, dir
+    end
+  end
+
+  def stub_all(mod, names, &block)
+    return block.call if names.empty?
+    mod.stub(names.first, nil) { stub_all(mod, names.drop(1), &block) }
+  end
+
+  def run_setup_against(mod, dir, transport)
+    mod.stub(:interactive?, false) do
+      run_setup_steps_against(mod, dir, transport) { assert_raises(DevBoxer::SetupError) { mod.setup! } }
+    end
+  end
+
+  def run_setup_steps_against(mod, dir, transport)
+    mod.stub(:check_saved_tokens, nil) do
+      mod.stub(:install_cloudflared, nil) do
+        mod.stub(:credentials_path, File.join(dir, "credentials.json")) do
+          mod.stub(:api_client, -> { DevBoxer::CloudflareAPI::Client.new(transport: transport) }) do
+            yield
+          end
+        end
+      end
+    end
+  end
 
   def build_cloudflare_module(config_path:, secrets_path:, config_hash: default_config_hash, log_io: StringIO.new, shell: nil)
     DevBoxer::Exposure::Cloudflare.new(

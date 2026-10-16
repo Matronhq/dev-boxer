@@ -158,19 +158,19 @@ module DevBoxer
       def install_bridge
         if Dir.exist?(bridge_dir)
           skip "matron-bridge already cloned"
-          shell.sh("su - #{username} -c 'cd #{bridge_dir} && git pull --ff-only'")
+          unless shell.sh("su - #{username} -c 'cd #{bridge_dir} && git pull --ff-only'")
+            warn "Could not update matron-bridge (git pull --ff-only failed); continuing with the current checkout"
+          end
         else
           ensure_dev_user_can_clone
           info "Cloning matron-bridge"
           shell.run_as_user(username, "git clone #{BRIDGE_REPO} #{bridge_dir}")
         end
 
-        if Dir.exist?("#{bridge_dir}/node_modules")
-          skip "npm dependencies already installed"
-        else
-          info "Installing npm dependencies"
-          shell.run_as_user(username, "cd #{bridge_dir} && npm install")
-        end
+        # Always run: npm install is quick when nothing changed, and it repairs
+        # an interrupted install or picks up dependencies after the pull above.
+        info "Installing npm dependencies"
+        shell.run_as_user(username, "cd #{bridge_dir} && npm install")
         ok "matron-bridge installed"
       end
 

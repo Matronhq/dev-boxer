@@ -100,10 +100,36 @@ module DevBoxer
         end
       end
 
+      def ssh_port = config.ssh&.port || 2222
+
+      # This restart turns on key-only login on the new port, so check first
+      # that it cannot lock the operator out: a usable key is installed, the
+      # config parses, and afterwards sshd really listens on the new port.
       def restart_ssh_service
+        problem = SshKeyCheck.problem(config.user&.ssh_public_key)
+        if problem
+          raise SetupError, "Not restarting SSH: user.ssh_public_key in config.yml is not usable (#{problem}).\n" \
+                            "Password login would be turned off, locking you out. Fix the key, then re-run: sudo ./setup.rb --from users"
+        end
+        unless shell.sh("sshd -t")
+          raise SetupError, "Not restarting SSH: `sshd -t` rejects /etc/ssh/sshd_config.\n" \
+                            "Run `sshd -t` to see why, fix it, then re-run: sudo ./setup.rb --from security"
+        end
+
         info "Restarting SSH with hardened config"
+        # Ubuntu 22.10+ starts sshd from ssh.socket, which keeps listening on
+        # the old port until systemd regenerates it from sshd_config.
+        if shell.sh("systemctl is-active --quiet ssh.socket")
+          shell.sh!("systemctl daemon-reload")
+          shell.systemctl(:restart, "ssh.socket")
+        end
         shell.systemctl(:restart, "ssh")
-        ok "SSH restarted (key-only auth now active)"
+
+        unless shell.sh("ss -ltnH 'sport = :#{Integer(ssh_port)}' | grep -q LISTEN")
+          raise SetupError, "SSH is not listening on port #{ssh_port} after the restart. Keep this session open.\n" \
+                            "Check `systemctl status ssh ssh.socket` and `ss -ltn`, fix it, then re-run: sudo ./setup.rb --from users"
+        end
+        ok "SSH restarted on port #{ssh_port} (key-only auth now active)"
       end
     end
   end

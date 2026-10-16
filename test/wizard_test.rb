@@ -5,29 +5,30 @@ class WizardTest < Minitest::Test
   def run_wizard(answers, config_path:)
     input = StringIO.new(answers.join("\n") + "\n")
     output = StringIO.new
-    result = DevBoxer::Wizard.run(config_path: config_path, input: input, output: output)
+    result = DevBoxer::Wizard.run(config_path: config_path, input: input, output: output,
+                                  token_check: DevBoxer::Testing::FakeTokenCheck.new)
     [result, output.string]
   end
 
   CLOUDFLARE_BUNDLED_ANSWERS = [
     "alice",                                    # Linux username
-    "ssh-ed25519 AAAATEST alice@example.com",   # SSH public key
+    DevBoxer::Testing::SSH_KEY_ALICE,           # SSH public key
     "2223",                                     # SSH port
     "bundled",                                  # journal location
     "alice",                                    # journal username
     "cloudflare",                               # exposure mode
     "example.com",                              # base domain
     "yes",                                      # manage DNS
-    "zone-token",                               # zone DNS API token
+    DevBoxer::Testing::ZONE_TOKEN,              # zone DNS API token
     "yes",                                      # create tunnel + Access
     "alice@example.com, example.com",           # Access allowed
-    "setup-token",                              # one-time setup token
+    DevBoxer::Testing::SETUP_TOKEN,             # one-time setup token
     "intermediate",                             # Claude experience level
   ].freeze
 
   IP_EXTERNAL_ANSWERS = [
     "bob",
-    "ssh-ed25519 AAAATEST bob@example.com",
+    DevBoxer::Testing::SSH_KEY_BOB,
     "2222",
     "external",                                 # journal location
     "wss://chat.example.com/ws",                # journal URL
@@ -62,8 +63,8 @@ class WizardTest < Minitest::Test
       assert_equal false, config.dig("desktop", "enabled")
       assert_equal "intermediate", config.dig("claude", "experience_level")
 
-      assert_equal "zone-token", secrets.dig("exposure", "cloudflare", "zone_api_token")
-      assert_equal "setup-token", secrets.dig("exposure", "cloudflare", "api_token")
+      assert_equal DevBoxer::Testing::ZONE_TOKEN, secrets.dig("exposure", "cloudflare", "zone_api_token")
+      assert_equal DevBoxer::Testing::SETUP_TOKEN, secrets.dig("exposure", "cloudflare", "api_token")
       assert secrets.dig("user", "rdp_password")
       assert_equal 0o600, File.stat(File.join(dir, "secrets.yml")).mode & 0o777
 
@@ -76,6 +77,116 @@ class WizardTest < Minitest::Test
       assert_includes out, "== 4. Claude behavior =="
       refute_match(/matrix/i, out)
     end
+  end
+
+  def test_refused_cloudflare_token_is_asked_for_again
+    Dir.mktmpdir do |dir|
+      bad = "bad-token-".ljust(40, "0")
+      answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
+      answers.insert(8, bad) # first zone token attempt, refused
+      check = DevBoxer::Testing::FakeTokenCheck.new(refuse: { bad => "Cloudflare does not recognise it" })
+      output = run_with_check(answers, dir, check)
+
+      assert_includes output, "That token was refused:\n  - Cloudflare does not recognise it"
+      assert_includes output, "Zone → DNS: Edit"
+      assert_equal [bad, DevBoxer::Testing::ZONE_TOKEN], check.checks.select { |c| c[0] == :zone }.map { |c| c[1] }
+      secrets = YAML.safe_load_file(File.join(dir, "secrets.yml"))
+      assert_equal DevBoxer::Testing::ZONE_TOKEN, secrets.dig("exposure", "cloudflare", "zone_api_token")
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal "account-123", config.dig("exposure", "cloudflare", "account_id")
+      assert_equal [:setup, DevBoxer::Testing::SETUP_TOKEN, "account-123", true], check.checks.find { |c| c[0] == :setup }
+    end
+  end
+
+  def test_access_not_switched_on_shows_steps_and_waits
+    Dir.mktmpdir do |dir|
+      answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
+      answers.insert(12, "", "") # Enter twice: not yet, then switched on
+      check = DevBoxer::Testing::FakeTokenCheck.new(access_not_enabled: true)
+      check.access_states = [:not_enabled, :ok]
+      output = run_with_check(answers, dir, check)
+
+      assert_includes output, "Cloudflare Access is not switched on"
+      assert_includes output, "Not yet."
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal true, config.dig("exposure", "cloudflare", "access", "enabled")
+    end
+  end
+
+  def test_skipping_zero_trust_turns_access_automation_off
+    Dir.mktmpdir do |dir|
+      answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
+      answers.insert(12, "skip")
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new(access_not_enabled: true))
+
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal false, config.dig("exposure", "cloudflare", "access", "enabled")
+      assert_includes output, "Skipping the Access apps for now"
+    end
+  end
+
+  def test_bad_ssh_key_username_and_access_list_are_refused_at_entry
+    Dir.mktmpdir do |dir|
+      answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
+      answers.insert(10, "nobody at all")                                   # Access list, refused
+      answers.insert(1, DevBoxer::Testing::SSH_KEY_ALICE * 2)               # doubled key, refused
+      answers.insert(0, "Alice Smith")                                      # username, refused
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new)
+
+      assert_includes output, "That linux username was refused"
+      assert_includes output, "That ssh public key was refused: it looks like more than one key"
+      assert_includes output, "That allowed emails or email domains (comma-separated) was refused"
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal "alice", config.dig("user", "name")
+      assert_equal DevBoxer::Testing::SSH_KEY_ALICE, config.dig("user", "ssh_public_key")
+    end
+  end
+
+  def test_missing_journal_token_file_is_refused_at_entry
+    Dir.mktmpdir do |dir|
+      token_file = File.join(dir, "agent-token")
+      File.write(token_file, "token\n")
+      answers = IP_EXTERNAL_ANSWERS.dup
+      answers[5] = File.join(dir, "missing-token")
+      answers.insert(6, token_file)
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new)
+
+      assert_includes output, "missing-token does not exist on this server"
+      assert_equal token_file, YAML.safe_load_file(File.join(dir, "config.yml")).dig("journal", "token_file")
+    end
+  end
+
+  def test_ip_address_and_root_username_are_refused_at_entry
+    Dir.mktmpdir do |dir|
+      answers = IP_EXTERNAL_ANSWERS.dup
+      answers[7] = "box.example.com"     # IP address, refused
+      answers.insert(8, "203.0.113.7")
+      answers.insert(0, "root")          # username, refused
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new)
+
+      assert_includes output, "root can't be used"
+      assert_includes output, "box.example.com is not an IP address"
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal "203.0.113.7", config.dig("exposure", "ip", "address")
+      assert_equal "bob", config.dig("user", "name")
+    end
+  end
+
+  def test_out_of_range_saved_ssh_port_is_not_offered_again
+    prompter = DevBoxer::Wizard::Prompter.new(
+      input: StringIO.new(["", "", "", "2224"].join("\n") + "\n"), output: (out = StringIO.new),
+    )
+    existing = { "user" => { "name" => "alice", "ssh_public_key" => DevBoxer::Testing::SSH_KEY_ALICE }, "ssh" => { "port" => 70_000 } }
+    fragment, = DevBoxer::Wizard::ServerLoginSection.new(prompter: prompter, existing: existing).collect({})
+
+    assert_equal 2224, fragment.dig("ssh", "port")
+    assert_includes out.string, "must be between 1 and 65535"
+  end
+
+  def test_ip_address_with_a_network_range_is_refused
+    assert_match(/network range/, DevBoxer::Wizard::ExposureSection.ip_address_problem("203.0.113.7/24"))
+    assert_nil DevBoxer::Wizard::ExposureSection.ip_address_problem("203.0.113.7")
+    assert_nil DevBoxer::Wizard::ExposureSection.ip_address_problem("2001:db8::7")
   end
 
   def test_ip_external_run_writes_v2_config_that_validates
@@ -188,11 +299,12 @@ class WizardTest < Minitest::Test
       })
 
       answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
-      answers[8] = "rotated-zone-token" # zone DNS API token -> collected value
+      answers[8] = DevBoxer::Testing::ROTATED_ZONE_TOKEN # zone DNS API token -> collected value
       input = StringIO.new(answers.join("\n") + "\n")
       output = StringIO.new
       result = DevBoxer::Wizard.run(
         config_path: config_path, input: input, output: output, force: true,
+        token_check: DevBoxer::Testing::FakeTokenCheck.new,
       )
 
       assert_equal :created, result
@@ -200,7 +312,7 @@ class WizardTest < Minitest::Test
       assert_equal "keep-me-login", secrets.dig("journal", "user_password")
       assert_equal "keep-me-hmac", secrets.dig("bridge", "hmac_secret")
       # Wizard-collected secret still overrides on conflict.
-      assert_equal "rotated-zone-token",
+      assert_equal DevBoxer::Testing::ROTATED_ZONE_TOKEN,
         secrets.dig("exposure", "cloudflare", "zone_api_token")
     end
   end
@@ -250,6 +362,13 @@ class WizardTest < Minitest::Test
   end
 
   private
+
+  def run_with_check(answers, dir, check)
+    output = StringIO.new
+    DevBoxer::Wizard.run(config_path: File.join(dir, "config.yml"),
+                         input: StringIO.new(answers.join("\n") + "\n"), output: output, token_check: check)
+    output.string
+  end
 
   def collect_journal(answers, existing, so_far = {})
     prompter = DevBoxer::Wizard::Prompter.new(

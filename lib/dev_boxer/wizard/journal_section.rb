@@ -42,11 +42,11 @@ module DevBoxer
           [{ "journal" => { "mode" => "bundled", "username" => name } }, {}]
         when "external"
           url = ask_journal_url
-          token_file = ask(
+          token_file = ask_valid(
             "Path to a pre-provisioned agent token file (Enter to skip and pair from the app)",
             default: existing.dig("journal", "token_file"),
             required: false,
-          )
+          ) { |path| token_file_problem(path) }
           # Carry forward keys the wizard doesn't prompt for but that config
           # supports (config.example.yml) and probe_external_journal! relies on
           # (module 08). Without this a reconfigure drops ca_file and the next
@@ -64,6 +64,14 @@ module DevBoxer
       end
 
       private
+
+      def token_file_problem(path)
+        return nil if path.nil?
+        return "use the full path, starting with /" unless path.start_with?("/")
+        return "#{path} does not exist on this server" unless File.file?(path)
+        return "#{path} is empty" if File.zero?(path)
+        nil
+      end
 
       def ask_journal_url
         loop do

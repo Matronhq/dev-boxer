@@ -114,6 +114,43 @@ class PreflightTest < DevBoxer::Testing::ModuleTestCase
   end
 end
 
+class PreflightFirstRunTokenTest < DevBoxer::Testing::ModuleTestCase
+  def preflight(token)
+    config = DevBoxer::Config.from_hash({ "user" => { "name" => "dev" }, "journal" => { "token_file" => token } })
+    DevBoxer::Preflight.new(config: config, shell: @shell, log: @log, interactive: false)
+  end
+
+  def setup
+    super
+    respond("id -u dev >/dev/null 2>&1", success: false)
+  end
+
+  def test_a_token_under_a_closed_directory_stops_a_first_run
+    Dir.mktmpdir do |dir|
+      closed = File.join(dir, "closed")
+      Dir.mkdir(closed, 0o700)
+      token = File.join(closed, "agent-token")
+      File.write(token, "tok\n")
+
+      error = assert_raises(DevBoxer::SetupError) { preflight(token).run(%w[matron]) }
+      assert_match(/is under #{Regexp.escape(closed)}, which only its owner and group can open/, error.message)
+      refute_recorded(/chown|runuser/)
+    end
+  end
+
+  def test_a_token_under_open_directories_waits_for_the_matron_step
+    Dir.mktmpdir do |dir|
+      File.chmod(0o755, dir)
+      token = File.join(dir, "agent-token")
+      File.write(token, "tok\n")
+      File.chmod(0o600, token)
+
+      preflight(token).run(%w[matron])
+      refute_recorded(/chown|runuser/)
+    end
+  end
+end
+
 class PreflightAgentTokenTest < DevBoxer::Testing::ModuleTestCase
   def test_a_token_still_unreadable_after_the_chown_stops_with_the_next_step
     Dir.mktmpdir do |dir|

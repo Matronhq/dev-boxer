@@ -81,7 +81,32 @@ module DevBoxer
       path = config.journal&.token_file.to_s
       return if path.empty? || !File.exist?(path)
 
-      JournalEnrollment.new(config: config, shell: shell, log: log).ensure_readable_by_user!(path)
+      if shell.user_exists?(username)
+        JournalEnrollment.new(config: config, shell: shell, log: log).ensure_readable_by_user!(path)
+        return
+      end
+
+      # First run: the dev user doesn't exist yet, so it can't be asked. The
+      # matron step hands the file itself over later; a closed directory
+      # above it can't be fixed that way, so catch that now.
+      closed = closed_parent_directory(path)
+      return unless closed
+
+      raise SetupError, <<~MSG.chomp
+        The agent token #{path} is under #{closed}, which only its owner and group can open, so the bridge (running as #{username}) won't be able to read it.
+        Next step: move the token to #{JournalEnrollment::TOKEN_PATH} (or set journal.token_file to a path outside closed directories), then re-run setup. Nothing has been changed yet.
+      MSG
+    end
+
+    # The first directory above path that others can't pass through.
+    def closed_parent_directory(path)
+      dir = File.dirname(File.expand_path(path))
+      loop do
+        return dir if (File.stat(dir).mode & 0o001).zero?
+        parent = File.dirname(dir)
+        return nil if parent == dir
+        dir = parent
+      end
     end
 
     def github_already_logged_in?

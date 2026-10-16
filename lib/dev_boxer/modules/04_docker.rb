@@ -49,7 +49,9 @@ module DevBoxer
       end
 
       def install_docker
-        if shell.command_exists?("docker")
+        # The engine package, not the docker command: an interrupted install
+        # can leave the CLI without the daemon, and a re-run must finish it.
+        if shell.apt_installed?("docker-ce")
           skip "Docker already installed"
           return
         end

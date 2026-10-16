@@ -1,3 +1,4 @@
+require "etc"
 require "securerandom"
 require_relative "section"
 
@@ -20,11 +21,19 @@ module DevBoxer
 
       def collect(_so_far)
         explain_linux_username
-        username = ask("Linux username", default: existing.dig("user", "name") || default_username)
+        username = ask_valid("Linux username", default: existing.dig("user", "name") || default_username) do |value|
+          username_problem(value)
+        end
         explain_ssh_public_key
-        ssh_key = ask("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key)
+        ssh_key = ask_valid("SSH public key", default: existing.dig("user", "ssh_public_key") || default_ssh_public_key) do |value|
+          SshKeyCheck.problem(value)
+        end
         explain_ssh_port
-        ssh_port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
+        ssh_port = loop do
+          port = ask_integer("SSH port", default: existing.dig("ssh", "port") || DEFAULT_SSH_PORT)
+          break port if port.between?(1, 65_535)
+          say "The SSH port must be between 1 and 65535."
+        end
         rdp_password = existing.dig("user", "rdp_password") || SecureRandom.urlsafe_base64(18)
 
         [
@@ -61,6 +70,18 @@ module DevBoxer
         say
       end
 
+      def username_problem(value)
+        errors = []
+        Config.validate_username(errors, value)
+        return "use lowercase letters, digits, - and _, starting with a letter" unless errors.empty?
+        return "root can't be used: Dev Boxer turns off root login" if value == "root"
+
+        uid = Etc.getpwnam(value).uid
+        "#{value} is a system account; pick a different name" if uid < 1000
+      rescue ArgumentError
+        nil # no such user yet: it will be created
+      end
+
       def default_username
         user = ENV["SUDO_USER"]
         return user if user && user != "root"
@@ -70,7 +91,13 @@ module DevBoxer
       def default_ssh_public_key
         path = "/root/.ssh/authorized_keys"
         return nil unless File.exist?(path)
-        File.readlines(path).map(&:strip).find { |line| !line.empty? && !line.start_with?("#") }
+        line = File.readlines(path).map(&:strip).find { |l| !l.empty? && !l.start_with?("#") }
+        return nil unless line
+        # Cloud images often prefix the key with options such as
+        # command="echo 'Please login as ...'", which would stop the new user
+        # getting a shell. Keep only "type key [comment]".
+        types = SshKeyCheck::KEY_TYPES.map { |t| Regexp.escape(t) }.join("|")
+        line[/(?:#{types})\s+AAAA\S*(?:\s.*)?\z/] || line
       end
     end
   end

@@ -50,6 +50,19 @@ class DockerModuleTest < Minitest::Test
     refute_includes script, "ctr "
   end
 
+  def test_reinstalls_when_the_cli_exists_but_the_engine_package_does_not
+    recorded = []
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      recorded << cmd
+      [!cmd.start_with?("dpkg -s docker-ce"), "", ""]
+    })
+    mod = DevBoxer::Modules::Docker.new(config: DevBoxer::Config.from_hash({}),
+                                        log: DevBoxer::Log.new(io: StringIO.new, color: false), shell: shell)
+    shell.stub(:write_file, nil) { mod.send(:install_docker) }
+
+    assert(recorded.any? { |cmd| cmd.include?("download.docker.com") }, recorded.inspect)
+  end
+
   private
 
   def build_module(config_hash)

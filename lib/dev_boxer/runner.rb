@@ -2,6 +2,19 @@ module DevBoxer
   class Runner
     UnknownModule = Class.new(StandardError)
 
+    # A module stopped. Carries the module name so setup.rb can say exactly
+    # how to resume; the original error is kept as `cause`.
+    class ModuleFailed < StandardError
+      attr_reader :module_name
+
+      def initialize(module_name, error)
+        @module_name = module_name
+        super(error.message)
+      end
+
+      def resume_command = "sudo ./setup.rb --from #{module_name}"
+    end
+
     def initialize(modules:, config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil, interactive: true)
       @modules = modules.sort_by { |m| m.module_order || 0 }
       @config = config
@@ -31,6 +44,14 @@ module DevBoxer
       end
 
       selected.each do |klass|
+        run_module(klass)
+      end
+    end
+
+    private
+
+    def run_module(klass)
+      begin
         klass.new(
           config: @config,
           log: @log,
@@ -40,10 +61,10 @@ module DevBoxer
           secrets_path: @secrets_path,
           interactive: @interactive,
         ).run
+      rescue StandardError => e
+        raise ModuleFailed.new(klass.module_name, e)
       end
     end
-
-    private
 
     def validate_known!(module_name)
       return if @modules.any? { |m| m.module_name == module_name }

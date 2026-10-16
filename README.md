@@ -143,7 +143,9 @@ Setup runs 10 modules by default, in order; the optional desktop module (03) bri
 | 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |
 | 11 | `hello-world`  | `localhost:9820` tunnel smoke-test service |
 
-If a module fails, fix the cause and resume with `sudo ./setup.rb --from <module>` — every module is idempotent.
+If a module fails, setup prints which step failed, why, and the exact command to resume (`sudo ./setup.rb --from <module>`). Every module is idempotent. The full error with its backtrace is saved to `last-error.log` next to `config.yml`, for bug reports.
+
+The wizard checks answers when you enter them, so mistakes are refused straight away instead of failing later. It checks the SSH public key is one complete key line (a mangled key would lock you out once password login is off), the username and port, that an agent token file exists, the Access email list, and both Cloudflare tokens.
 
 ```bash
 sudo ./setup.rb --only security

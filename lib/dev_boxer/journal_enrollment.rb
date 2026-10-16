@@ -189,7 +189,9 @@ module DevBoxer
 
     def confirm_retry?
       log.info "Request a fresh pairing code? [Y/n]:"
-      answer = input.gets.to_s.strip.downcase
+      line = input.gets
+      return false if line.nil? # input closed: don't loop on pairing forever
+      answer = line.strip.downcase
       answer.empty? || %w[y yes].include?(answer)
     end
 

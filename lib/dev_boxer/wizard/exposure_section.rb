@@ -1,3 +1,4 @@
+require "ipaddr"
 require "uri"
 require_relative "section"
 
@@ -57,8 +58,18 @@ module DevBoxer
         end
       end
 
+      def self.ip_address_problem(value)
+        return nil if Config.blank?(value)
+        IPAddr.new(value.to_s)
+        nil
+      rescue IPAddr::InvalidAddressError
+        "#{value} is not an IP address (use digits like 203.0.113.7, not a hostname)"
+      end
+
       def self.validate_ip(hash, errors)
         ip = hash.dig("exposure", "ip") || {}
+        problem = ip_address_problem(ip["address"])
+        errors << "exposure.ip.address: #{problem}" if problem
         %w[journal_port viewer_port hello_port].each do |key|
           value = ip[key]
           Config.validate_port(errors, "exposure.ip.#{key}", value) unless value.nil?
@@ -79,11 +90,11 @@ module DevBoxer
 
       def collect_ip
         explain_ip_mode
-        address = ask(
+        address = ask_valid(
           "Public IP address (Enter to auto-detect at setup time)",
           default: existing.dig("exposure", "ip", "address"),
           required: false,
-        )
+        ) { |value| self.class.ip_address_problem(value) }
         ip = {
           "address" => address,
           "journal_port" => existing.dig("exposure", "ip", "journal_port") || 8443,
@@ -223,10 +234,10 @@ module DevBoxer
       def build_access_config(existing, enabled:)
         return { "enabled" => false } unless enabled
 
-        allowed = ask(
+        allowed = ask_valid(
           "Allowed emails or email domains (comma-separated)",
           default: default_access_allowed(existing),
-        )
+        ) { |value| access_allowed_problem(value) }
         allowed_emails, allowed_domains = parse_access_allowed(allowed)
 
         {
@@ -285,6 +296,15 @@ module DevBoxer
           *Array(existing.dig("exposure", "cloudflare", "access", "allowed_emails")),
           *Array(existing.dig("exposure", "cloudflare", "access", "allowed_email_domains")),
         ].join(", ")
+      end
+
+      def access_allowed_problem(value)
+        items = parse_access_allowed(value).flatten
+        bad = items.reject { |item| item.match?(/\A[^@\s,]+@[a-z0-9.-]+\.[a-z]{2,}\z/) || item.match?(/\A[a-z0-9.-]+\.[a-z]{2,}\z/) }
+        return "#{bad.join(", ")} is not an email address or a domain" unless bad.empty?
+        nil
+      rescue RuntimeError => e
+        e.message
       end
 
       def parse_access_allowed(value)

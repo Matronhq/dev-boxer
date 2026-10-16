@@ -198,6 +198,22 @@ class JournalEnrollmentTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  def test_expired_code_with_closed_input_stops_instead_of_retrying_forever
+    Dir.mktmpdir do |dir|
+      responses = [
+        [200, { "pair_code" => "AAAA-AAAA", "poll_token" => "p1", "expires_in" => 600 }],
+        [404, { "error" => "not_found" }],
+      ]
+      enrollment = build_enrollment(
+        { "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" } },
+        dir: dir, interactive: true, http_post: ->(_url, _body) { responses.shift }, input: StringIO.new(""),
+      )
+
+      error = assert_raises(DevBoxer::JournalEnrollment::NotEnrolled) { enrollment.resolve! }
+      assert_match(/Pairing abandoned/, error.message)
+    end
+  end
+
   def test_https_base_conversion
     assert_equal "https://chat.example.com", DevBoxer::JournalEnrollment.https_base("wss://chat.example.com/ws")
     assert_equal "https://203.0.113.7:8443", DevBoxer::JournalEnrollment.https_base("wss://203.0.113.7:8443/ws")

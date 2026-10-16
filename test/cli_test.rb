@@ -173,4 +173,38 @@ class CLITest < Minitest::Test
       refute_match(/\.rb:\d+:in/, out + err)
     end
   end
+
+  def test_any_module_failure_names_the_step_and_how_to_resume
+    Dir.mktmpdir do |dir|
+      cfg = File.join(dir, "config.yml")
+      File.write(cfg, {
+        "user" => { "name" => "dev", "ssh_public_key" => "ssh-ed25519 AAAATEST t@e", "rdp_password" => "x" },
+        "ssh" => { "port" => 2222 },
+        "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" },
+        "exposure" => { "mode" => "ip" },
+        "hello_world" => { "port" => 9820 },
+      }.to_yaml)
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+      File.write(File.join(mods_dir, "01_broken.rb"), <<~RUBY)
+        module DevBoxer
+          module Modules
+            class Broken < ModuleBase
+              module_name "broken"
+              module_order 1
+              def run = raise("apt-get could not reach the mirror")
+            end
+          end
+        end
+      RUBY
+
+      out, err, status = run_setup("--non-interactive", "--config", cfg, "--modules-dir", mods_dir)
+
+      assert_equal 1, status.exitstatus
+      assert_match(/✗ The broken step failed: apt-get could not reach the mirror/, out)
+      assert_match(%r{resume with: sudo ./setup.rb --from broken}, out)
+      refute_match(/\.rb:\d+:in/, out + err)
+      assert_match(/01_broken.rb:\d+/, File.read(File.join(dir, "last-error.log")))
+    end
+  end
 end

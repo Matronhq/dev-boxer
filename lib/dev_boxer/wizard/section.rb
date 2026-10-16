@@ -38,6 +38,19 @@ module DevBoxer
       def ask_choice(...) = prompter.ask_choice(...)
       def confirm(...) = prompter.confirm(...)
       def say(...) = prompter.say(...)
+
+      # Ask until the block (value -> problem or nil) accepts the answer, so
+      # a bad value is refused at entry rather than failing later in setup.
+      def ask_valid(label, **options)
+        loop do
+          value = ask(label, **options)
+          problem = yield(value)
+          return value if problem.nil?
+
+          say "That #{label.downcase} was refused: #{problem}."
+          options = options.merge(default: nil) if value == options[:default]
+        end
+      end
     end
   end
 end

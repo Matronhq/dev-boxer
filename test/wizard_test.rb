@@ -12,7 +12,7 @@ class WizardTest < Minitest::Test
 
   CLOUDFLARE_BUNDLED_ANSWERS = [
     "alice",                                    # Linux username
-    "ssh-ed25519 AAAATEST alice@example.com",   # SSH public key
+    DevBoxer::Testing::SSH_KEY_ALICE,           # SSH public key
     "2223",                                     # SSH port
     "bundled",                                  # journal location
     "alice",                                    # journal username
@@ -28,7 +28,7 @@ class WizardTest < Minitest::Test
 
   IP_EXTERNAL_ANSWERS = [
     "bob",
-    "ssh-ed25519 AAAATEST bob@example.com",
+    DevBoxer::Testing::SSH_KEY_BOB,
     "2222",
     "external",                                 # journal location
     "wss://chat.example.com/ws",                # journal URL
@@ -122,6 +122,53 @@ class WizardTest < Minitest::Test
       config = YAML.safe_load_file(File.join(dir, "config.yml"))
       assert_equal false, config.dig("exposure", "cloudflare", "access", "enabled")
       assert_includes output, "Skipping the Access apps for now"
+    end
+  end
+
+  def test_bad_ssh_key_username_and_access_list_are_refused_at_entry
+    Dir.mktmpdir do |dir|
+      answers = CLOUDFLARE_BUNDLED_ANSWERS.dup
+      answers.insert(10, "nobody at all")                                   # Access list, refused
+      answers.insert(1, DevBoxer::Testing::SSH_KEY_ALICE * 2)               # doubled key, refused
+      answers.insert(0, "Alice Smith")                                      # username, refused
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new)
+
+      assert_includes output, "That linux username was refused"
+      assert_includes output, "That ssh public key was refused: it looks like more than one key"
+      assert_includes output, "That allowed emails or email domains (comma-separated) was refused"
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal "alice", config.dig("user", "name")
+      assert_equal DevBoxer::Testing::SSH_KEY_ALICE, config.dig("user", "ssh_public_key")
+    end
+  end
+
+  def test_missing_journal_token_file_is_refused_at_entry
+    Dir.mktmpdir do |dir|
+      token_file = File.join(dir, "agent-token")
+      File.write(token_file, "token\n")
+      answers = IP_EXTERNAL_ANSWERS.dup
+      answers[5] = File.join(dir, "missing-token")
+      answers.insert(6, token_file)
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new)
+
+      assert_includes output, "missing-token does not exist on this server"
+      assert_equal token_file, YAML.safe_load_file(File.join(dir, "config.yml")).dig("journal", "token_file")
+    end
+  end
+
+  def test_ip_address_and_root_username_are_refused_at_entry
+    Dir.mktmpdir do |dir|
+      answers = IP_EXTERNAL_ANSWERS.dup
+      answers[7] = "box.example.com"     # IP address, refused
+      answers.insert(8, "203.0.113.7")
+      answers.insert(0, "root")          # username, refused
+      output = run_with_check(answers, dir, DevBoxer::Testing::FakeTokenCheck.new)
+
+      assert_includes output, "root can't be used"
+      assert_includes output, "box.example.com is not an IP address"
+      config = YAML.safe_load_file(File.join(dir, "config.yml"))
+      assert_equal "203.0.113.7", config.dig("exposure", "ip", "address")
+      assert_equal "bob", config.dig("user", "name")
     end
   end
 

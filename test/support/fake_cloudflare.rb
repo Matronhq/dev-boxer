@@ -5,6 +5,14 @@ module DevBoxer
     SETUP_TOKEN = "setup-token-".ljust(40, "0").freeze
     ROTATED_ZONE_TOKEN = "rotated-zone-token-".ljust(40, "0").freeze
 
+    # Well-formed (but not real) ed25519 public keys.
+    def self.ssh_key(comment, seed)
+      blob = [11].pack("N") + "ssh-ed25519" + [32].pack("N") + (seed * 32)[0, 32]
+      "ssh-ed25519 #{[blob].pack("m0")} #{comment}"
+    end
+    SSH_KEY_ALICE = ssh_key("alice@example.com", "a").freeze
+    SSH_KEY_BOB = ssh_key("bob@example.com", "b").freeze
+
     # Stands in for CloudflareTokenCheck: approves every token, records the
     # checks, and can be told to refuse a token or report Access as off.
     class FakeTokenCheck

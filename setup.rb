@@ -173,12 +173,30 @@ begin
 rescue DevBoxer::Runner::UnknownModule => e
   warn e.message
   exit 1
-rescue DevBoxer::SetupError => e
-  # A failure the operator can fix: the message says how; a backtrace
-  # would only bury it.
-  lines = e.message.lines.map(&:chomp)
-  log.error(lines.shift)
+rescue DevBoxer::Runner::ModuleFailed => e
+  # Print what went wrong and how to resume, not a backtrace; the backtrace
+  # goes to a log file for whoever needs it.
+  error = e.cause || e
+  lines = error.message.lines.map(&:chomp)
+  log_path = File.join(File.dirname(options[:config]), "last-error.log")
+  begin
+    File.write(log_path, "#{Time.now.utc} module #{e.module_name}\n#{error.class}: #{error.message}\n" \
+                         "#{Array(error.backtrace).join("\n")}\n")
+  rescue SystemCallError
+    log_path = nil
+  end
+  if error.is_a?(DevBoxer::SetupError)
+    log.error(lines.shift)
+  else
+    log.error("The #{e.module_name} step failed: #{lines.shift}")
+    lines = lines.last(40)
+  end
   lines.each { |line| log.info("    #{line}") }
+  unless error.is_a?(DevBoxer::SetupError)
+    log.info("    Next step: fix the cause above, then resume with: #{e.resume_command}")
+    log.info("    Every step is safe to re-run.")
+  end
+  log.info("    (Details for a bug report: #{log_path})") if log_path
   exit 1
 rescue DevBoxer::Wizard::Prompter::InputClosed => e
   warn e.message

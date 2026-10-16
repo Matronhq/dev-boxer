@@ -509,7 +509,9 @@ module DevBoxer
         manual_tunnel_id = nil
         loop do
           print "Cloudflare TunnelID: "
-          manual_tunnel_id = $stdin.gets.to_s.strip
+          line = $stdin.gets
+          raise SetupError, "Input ended while waiting for the TunnelID. Re-run: #{RERUN_COMMAND}" if line.nil?
+          manual_tunnel_id = line.strip
           break unless manual_tunnel_id.empty?
           info "TunnelID is required."
         end

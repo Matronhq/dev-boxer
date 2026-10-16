@@ -144,4 +144,31 @@ class RunnerTest < Minitest::Test
 
     assert_equal %w[desktop], @ran
   end
+
+  def test_preflight_sees_the_selected_steps_before_any_runs
+    seen = []
+    ran = @ran
+    preflight = Object.new
+    preflight.define_singleton_method(:run) { |names| seen << [names, ran.dup] }
+    runner = DevBoxer::Runner.new(modules: [@mod_a, @mod_b, @mod_c], config: @config, log: @log, preflight: preflight)
+
+    runner.run(from: "alpha")
+
+    assert_equal [[%w[alpha gamma], []]], seen
+  end
+
+  def test_a_preflight_refusal_stops_before_any_step
+    preflight = Object.new
+    preflight.define_singleton_method(:run) { |_names| raise DevBoxer::SetupError, "port clash" }
+    runner = DevBoxer::Runner.new(modules: [@mod_a], config: @config, log: @log, preflight: preflight)
+
+    assert_raises(DevBoxer::SetupError) { runner.run }
+    assert_empty @ran
+  end
+
+  def test_dry_run_skips_the_preflight
+    preflight = Object.new
+    preflight.define_singleton_method(:run) { |_names| flunk "preflight ran on a dry run" }
+    DevBoxer::Runner.new(modules: [@mod_a], config: @config, log: @log, preflight: preflight).run(dry_run: true)
+  end
 end

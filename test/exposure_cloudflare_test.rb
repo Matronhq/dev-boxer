@@ -861,7 +861,10 @@ class ExposureCloudflareTest < Minitest::Test
       )
       transport = Transport.new(
         "GET /zones" => ZONES,
-        "GET /accounts/account-123/access/apps" => [{ "id" => "app-old", "name" => "Dev Boxer" }],
+        "GET /accounts/account-123/access/apps" => [
+          { "id" => "other-box-app", "name" => "Dev Boxer", "domain" => "*.example.net" },
+          { "id" => "app-old", "name" => "Dev Boxer", "domain" => "*.example.com" },
+        ],
         "PUT /accounts/account-123/access/apps/app-old" => { "id" => "app-old" },
         "POST /accounts/account-123/access/apps" => { "id" => "bypass-new" },
       )
@@ -872,6 +875,7 @@ class ExposureCloudflareTest < Minitest::Test
       # Only the bypass app (not found by name) is created.
       assert_equal 1, transport.calls.count { |call, _| call == "POST /accounts/account-123/access/apps" }
       assert_includes transport.calls.map(&:first), "PUT /accounts/account-123/access/apps/app-old"
+      refute_includes transport.calls.map(&:first), "PUT /accounts/account-123/access/apps/other-box-app"
       assert_equal "app-old", YAML.safe_load_file(config_path).dig("exposure", "cloudflare", "access", "app_id")
     end
   end

@@ -150,6 +150,24 @@ class CloudflareTokenCheckTest < Minitest::Test
     assert_match(/could not reach/, result.unreachable)
   end
 
+  def test_cloudflare_server_errors_are_an_outage_not_a_bad_token
+    transport = Transport.new(
+      "GET /zones" => Transport.failure(503, 10001, "Service unavailable"),
+      "GET /user/tokens/verify" => Transport.failure(503, 10001, "Service unavailable"),
+    )
+    result = checker(transport).check_zone_token(LEGACY, zone_name: "example.com")
+
+    assert_empty result.problems
+    assert_match(/HTTP 503/, result.unreachable)
+  end
+
+  def test_access_state_reports_an_outage_instead_of_raising
+    transport = ->(*) { raise DevBoxer::CloudflareAPI::Unreachable, "timeout" }
+    client = DevBoxer::CloudflareAPI::Client.new(transport: transport)
+
+    assert_equal :unreachable, DevBoxer::CloudflareTokenCheck.new(client: client).access_state(LEGACY, "acct-1")
+  end
+
   def test_api_error_knows_an_authentication_failure
     client = DevBoxer::CloudflareAPI::Client.new(transport: Transport.new("POST /accounts/acct-1/cfd_tunnel" => AUTH_ERROR))
     error = assert_raises(DevBoxer::CloudflareAPI::Error) do

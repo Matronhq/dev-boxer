@@ -67,11 +67,12 @@ module DevBoxer
         status, response_body = @transport.call(method, uri, headers, body && JSON.generate(body))
         status = status.to_i
 
+        # A server-side failure says nothing about the token; report it as an
+        # outage so it is never shown as "token refused".
+        raise Unreachable, "Cloudflare API #{method.to_s.upcase} #{path} returned HTTP #{status}" if status >= 500
+
         parsed = parse(response_body)
         if parsed.nil?
-          if status >= 500
-            raise Unreachable, "Cloudflare API #{method.to_s.upcase} #{path} returned HTTP #{status}"
-          end
           raise Error.new(http_method: method, path: path, status: status, errors: [], body: response_body)
         end
         return parsed["result"] if status.between?(200, 299) && parsed["success"] != false

@@ -383,8 +383,9 @@ module DevBoxer
 
       def upsert_access_app(app_id:, body:)
         # An app created by a run that stopped before saving its id is found
-        # by name and updated, not created twice.
-        app_id = existing_access_app_id(body["name"]) if app_id.to_s.empty?
+        # and updated, not created twice. Name and domain must both match, so
+        # another box's app in the same account is never taken over.
+        app_id = existing_access_app_id(body) if app_id.to_s.empty?
         if app_id.to_s.empty?
           cloudflare_api(token: setup_token, method: :post, path: "/accounts/#{access_account_id}/access/apps", body: body)
         else
@@ -392,10 +393,20 @@ module DevBoxer
         end
       end
 
-      def existing_access_app_id(name)
-        apps = cloudflare_api(token: setup_token, method: :get, path: "/accounts/#{access_account_id}/access/apps")
-        match = Array(apps).find { |app| app.is_a?(Hash) && app["name"] == name }
-        match && match["id"]
+      ACCESS_APPS_PAGE_SIZE = 100
+      ACCESS_APPS_MAX_PAGES = 20
+
+      def existing_access_app_id(body)
+        (1..ACCESS_APPS_MAX_PAGES).each do |page|
+          apps = Array(cloudflare_api(
+            token: setup_token, method: :get, path: "/accounts/#{access_account_id}/access/apps",
+            query: { "page" => page, "per_page" => ACCESS_APPS_PAGE_SIZE },
+          )).select { |app| app.is_a?(Hash) }
+          match = apps.find { |app| app["name"] == body["name"] && app["domain"] == body["domain"] }
+          return match["id"] if match
+          return nil if apps.length < ACCESS_APPS_PAGE_SIZE
+        end
+        nil
       end
 
       def access_protected_destinations

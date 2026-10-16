@@ -140,13 +140,15 @@ module DevBoxer
       end
     end
 
-    # :ok, :not_enabled (Zero Trust never switched on for the account) or
-    # :denied (the token lacks the Access permissions).
+    # :ok, :not_enabled (Zero Trust never switched on for the account),
+    # :denied (the token lacks the Access permissions) or :unreachable.
     def access_state(token, account_id)
       call(token, :get, "/accounts/#{account_id}/access/apps", "per_page" => 1)
       :ok
     rescue CloudflareAPI::Error => e
       self.class.access_not_enabled_error?(e) ? :not_enabled : :denied
+    rescue CloudflareAPI::Unreachable
+      :unreachable
     end
 
     private

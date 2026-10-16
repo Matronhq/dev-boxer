@@ -15,7 +15,7 @@ module DevBoxer
       def resume_command = "sudo ./setup.rb --from #{module_name}"
     end
 
-    def initialize(modules:, config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil, interactive: true)
+    def initialize(modules:, config:, log:, shell: Shell.new, templates_dir: nil, config_path: nil, secrets_path: nil, interactive: true, preflight: nil)
       @modules = modules.sort_by { |m| m.module_order || 0 }
       @config = config
       @log = log
@@ -24,6 +24,7 @@ module DevBoxer
       @config_path = config_path
       @secrets_path = secrets_path
       @interactive = interactive
+      @preflight = preflight
     end
 
     def run(only: nil, from: nil, skip: [], dry_run: false)
@@ -42,6 +43,9 @@ module DevBoxer
         selected.each { |m| @log.info("#{m.module_order.to_s.rjust(2, '0')}  #{m.module_name}") }
         return
       end
+
+      # Checks for the steps about to run, before any of them changes the box.
+      @preflight&.run(selected.map(&:module_name))
 
       selected.each do |klass|
         run_module(klass)

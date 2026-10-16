@@ -207,4 +207,39 @@ class CLITest < Minitest::Test
       assert_match(/01_broken.rb:\d+/, File.read(File.join(dir, "last-error.log")))
     end
   end
+
+  def test_a_port_clash_stops_setup_before_the_first_step
+    Dir.mktmpdir do |dir|
+      cfg = File.join(dir, "config.yml")
+      File.write(cfg, {
+        "user" => { "name" => "dev", "ssh_public_key" => "ssh-ed25519 AAAATEST t@e", "rdp_password" => "x" },
+        "ssh" => { "port" => 2222 },
+        "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" },
+        "exposure" => { "mode" => "ip" },
+        "hello_world" => { "port" => 2222 },
+      }.to_yaml)
+      mods_dir = File.join(dir, "modules")
+      Dir.mkdir(mods_dir)
+      marker = File.join(dir, "ran")
+      File.write(File.join(mods_dir, "01_marker.rb"), <<~RUBY)
+        module DevBoxer
+          module Modules
+            class Marker < ModuleBase
+              module_name "marker"
+              module_order 1
+              def run = File.write(#{marker.inspect}, "x")
+            end
+          end
+        end
+      RUBY
+
+      out, err, status = run_setup("--non-interactive", "--config", cfg, "--modules-dir", mods_dir)
+
+      assert_equal 1, status.exitstatus
+      assert_match(/✗ Some ports can't be used:/, out)
+      assert_match(/SSH \(ssh.port\) and the hello-world test page \(hello_world.port\) are both set to port 2222/, out)
+      refute File.exist?(marker), "no step should run"
+      refute_match(/\.rb:\d+:in/, out + err)
+    end
+  end
 end

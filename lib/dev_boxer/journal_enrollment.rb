@@ -95,6 +95,27 @@ module DevBoxer
       MSG
     end
 
+    # The bridge runs as the dev user and reads the token file itself, so a
+    # token only root can read (a pre-provisioned file copied in as root,
+    # say) would only show up as a bridge that never connects. Hand the file
+    # to the dev user, and stop with the next step if a parent directory
+    # still blocks it.
+    def ensure_readable_by_user!(path)
+      user = config.user&.name
+      return if user.to_s.empty? || !shell.user_exists?(user)
+      return if readable_by?(user, path)
+
+      log.info "#{user} cannot read the agent token #{path}; giving it to #{user} (mode 0600)"
+      shell.sh!("chown #{Shellwords.escape(user)}:#{Shellwords.escape(user)} #{Shellwords.escape(path)}")
+      shell.sh!("chmod 0600 #{Shellwords.escape(path)}")
+      return log.ok("Agent token #{path} is readable by #{user}") if readable_by?(user, path)
+
+      raise SetupError, <<~MSG.chomp
+        #{user} still cannot read the agent token #{path}: a directory above it is closed to #{user}.
+        Next step: move the token to #{TOKEN_PATH} (or set journal.token_file to a path #{user} can read), then re-run: sudo ./setup.rb --from matron
+      MSG
+    end
+
     def agent_name
       configured = config.journal&.agent_name
       return configured unless configured.to_s.empty?
@@ -206,6 +227,10 @@ module DevBoxer
       File.chmod(0o600, token_path)
       owner = config.user&.name
       shell.sh!("chown #{Shellwords.escape(owner)}:#{Shellwords.escape(owner)} #{Shellwords.escape(token_path)}") if owner
+    end
+
+    def readable_by?(user, path)
+      shell.sh("runuser -u #{Shellwords.escape(user)} -- test -r #{Shellwords.escape(path)}")
     end
 
     def default_http_post(url, body)

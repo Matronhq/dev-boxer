@@ -66,6 +66,8 @@ github:
   token: github_pat_...
 ```
 
+Use a fine-grained token with **Contents: Read** on the repositories the dev user clones, or a classic token with the `repo` and `read:org` scopes (`gh` refuses a classic token without `read:org`). Setup checks the token with GitHub before the first step. A refused token stops setup with the reason; in a terminal you can paste a replacement, or press Enter to go on without one and log in with a browser when a private clone needs it. A token that expires within a week gets a warning.
+
 ### No VPS? Use spare hardware
 
 Cloudflare Tunnel handles "expose a home box to the internet" without port forwarding or a static IP, so an old Mac mini, a NUC, or a retired laptop runs Dev Boxer just as well as a paid VPS — and you skip the $5–20/month rental fee. Raspberry Pi 4/5 and other arm64 boards work too, with one caveat: Google Chrome has no arm64 Linux build, so Chrome and the Chrome DevTools MCP are skipped — Firefox and everything else install normally.
@@ -144,6 +146,12 @@ Setup runs 10 modules by default, in order; the optional desktop module (03) bri
 | 11 | `hello-world`  | `localhost:9820` tunnel smoke-test service |
 
 If a module fails, setup prints which step failed, why, and the exact command to resume (`sudo ./setup.rb --from <module>`). Every module is idempotent. The full error with its backtrace is saved to `last-error.log` next to `config.yml`, for bug reports.
+
+Before the first step, setup also checks, for the steps about to run:
+
+- **Ports:** two services set to the same port (for example `ssh.port` on the file viewer's 9803), or a port another program already listens on, stop setup before anything changes. The fixed ports are 9802 (bridge API), 9803 (file viewer), 9810 (bundled journal) and 3389 (remote desktop, when enabled).
+- **The GitHub token**, as above.
+- **A pre-provisioned agent token file** (`journal.token_file`): the bridge runs as the dev user, so a file only root can read is handed to the dev user (mode 0600). If a directory above it is closed to the dev user, setup says so and stops.
 
 The wizard checks answers when you enter them, so mistakes are refused straight away instead of failing later. It checks the SSH public key is one complete key line (a mangled key would lock you out once password login is off), the username and port, that an agent token file exists, the Access email list, and both Cloudflare tokens.
 

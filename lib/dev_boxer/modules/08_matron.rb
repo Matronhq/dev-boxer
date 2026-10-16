@@ -40,6 +40,7 @@ module DevBoxer
         end
 
         token_file = enrollment.resolve!
+        enrollment.ensure_readable_by_user!(token_file)
         install_bridge
         install_voice_notes
         write_bridge_env(token_file)

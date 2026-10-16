@@ -153,14 +153,23 @@ unless options[:dry_run]
 end
 
 mods   = DevBoxer::Modules.discover(options[:modules_dir])
+secrets_path = DevBoxer::Config.secrets_path_for(options[:config])
+preflight = DevBoxer::Preflight.new(
+  config: config,
+  shell: DevBoxer::Shell.new,
+  log: log,
+  interactive: interactive && !options[:non_interactive],
+  secrets_path: secrets_path,
+)
 runner = DevBoxer::Runner.new(
   modules: mods,
   config: config,
   log: log,
   templates_dir: options[:templates_dir],
   config_path: options[:config],
-  secrets_path: DevBoxer::Config.secrets_path_for(options[:config]),
+  secrets_path: secrets_path,
   interactive: interactive && !options[:non_interactive],
+  preflight: preflight,
 )
 
 begin
@@ -172,6 +181,12 @@ begin
   )
 rescue DevBoxer::Runner::UnknownModule => e
   warn e.message
+  exit 1
+rescue DevBoxer::SetupError => e
+  # A check before the first step refused something; it says what to do.
+  lines = e.message.lines.map(&:chomp)
+  log.error(lines.shift)
+  lines.each { |line| log.info("  #{line}") }
   exit 1
 rescue DevBoxer::Runner::ModuleFailed => e
   # Print what went wrong and how to resume, not a backtrace; the backtrace

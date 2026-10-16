@@ -38,15 +38,16 @@ module DevBoxer
 
       # Ask for a secret, check it, and ask again until the check passes.
       # The block gets the value and returns a CloudflareTokenCheck::Result
-      # (or anything with ok?, problems and unreachable). A refused saved
+      # (or anything with ok?, problems and unreachable, such as a
+      # GithubTokenCheck::Result). A refused saved
       # value is not offered again. Returns [value, result], or nil when the
       # user enters nothing and required is false.
-      def ask_checked_secret(label, default: nil, required: true, needs: [])
+      def ask_checked_secret(label, default: nil, required: true, needs: [], checking: "Checking it with Cloudflare...")
         loop do
           value = ask(label, default: default, required: required, secret: true)
           return nil if value.nil?
 
-          say "Checking it with Cloudflare..."
+          say checking
           result = yield value
           return [value, result] if result.ok?
 

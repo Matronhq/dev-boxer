@@ -168,6 +168,18 @@ class CloudflareTokenCheckTest < Minitest::Test
     assert_equal :unreachable, DevBoxer::CloudflareTokenCheck.new(client: client).access_state(LEGACY, "acct-1")
   end
 
+  def test_access_outage_during_the_setup_token_check_is_not_a_pass
+    transport = Transport.new(
+      "GET /user/tokens/verify" => ACTIVE,
+      "GET /accounts/acct-1/cfd_tunnel" => [],
+      "GET /accounts/acct-1/access/apps" => Transport.failure(502, 10001, "Bad gateway"),
+    )
+    result = checker(transport).check_setup_token(LEGACY, account_id: "acct-1", needs_access: true)
+
+    refute result.ok?
+    assert_match(/check Access/, result.unreachable)
+  end
+
   def test_api_error_knows_an_authentication_failure
     client = DevBoxer::CloudflareAPI::Client.new(transport: Transport.new("POST /accounts/acct-1/cfd_tunnel" => AUTH_ERROR))
     error = assert_raises(DevBoxer::CloudflareAPI::Error) do

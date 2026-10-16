@@ -132,6 +132,8 @@ module DevBoxer
         if needs_access
           case access_state(token, chosen)
           when :not_enabled then not_enabled = true
+          when :unreachable
+            next Result.new(problems: [], account_id: chosen, unreachable: "could not reach Cloudflare to check Access")
           when :denied
             problems << "it cannot manage Cloudflare Access apps: give it Account → Access: Apps: Edit and Access: Policies: Edit"
           end

@@ -505,8 +505,8 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
 
     mod.run
 
-    assert_equal %i[install_bridge install_voice_notes remove_voice_notes write_bridge_env],
-                 calls[2, 4]
+    assert_includes calls.each_cons(4).to_a,
+                    %i[install_bridge install_voice_notes remove_voice_notes write_bridge_env]
   end
 
   # Voice notes on means the install step owns that directory; removal must

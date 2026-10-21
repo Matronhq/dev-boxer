@@ -60,8 +60,9 @@ bridge:
   # failed build never aborts setup; re-run it later as the dev user, passing
   # the model you configured below (the installer's own default is small):
   #   WHISPER_MODEL=small bash ~/matron-bridge/setup/install-whisper.sh
-  # Set enabled: false when your journal transcribes voice notes (cloud key or
-  # its own whisper); setup then removes any local whisper.cpp install.
+  # Set enabled: false when your journal transcribes voice notes (it has a
+  # cloud speech-to-text key or its own whisper.cpp); setup then removes any
+  # local whisper.cpp install.
   # ffmpeg is installed regardless (video frames).
   voice_notes:
     enabled: true

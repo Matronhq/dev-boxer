@@ -46,8 +46,13 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_equal "", vars["SUMMARY_ANTHROPIC_API_KEY_LINE"]
   end
 
+  def test_summary_order_accepts_the_journal
+    mod = build_matron({"bridge" => {"summary_providers" => "journal,anthropic"}})
+    assert_equal "SUMMARY_PROVIDERS=journal,anthropic", mod.send(:summary_providers_line)
+  end
+
   def test_claude_summary_rejects_invalid_settings_without_echoing_the_key
-    %w[legacy openai,openai anthropic,typo openai, ,openai].each do |order|
+    %w[legacy openai,openai anthropic,typo journal,journal openai, ,openai].each do |order|
       mod = build_matron({"bridge" => {"summary_providers" => order}})
       assert_raises(RuntimeError) { mod.send(:summary_providers_line) }
     end

@@ -50,10 +50,12 @@ journal:
 # The matron-bridge process on this box.
 bridge:
   # Summary provider order; unset uses the bridge default
-  # (anthropic,openai,gemini), skipping any provider without a key, so
-  # bridge.summary_anthropic_api_key is what turns Claude on. Put that key in
-  # secrets.yml, never this file.
-  # summary_providers: openai,gemini
+  # (journal,anthropic,openai,gemini), skipping any provider that is not
+  # available. `journal` asks the journal to write titles and summaries with
+  # its own key, so a box connected to a journal that offers it needs no
+  # summary key here. bridge.summary_anthropic_api_key is only a local
+  # fallback; put it in secrets.yml, never this file.
+  # summary_providers: journal,openai
   # With enabled: true, voice notes sent from the Matron apps are transcribed
   # locally with whisper.cpp. Setup builds it from source and downloads the
   # model (small is ~470 MB), which adds a few minutes to a first run. A

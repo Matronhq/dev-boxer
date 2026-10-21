@@ -448,6 +448,79 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  # A box whose journal transcribes voice notes has no use for a local
+  # whisper.cpp build (sources plus a model of hundreds of MB), so opting out
+  # must also clear one an earlier run left behind.
+  def test_remove_voice_notes_deletes_the_install_when_disabled
+    respond("test -d /home/dev/.local/share/whisper-cpp", success: true)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:remove_voice_notes)
+
+    # Shellwords-escaped inside the `su - dev -c` wrapper: spaces arrive
+    # backslashed, so this is `rm -rf <dir>` run as the dev user.
+    assert_recorded(%r{\Asu - dev -c rm\\ -rf\\ /home/dev/\.local/share/whisper-cpp\z})
+    assert_match(/Removed local whisper\.cpp/, @log_io.string)
+  end
+
+  # Re-runs on an already-clean box must not touch the filesystem.
+  def test_remove_voice_notes_is_a_noop_when_dir_missing
+    respond("test -d /home/dev/.local/share/whisper-cpp", success: false)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:remove_voice_notes)
+
+    refute_recorded(/rm\\? -rf/)
+    refute_match(/Removed local whisper/, @log_io.string)
+    assert_match(/No local whisper\.cpp to remove/, @log_io.string)
+  end
+
+  # Clearing the old install is housekeeping. A tree the dev user cannot
+  # delete (say, root-owned files from an installer run under sudo) must cost
+  # only the disk space, never the bridge .env and units that follow.
+  def test_remove_voice_notes_warns_and_continues_when_rm_fails
+    respond("test -d /home/dev/.local/share/whisper-cpp", success: true)
+    respond("su - dev -c rm\\ -rf\\ /home/dev/.local/share/whisper-cpp", success: false,
+            stderr: "rm: cannot remove: Permission denied")
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:remove_voice_notes)
+
+    assert_match(%r{Could not remove /home/dev/\.local/share/whisper-cpp}, @log_io.string)
+    refute_match(/Removed local whisper/, @log_io.string)
+  end
+
+  # The two voice-note steps only work as a pair if run calls both, in order.
+  def test_run_removes_voice_notes_right_after_installing_them
+    mod = build_matron
+    calls = []
+    enrollment = Object.new
+    enrollment.define_singleton_method(:resolve!) { "/t" }
+    enrollment.define_singleton_method(:ensure_readable_by_user!) { |_| nil }
+    mod.define_singleton_method(:enrollment) { enrollment }
+    %i[install_journal ensure_journal_user install_bridge install_voice_notes
+       remove_voice_notes write_bridge_env write_mcp_config install_systemd_units].each do |step|
+      mod.define_singleton_method(step) { |*| calls << step }
+    end
+
+    mod.run
+
+    assert_includes calls.each_cons(4).to_a,
+                    %i[install_bridge install_voice_notes remove_voice_notes write_bridge_env]
+  end
+
+  # Voice notes on means the install step owns that directory; removal must
+  # not even look at it.
+  def test_remove_voice_notes_never_runs_when_enabled
+    respond_default(success: true)
+    mod = build_matron
+
+    mod.send(:remove_voice_notes)
+
+    refute_recorded(/rm\\? -rf/)
+    refute_recorded(/test -d/)
+  end
+
   def test_bridge_env_template_renders_whisper_model_line
     template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
     assert_includes template, "{{WHISPER_MODEL_LINE}}"

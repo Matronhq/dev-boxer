@@ -54,13 +54,16 @@ bridge:
   # bridge.summary_anthropic_api_key is what turns Claude on. Put that key in
   # secrets.yml, never this file.
   # summary_providers: openai,gemini
-  # Voice notes sent from the Matron apps are transcribed locally with
-  # ffmpeg + whisper.cpp. Setup builds whisper.cpp from source and downloads
-  # the model (small is ~470 MB), which adds a few minutes to a first run —
-  # set enabled: false to skip it and lose only voice notes. A failed build
-  # never aborts setup; re-run it later as the dev user, passing the model you
-  # configured below (the installer's own default is small):
+  # With enabled: true, voice notes sent from the Matron apps are transcribed
+  # locally with whisper.cpp. Setup builds it from source and downloads the
+  # model (small is ~470 MB), which adds a few minutes to a first run. A
+  # failed build never aborts setup; re-run it later as the dev user, passing
+  # the model you configured below (the installer's own default is small):
   #   WHISPER_MODEL=small bash ~/matron-bridge/setup/install-whisper.sh
+  # Set enabled: false when your journal transcribes voice notes (it has a
+  # cloud speech-to-text key or its own whisper.cpp); setup then removes any
+  # local whisper.cpp install.
+  # ffmpeg is installed regardless (video frames).
   voice_notes:
     enabled: true
     model: small           # tiny | base | small | medium | large (bigger = better, slower, more RAM)

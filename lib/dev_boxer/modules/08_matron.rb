@@ -43,6 +43,7 @@ module DevBoxer
         enrollment.ensure_readable_by_user!(token_file)
         install_bridge
         install_voice_notes
+        remove_voice_notes
         write_bridge_env(token_file)
         write_mcp_config
         install_systemd_units
@@ -197,12 +198,13 @@ module DevBoxer
 
       # ----- voice notes -----
 
-      # The bridge transcribes voice notes by shelling out to ffmpeg and
-      # whisper.cpp. Neither arrives with its npm dependencies, so a box
+      # The bridge transcribes voice notes locally by shelling out to ffmpeg
+      # and whisper.cpp. Neither arrives with its npm dependencies (dev-tools
+      # installs ffmpeg; whisper.cpp is built here), so a box
       # provisioned without this step looks healthy until someone actually
       # sends a voice note — the bridge answers every one of them with
-      # "Could not transcribe that voice note" (the underlying `spawn ffmpeg
-      # ENOENT` only ever reaches the service log).
+      # "Could not transcribe that voice note" (the underlying missing
+      # whisper-cli only ever reaches the service log).
       #
       # The bridge ships the installer, so it stays the single source of
       # truth for the whisper.cpp version, build flags and install paths;
@@ -227,6 +229,27 @@ module DevBoxer
       rescue Shell::Error => e
         warn "Whisper install failed — voice notes will not transcribe until you re-run " \
              "`#{whisper_install_cmd}` as #{username}: #{e.message.lines.first&.strip}"
+      end
+
+      # Opting out means the journal transcribes voice notes, so a whisper.cpp
+      # build left by an earlier run is only dead weight (sources plus a model
+      # of hundreds of MB). ffmpeg stays: dev-tools installs it on its own for
+      # video key frames.
+      def remove_voice_notes
+        # Enabled: install_voice_notes owns the directory and already logged.
+        return if voice_notes_enabled?
+        unless shell.sh("test -d #{Shellwords.escape(whisper_dir)}")
+          skip "No local whisper.cpp to remove"
+          return
+        end
+
+        shell.run_as_user(username, "rm -rf #{Shellwords.escape(whisper_dir)}")
+        info "Removed local whisper.cpp — voice notes are transcribed by the journal"
+      rescue Shell::Error => e
+        # Housekeeping only: a tree the dev user cannot delete (root-owned
+        # files) must not stop the bridge .env and units being written.
+        warn "Could not remove #{whisper_dir} — delete it by hand to free the space: " \
+             "#{e.message.lines.first&.strip}"
       end
 
       # Both the install and the recovery advice have to carry WHISPER_MODEL.

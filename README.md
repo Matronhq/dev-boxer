@@ -137,13 +137,15 @@ Setup runs 10 modules by default, in order; the optional desktop module (03) bri
 | 02 | `users`        | Linux user creation, SSH key, sudo, zsh |
 | 03 | `desktop`      | Optional XFCE4 + XRDP + GUI apps (run `~/setup-desktop`) |
 | 04 | `docker`       | Docker Engine + Compose |
-| 05 | `dev-tools`    | Node.js 22, Git, Python, uv, GitHub CLI |
+| 05 | `dev-tools`    | Node.js 22, Git, ffmpeg, Python, uv, GitHub CLI |
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
-| 08 | `matron`       | matron-journal (bundled mode) + matron-bridge, agent enrollment, voice-note transcription (ffmpeg + whisper.cpp; `bridge.voice_notes`) |
+| 08 | `matron`       | matron-journal (bundled mode) + matron-bridge, agent enrollment, optional local voice-note transcription (whisper.cpp; set `bridge.voice_notes.enabled: false` when your journal transcribes voice notes, and setup removes it; see below) |
 | 09 | `exposure`     | Cloudflare Tunnel or IP + self-signed TLS, per `exposure.mode` |
 | 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |
 | 11 | `hello-world`  | `localhost:9820` tunnel smoke-test service |
+
+**Voice notes.** If the journal this box talks to transcribes voice notes itself (it has a cloud speech-to-text key, or its own whisper.cpp as a fallback), the bridge does not need a local whisper.cpp. Set `bridge.voice_notes.enabled: false`. Setup then skips the whisper.cpp build and removes any install an earlier run left in `~/.local/share/whisper-cpp`. Keep it `true` (the default) only where the journal does not transcribe, so the bridge can do it locally. ffmpeg is installed either way, because the bridge also uses it for video key frames.
 
 If a module fails, setup prints which step failed, why, and the exact command to resume (`sudo ./setup.rb --from <module>`). Every module is idempotent. The full error with its backtrace is saved to `last-error.log` next to `config.yml`, for bug reports.
 

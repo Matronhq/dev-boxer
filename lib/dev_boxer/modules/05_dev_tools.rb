@@ -7,7 +7,7 @@ module DevBoxer
       module_order 5
 
       BASE_PACKAGES = %w[
-        git build-essential make cmake htop jq unzip wget curl tree
+        git build-essential make cmake htop jq unzip wget curl tree ffmpeg
       ].freeze
 
       def run

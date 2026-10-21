@@ -134,4 +134,24 @@ class DevToolsModuleTest < Minitest::Test
 
     assert_includes error.message, "gh on PATH is 2.97.0 after install"
   end
+
+  # The bridge extracts video key frames with ffmpeg whether or not this box
+  # transcribes voice notes, so ffmpeg must not depend on the whisper step.
+  def test_base_packages_include_ffmpeg
+    recorded = []
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      recorded << cmd
+      [true, "", ""]
+    })
+    mod = DevBoxer::Modules::DevTools.new(
+      config: DevBoxer::Config.from_hash("user" => { "name" => "dev" }),
+      log: DevBoxer::Log.new(io: StringIO.new, color: false),
+      shell: shell,
+    )
+
+    mod.send(:install_base_packages)
+
+    assert(recorded.any? { |c| c.include?("apt-get install") && c.split.include?("ffmpeg") },
+           "should apt-install ffmpeg with the base packages\nrecorded:\n#{recorded.join("\n")}")
+  end
 end

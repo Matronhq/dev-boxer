@@ -448,6 +448,44 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  # A box whose journal transcribes voice notes has no use for a local
+  # whisper.cpp build (sources plus a model of hundreds of MB), so opting out
+  # must also clear one an earlier run left behind.
+  def test_remove_voice_notes_deletes_the_install_when_disabled
+    respond("test -d /home/dev/.local/share/whisper-cpp", success: true)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:remove_voice_notes)
+
+    # Shellwords-escaped inside the `su - dev -c` wrapper: spaces arrive
+    # backslashed, so this is `rm -rf <dir>` run as the dev user.
+    assert_recorded(%r{\Asu - dev -c rm\\ -rf\\ /home/dev/\.local/share/whisper-cpp\z})
+    assert_match(/Removed local whisper\.cpp/, @log_io.string)
+  end
+
+  # Re-runs on an already-clean box must not touch the filesystem.
+  def test_remove_voice_notes_is_a_noop_when_dir_missing
+    respond("test -d /home/dev/.local/share/whisper-cpp", success: false)
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:remove_voice_notes)
+
+    refute_recorded(/rm\\? -rf/)
+    refute_match(/Removed local whisper/, @log_io.string)
+  end
+
+  # Voice notes on means the install step owns that directory; removal must
+  # not even look at it.
+  def test_remove_voice_notes_never_runs_when_enabled
+    respond_default(success: true)
+    mod = build_matron
+
+    mod.send(:remove_voice_notes)
+
+    refute_recorded(/rm\\? -rf/)
+    refute_recorded(/test -d/)
+  end
+
   def test_bridge_env_template_renders_whisper_model_line
     template = File.read(File.join(TEMPLATES_DIR, "matron-bridge.env"))
     assert_includes template, "{{WHISPER_MODEL_LINE}}"

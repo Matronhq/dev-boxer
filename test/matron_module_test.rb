@@ -472,6 +472,41 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
 
     refute_recorded(/rm\\? -rf/)
     refute_match(/Removed local whisper/, @log_io.string)
+    assert_match(/No local whisper\.cpp to remove/, @log_io.string)
+  end
+
+  # Clearing the old install is housekeeping. A tree the dev user cannot
+  # delete (say, root-owned files from an installer run under sudo) must cost
+  # only the disk space, never the bridge .env and units that follow.
+  def test_remove_voice_notes_warns_and_continues_when_rm_fails
+    respond("test -d /home/dev/.local/share/whisper-cpp", success: true)
+    respond("su - dev -c rm\\ -rf\\ /home/dev/.local/share/whisper-cpp", success: false,
+            stderr: "rm: cannot remove: Permission denied")
+    mod = build_matron({ "bridge" => { "voice_notes" => { "enabled" => false } } })
+
+    mod.send(:remove_voice_notes)
+
+    assert_match(%r{Could not remove /home/dev/\.local/share/whisper-cpp}, @log_io.string)
+    refute_match(/Removed local whisper/, @log_io.string)
+  end
+
+  # The two voice-note steps only work as a pair if run calls both, in order.
+  def test_run_removes_voice_notes_right_after_installing_them
+    mod = build_matron
+    calls = []
+    enrollment = Object.new
+    enrollment.define_singleton_method(:resolve!) { "/t" }
+    enrollment.define_singleton_method(:ensure_readable_by_user!) { |_| nil }
+    mod.define_singleton_method(:enrollment) { enrollment }
+    %i[install_journal ensure_journal_user install_bridge install_voice_notes
+       remove_voice_notes write_bridge_env write_mcp_config install_systemd_units].each do |step|
+      mod.define_singleton_method(step) { |*| calls << step }
+    end
+
+    mod.run
+
+    assert_equal %i[install_bridge install_voice_notes remove_voice_notes write_bridge_env],
+                 calls[2, 4]
   end
 
   # Voice notes on means the install step owns that directory; removal must

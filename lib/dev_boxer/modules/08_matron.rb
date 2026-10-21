@@ -203,8 +203,8 @@ module DevBoxer
       # installs ffmpeg; whisper.cpp is built here), so a box
       # provisioned without this step looks healthy until someone actually
       # sends a voice note — the bridge answers every one of them with
-      # "Could not transcribe that voice note" (the underlying `spawn ffmpeg
-      # ENOENT` only ever reaches the service log).
+      # "Could not transcribe that voice note" (the underlying missing
+      # whisper-cli only ever reaches the service log).
       #
       # The bridge ships the installer, so it stays the single source of
       # truth for the whisper.cpp version, build flags and install paths;
@@ -245,6 +245,11 @@ module DevBoxer
 
         shell.run_as_user(username, "rm -rf #{Shellwords.escape(whisper_dir)}")
         info "Removed local whisper.cpp — voice notes are transcribed by the journal"
+      rescue Shell::Error => e
+        # Housekeeping only: a tree the dev user cannot delete (root-owned
+        # files) must not stop the bridge .env and units being written.
+        warn "Could not remove #{whisper_dir} — delete it by hand to free the space: " \
+             "#{e.message.lines.first&.strip}"
       end
 
       # Both the install and the recovery advice have to carry WHISPER_MODEL.

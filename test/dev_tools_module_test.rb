@@ -154,4 +154,9 @@ class DevToolsModuleTest < Minitest::Test
     assert(recorded.any? { |c| c.include?("apt-get install") && c.split.include?("ffmpeg") },
            "should apt-install ffmpeg with the base packages\nrecorded:\n#{recorded.join("\n")}")
   end
+
+  # Agent pairing prints its QR code with qrencode.
+  def test_base_packages_include_qrencode
+    assert_includes DevBoxer::Modules::DevTools::BASE_PACKAGES, "qrencode"
+  end
 end

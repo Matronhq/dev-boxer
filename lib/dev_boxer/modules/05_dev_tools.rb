@@ -8,6 +8,7 @@ module DevBoxer
 
       BASE_PACKAGES = %w[
         git build-essential make cmake htop jq unzip wget curl tree ffmpeg
+        qrencode
       ].freeze
 
       def run

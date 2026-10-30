@@ -31,6 +31,19 @@ module DevBoxer
       base
     end
 
+    # The URI the Matron app's scanner reads, identical to the one the
+    # bridge's own pairing prints: the server is the journal's https base,
+    # URL-encoded the way JavaScript's encodeURIComponent does it.
+    def self.pair_uri(https_base, pair_code)
+      "matron://pair?v=1&server=#{encode_component(https_base)}&code=#{encode_component(pair_code)}"
+    end
+
+    # encodeURIComponent: everything but A-Z a-z 0-9 - _ . ! ~ * ' ( ) is
+    # percent-encoded (UTF-8, upper-case hex).
+    def self.encode_component(value)
+      value.to_s.b.gsub(/[^A-Za-z0-9\-_.!~*'()]/n) { |c| format("%%%02X", c.ord) }
+    end
+
     # Full root-shell command for one matron-admin invocation: cd into the
     # checkout, point at the live DB, run as the matron user (root would
     # leave root-owned SQLite WAL files behind and break the service).
@@ -166,7 +179,7 @@ module DevBoxer
         end
         raise NotEnrolled, "pair/start failed with HTTP #{code}: #{body.inspect}" unless code == 200
 
-        display_code(body)
+        display_code(body, base)
         return token_path if poll_for_claim(base, body)
 
         # nil -> the code expired before approval
@@ -176,13 +189,28 @@ module DevBoxer
       end
     end
 
-    def display_code(pair)
+    def display_code(pair, base)
       minutes = ((pair["expires_in"] || 600) / 60.0).round
       log.info ""
+      qr = qr_code(self.class.pair_uri(base, pair["pair_code"]))
+      if qr
+        log.info "Scan this with the Matron app (Settings -> Devices -> Add Agent):"
+        log.info qr
+      end
       log.info "Pairing code: #{pair['pair_code']}"
-      log.info "In the Matron app: Settings -> Devices -> Add Agent, enter the code,"
+      log.info "In the Matron app: Settings -> Devices -> Add Agent, #{qr ? 'scan the QR code or ' : ''}enter the code,"
       log.info "and name the agent (suggested name: #{agent_name})."
       log.info "The code expires in ~#{minutes} minutes. Waiting for approval (Ctrl-C to abort)..."
+    end
+
+    # The pairing URI as a terminal QR code (UTF-8 half blocks), or nil when
+    # qrencode is not installed or fails, so the text code alone still works.
+    def qr_code(uri)
+      return nil unless shell.command_exists?("qrencode")
+      out = shell.sh!("qrencode -t ANSIUTF8 -m 4 #{Shellwords.escape(uri)}")
+      out.empty? ? nil : out.chomp
+    rescue Shell::Error
+      nil
     end
 
     def poll_for_claim(base, pair)

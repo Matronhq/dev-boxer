@@ -225,4 +225,68 @@ class JournalEnrollmentTest < DevBoxer::Testing::ModuleTestCase
     inner = "cd /opt/matron-journal && MATRON_DB=/opt/matron-journal/data/matron.db npx matron-admin user add alice"
     assert_equal "runuser -u matron -- sh -c #{Shellwords.escape(inner)}", cmd
   end
+
+  def test_pair_uri_matches_the_bridge_format_with_server_url_encoded
+    assert_equal "matron://pair?v=1&server=https%3A%2F%2Fjournal.example.com%3A8443&code=BCDF-GHJK",
+      DevBoxer::JournalEnrollment.pair_uri("https://journal.example.com:8443", "BCDF-GHJK")
+    assert_equal "matron://pair?v=1&server=https%3A%2F%2Fjournal.example.com&code=BCDF-GHJK",
+      DevBoxer::JournalEnrollment.pair_uri(DevBoxer::JournalEnrollment.https_base("wss://journal.example.com/ws"), "BCDF-GHJK")
+  end
+
+  def test_encode_component_follows_encode_uri_component
+    assert_equal "a%20b%2F%3F%26%3D%2B!~*'()-_.", DevBoxer::JournalEnrollment.encode_component("a b/?&=+!~*'()-_.")
+    assert_equal "%C3%A9", DevBoxer::JournalEnrollment.encode_component("\u00e9")
+  end
+
+  def pairing_enrollment(dir)
+    responses = [
+      [200, { "pair_code" => "ABCD-EFGH", "poll_token" => "poll1", "expires_in" => 600 }],
+      [200, { "status" => "approved", "token" => "tok_paired", "device_id" => 7 }],
+    ]
+    build_enrollment(
+      { "journal" => { "mode" => "external", "url" => "wss://chat.example.com/ws" } },
+      dir: dir, interactive: true, http_post: ->(_url, _body) { responses.shift },
+    )
+  end
+
+  QR_COMMAND = "qrencode -t ANSIUTF8 -m 4 " \
+    "#{Shellwords.escape('matron://pair?v=1&server=https%3A%2F%2Fchat.example.com&code=ABCD-EFGH')}".freeze
+
+  def test_pairing_prints_qr_code_of_pair_uri_when_qrencode_is_present
+    Dir.mktmpdir do |dir|
+      respond("command -v qrencode >/dev/null 2>&1", success: true)
+      respond(QR_COMMAND, success: true, stdout: "[QR BLOCKS]\n")
+
+      pairing_enrollment(dir).resolve!
+
+      assert_recorded(QR_COMMAND)
+      assert_includes @log_io.string, "[QR BLOCKS]"
+      assert_includes @log_io.string, "Pairing code: ABCD-EFGH"
+      assert_operator @log_io.string.index("[QR BLOCKS]"), :<, @log_io.string.index("Pairing code: ABCD-EFGH")
+    end
+  end
+
+  def test_pairing_falls_back_to_text_code_without_qrencode
+    Dir.mktmpdir do |dir|
+      respond("command -v qrencode >/dev/null 2>&1", success: false)
+
+      pairing_enrollment(dir).resolve!
+
+      refute_recorded(/\Aqrencode /)
+      assert_includes @log_io.string, "Pairing code: ABCD-EFGH"
+      refute_includes @log_io.string, "scan the QR code"
+    end
+  end
+
+  def test_pairing_falls_back_to_text_code_when_qrencode_fails
+    Dir.mktmpdir do |dir|
+      respond("command -v qrencode >/dev/null 2>&1", success: true)
+      respond(QR_COMMAND, success: false, stderr: "qrencode: boom")
+
+      pairing_enrollment(dir).resolve!
+
+      assert_includes @log_io.string, "Pairing code: ABCD-EFGH"
+      refute_includes @log_io.string, "Scan this"
+    end
+  end
 end

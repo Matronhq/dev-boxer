@@ -249,7 +249,7 @@ class JournalEnrollmentTest < DevBoxer::Testing::ModuleTestCase
     )
   end
 
-  QR_COMMAND = "qrencode -t ANSIUTF8 -m 2 " \
+  QR_COMMAND = "qrencode -t ANSIUTF8 -m 4 " \
     "#{Shellwords.escape('matron://pair?v=1&server=https%3A%2F%2Fchat.example.com&code=ABCD-EFGH')}".freeze
 
   def test_pairing_prints_qr_code_of_pair_uri_when_qrencode_is_present

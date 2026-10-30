@@ -207,7 +207,7 @@ module DevBoxer
     # qrencode is not installed or fails, so the text code alone still works.
     def qr_code(uri)
       return nil unless shell.command_exists?("qrencode")
-      out = shell.sh!("qrencode -t ANSIUTF8 -m 2 #{Shellwords.escape(uri)}")
+      out = shell.sh!("qrencode -t ANSIUTF8 -m 4 #{Shellwords.escape(uri)}")
       out.empty? ? nil : out.chomp
     rescue Shell::Error
       nil

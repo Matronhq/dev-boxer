@@ -52,6 +52,8 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
       assert_equal "deny", decision("git log -U3", partial)
       assert_equal "deny", decision("git log --unified=3", partial)
       assert_equal "deny", decision("git log a#b -S needle", partial)
+      assert_equal "deny", decision(%(git log --grep " #1" -S needle), partial)
+      assert_equal "deny", decision(%(git log --grep ' #1' -p), partial)
       assert_equal "deny", decision("/usr/bin/git -c core.pager=cat log -S needle", partial)
       assert_equal "deny", decision("git --git-dir=#{partial}/.git log -S needle", dir)
       assert_includes reason("git log -S needle", partial), "git grep"

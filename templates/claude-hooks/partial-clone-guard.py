@@ -34,9 +34,26 @@ def segments(command):
     return re.split(r"\|\||&&|;|\||\n", command)
 
 
+def strip_comment(segment):
+    """Drop a shell comment: an unquoted # at the start of a word."""
+    quote, escaped = None, False
+    for i, ch in enumerate(segment):
+        if escaped:
+            escaped = False
+        elif ch == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            quote = None if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and (i == 0 or segment[i - 1].isspace()):
+            return segment[:i]
+    return segment
+
+
 def tokens(segment):
-    """Shell words of one command; a # starts a comment only after whitespace."""
-    segment = re.sub(r"(^|\s)#.*$", "", segment)
+    """Shell words of one command."""
+    segment = strip_comment(segment)
     try:
         return shlex.split(segment)
     except ValueError:

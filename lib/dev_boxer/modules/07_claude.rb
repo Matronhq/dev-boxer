@@ -26,10 +26,16 @@ module DevBoxer
 
       MARKETPLACE = "anthropics/claude-plugins-official".freeze
 
+      # PreToolUse hook that stops history-wide git searches (git log -S,
+      # git blame, ...) in partial clones, where each one downloads every
+      # old file version it touches and can fill the disk.
+      GUARD_HOOK = "partial-clone-guard.py".freeze
+
       def run
         section "Claude Code"
         install_cli
         ensure_local_bin_on_path
+        install_guard_hook
         write_settings
         register_marketplace
         install_plugins
@@ -70,21 +76,53 @@ module DevBoxer
         ok "~/.local/bin on PATH for bash + zsh (interactive + non-interactive)"
       end
 
+      def guard_hook_path = "#{home_dir}/.claude/hooks/#{GUARD_HOOK}"
+
+      # Copied on every run, so a changed hook reaches boxes set up earlier.
+      def install_guard_hook
+        FileUtils.mkdir_p(File.dirname(guard_hook_path))
+        FileUtils.cp(template_path("claude-hooks/#{GUARD_HOOK}"), guard_hook_path)
+        File.chmod(0o755, guard_hook_path)
+        ok "Partial-clone guard hook installed"
+      end
+
       def write_settings
         claude_dir = "#{home_dir}/.claude"
         FileUtils.mkdir_p(claude_dir)
         path = "#{claude_dir}/settings.json"
 
         existing = File.exist?(path) ? JSON.parse(File.read(path)) : {}
-        if existing["cleanupPeriodDays"] == 7
-          skip "Claude settings.json already configured"
-        else
+        changed = false
+        unless existing["cleanupPeriodDays"] == 7
           existing["cleanupPeriodDays"] = 7
+          changed = true
+        end
+        changed = true if add_guard_hook(existing)
+
+        if changed
           File.write(path, JSON.pretty_generate(existing) + "\n")
           File.chmod(0o600, path)
-          ok "Claude settings.json written (cleanupPeriodDays: 7)"
+          ok "Claude settings.json written (cleanupPeriodDays: 7, partial-clone guard)"
+        else
+          skip "Claude settings.json already configured"
         end
         shell.sh!("chown -R #{username}:#{username} #{claude_dir}")
+      end
+
+      # Adds the guard to settings' PreToolUse hooks unless an entry already
+      # runs it. Leaves every other hook alone. Returns true if it changed.
+      def add_guard_hook(settings)
+        pre_tool_use = ((settings["hooks"] ||= {})["PreToolUse"] ||= [])
+        present = pre_tool_use.any? do |entry|
+          Array(entry["hooks"]).any? { |h| h["command"].to_s.include?(GUARD_HOOK) }
+        end
+        return false if present
+
+        pre_tool_use << {
+          "matcher" => "Bash",
+          "hooks" => [{ "type" => "command", "command" => "python3 #{guard_hook_path}", "timeout" => 10 }],
+        }
+        true
       end
 
       # The marketplace must be registered before plugin install because the

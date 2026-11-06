@@ -7,6 +7,10 @@ require_relative "../lib/dev_boxer/modules/07_claude"
 
 class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
   HOOK = File.join(TEMPLATES_DIR, "claude-hooks", "partial-clone-guard.py")
+  # Run fixtures and the hook against the temp repos only, even when the
+  # suite itself runs inside a git hook.
+  CLEAN_GIT_ENV = %w[GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_CONFIG]
+                  .to_h { |k| [k, nil] }.freeze
 
   def test_settings_gain_the_guard_hook_once_and_keep_everything_else
     Dir.mktmpdir do |home|
@@ -43,9 +47,18 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
       assert_equal "deny", decision("cd #{partial} && git log --oneline -G needle", dir)
       assert_equal "deny", decision("git -C #{partial} blame README.md", dir)
       assert_equal "deny", decision("git status && git log --stat origin/master | head", partial)
+      assert_equal "deny", decision("git log -S needle -n 1", partial)
+      assert_equal "deny", decision("git log -p -3 -n 500", partial)
+      assert_equal "deny", decision("git log -U3", partial)
+      assert_equal "deny", decision("git log --unified=3", partial)
+      assert_equal "deny", decision("git log a#b -S needle", partial)
+      assert_equal "deny", decision("/usr/bin/git -c core.pager=cat log -S needle", partial)
+      assert_equal "deny", decision("git --git-dir=#{partial}/.git log -S needle", dir)
       assert_includes reason("git log -S needle", partial), "git grep"
 
       assert_nil decision("git log -p -3", partial)
+      assert_nil decision("git log -p -n 500 -3", partial)
+      assert_nil decision("git log --oneline # -S needle", partial)
       assert_nil decision("git log -n 20 --stat", partial)
       assert_nil decision("git log --oneline -50", partial)
       assert_nil decision("git grep -n needle origin/master", partial)
@@ -54,21 +67,43 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  def test_guard_reads_every_way_git_marks_a_partial_clone
+    skip "python3 or git missing" unless system("command -v python3 git >/dev/null 2>&1")
+    Dir.mktmpdir do |dir|
+      yes = git_repo(dir, "yes", partial: false)
+      git(yes, "config", "remote.up.stream.promisor", "yes")
+      assert_includes reason("git log -S needle", yes), "remote.up.stream.promisor"
+
+      extension = git_repo(dir, "extension", partial: true)
+      git(extension, "config", "core.repositoryformatversion", "1")
+      git(extension, "config", "extensions.partialclone", "origin")
+      assert_includes reason("git log -S needle", extension), "git config --unset extensions.partialclone"
+
+      # Following the hook's own instructions turns the guard off.
+      git(extension, "config", "--unset", "remote.origin.partialclonefilter")
+      git(extension, "config", "--unset", "remote.origin.promisor")
+      git(extension, "config", "--unset", "extensions.partialclone")
+      assert_nil decision("git log -S needle", extension)
+    end
+  end
+
   private
 
   def git_repo(dir, name, partial:)
     path = File.join(dir, name)
-    system("git", "init", "-q", path, exception: true)
+    system(CLEAN_GIT_ENV, "git", "init", "-q", path, exception: true)
     if partial
-      system("git", "-C", path, "config", "remote.origin.promisor", "true", exception: true)
-      system("git", "-C", path, "config", "remote.origin.partialclonefilter", "blob:none", exception: true)
+      git(path, "config", "remote.origin.promisor", "true")
+      git(path, "config", "remote.origin.partialclonefilter", "blob:none")
     end
     path
   end
 
+  def git(path, *args) = system(CLEAN_GIT_ENV, "git", "-C", path, *args, exception: true)
+
   def run_hook(command, cwd)
     input = JSON.generate("tool_name" => "Bash", "cwd" => cwd, "tool_input" => { "command" => command })
-    out, status = Open3.capture2("python3", HOOK, stdin_data: input)
+    out, status = Open3.capture2(CLEAN_GIT_ENV, "python3", HOOK, stdin_data: input)
     assert status.success?
     out.strip.empty? ? nil : JSON.parse(out)["hookSpecificOutput"]
   end

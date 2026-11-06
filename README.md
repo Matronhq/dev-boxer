@@ -139,7 +139,7 @@ Setup runs 10 modules by default, in order; the optional desktop module (03) bri
 | 04 | `docker`       | Docker Engine + Compose |
 | 05 | `dev-tools`    | Node.js 22, Git, ffmpeg, Python, uv, GitHub CLI |
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
-| 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP |
+| 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP + partial-clone git guard hook |
 | 08 | `matron`       | matron-journal (bundled mode) + matron-bridge, agent enrollment, optional local voice-note transcription (whisper.cpp; set `bridge.voice_notes.enabled: false` when your journal transcribes voice notes, and setup removes it; see below) |
 | 09 | `exposure`     | Cloudflare Tunnel or IP + self-signed TLS, per `exposure.mode` |
 | 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |

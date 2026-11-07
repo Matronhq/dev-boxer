@@ -54,6 +54,14 @@ class UsersModuleTest < Minitest::Test
     refute_includes @recorded, "systemctl restart ssh"
   end
 
+  def test_creates_the_privilege_separation_directory_before_checking_the_config
+    build.send(:restart_ssh_service)
+
+    mkdir = @recorded.index("install -d -m 0755 /run/sshd")
+    check = @recorded.index("sshd -t")
+    assert mkdir && check && mkdir < check, @recorded.inspect
+  end
+
   def test_reports_when_ssh_is_not_listening_on_the_new_port
     mod = build(failing: [/\Ass -ltnH/])
     error = assert_raises(DevBoxer::SetupError) { mod.send(:restart_ssh_service) }

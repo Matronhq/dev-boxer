@@ -111,6 +111,11 @@ module DevBoxer
           raise SetupError, "Not restarting SSH: user.ssh_public_key in config.yml is not usable (#{problem}).\n" \
                             "Password login would be turned off, locking you out. Fix the key, then re-run: sudo ./setup.rb --from users"
         end
+        # sshd -t refuses without its privilege separation directory, and
+        # under ssh.socket /run/sshd exists only while ssh.service runs: on
+        # an idle box a good config would fail the check. Create it the way
+        # the service's RuntimeDirectory= does.
+        shell.sh!("install -d -m 0755 /run/sshd")
         unless shell.sh("sshd -t")
           raise SetupError, "Not restarting SSH: `sshd -t` rejects /etc/ssh/sshd_config.\n" \
                             "Run `sshd -t` to see why, fix it, then re-run: sudo ./setup.rb --from security"

@@ -38,7 +38,7 @@ For tools used by Matron sessions, edit `~/matron-bridge/mcp-config.local.json` 
 }
 ```
 
-Keep credentials in the connector's own protected storage, not in examples or a repository. Run `sudo systemctl restart matron-bridge` after changing the overlay, then restart the affected chat. Gmail installation and its restricted desk profile are forthcoming; an unrestricted dev account is not a credential boundary.
+Keep credentials in the tool's own protected storage, not in examples or a repository. Run `sudo systemctl restart matron-bridge` after changing the overlay, then restart the affected chat. The starter dev account has administrator access; consider that when granting tools access to credentials.
 
 ## Standalone Claude sessions
 

@@ -18,7 +18,7 @@ Set up your first Matron on a fresh Ubuntu 24.04 VPS: browser app, journal, brid
 
 ## What you get
 
-The starter profile installs one AI CLI, the browser app, journal, bridge and file viewer. It sets up SSH keys on port 22, a firewall, automatic OS updates and automatic HTTPS renewal. It omits desktops, Docker, browsers, coding plugins and local voice transcription.
+The starter profile installs one AI CLI, the browser app, journal, bridge and file viewer. It sets up SSH keys on port 22, a firewall, automatic OS updates and automatic HTTPS renewal. It omits desktops, Docker, browsers, coding plugins and local voice transcription. Email and other service integrations are not included.
 
 Advanced developer setup retains those optional tools and the Cloudflare/self-signed exposure modes. See [exposure modes](docs/exposure-modes.md).
 
@@ -51,7 +51,7 @@ The installer clones Dev Boxer to `/opt/dev-boxer`, saves your settings and priv
 
 Start a chat in the prepared `work` folder. Ask for a reply and a notice in **For you**; check that both arrive. Setup's service checks do not substitute for this test.
 
-Later SSH connections use `ssh dev@YOUR_VPS_IP` on the starter path. Test that login before closing the initial terminal. The agent's `dev` account has passwordless sudo: this is a general-purpose computer, not a restricted connector desk.
+Later SSH connections use `ssh dev@YOUR_VPS_IP` on the starter path. Test that login before closing the initial terminal. The agent's `dev` account has passwordless sudo and can administer the server.
 
 Repeating the install command uses the saved settings and installed component revisions. Use `sudo matron status`, `sudo matron login`, or `sudo matron link` for recovery. Make a backup before the explicit `sudo matron update --backup PATH` action. See [backup, restore and recovery](docs/starter-recovery.md).
 

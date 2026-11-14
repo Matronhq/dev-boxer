@@ -33,7 +33,7 @@ sudo systemctl start matron-certificate.service
 sudo matron status
 ```
 
-If the public IP changes, edit `exposure.ip.address` in `/opt/dev-boxer/config.yml` and resume setup. Do not dismiss a certificate warning. A public-IP certificate does not meet Google's named-host requirement for a web OAuth callback; the forthcoming Gmail connector guide covers that additional hostname.
+If the public IP changes, edit `exposure.ip.address` in `/opt/dev-boxer/config.yml` and resume setup. Do not dismiss a certificate warning.
 
 ## Back up
 

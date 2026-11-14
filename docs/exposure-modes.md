@@ -35,5 +35,5 @@ warns about the unknown certificate on first connection — accept it only if
 the fingerprint matches. If the server's IP changes, re-running `setup.rb`
 regenerates the certificate (new fingerprint, apps must re-accept).
 
-Trade-off to know: until the Matron apps ship pinned-certificate trust
-(SP5), only clients that can accept a self-signed cert can connect.
+Trade-off to know: until the Matron apps ship pinned-certificate trust,
+only clients that can accept a self-signed cert can connect.

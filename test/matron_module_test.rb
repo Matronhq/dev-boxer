@@ -152,8 +152,9 @@ class MatronModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
-  # Production path: Chef merges the key into /opt/dev-boxer/secrets.yml
-  # (never config.yml), and Config.load folds secrets.yml over config.yml.
+  # When a config-management tool supplies the key, it merges it into
+  # secrets.yml (never config.yml), and Config.load folds secrets.yml over
+  # config.yml.
   def test_openai_key_line_renders_from_secrets_yml
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.yml")

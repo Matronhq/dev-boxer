@@ -49,7 +49,11 @@ The installer clones Dev Boxer to `/opt/dev-boxer`, saves your settings and priv
 2. **Add a box to my Matron** — enter the existing HTTPS address, approve the pairing code in Matron, and sign into the AI provider on this box.
 3. **Advanced developer setup** — the original wizard, including journal, domain/Cloudflare, desktop and developer configuration. It is also available with `sudo ./setup.rb --advanced` on a new checkout.
 
-Start a chat in the prepared `work` folder. Ask for a reply and a notice in **For you**; check that both arrive. Setup's service checks do not substitute for this test.
+Start a chat in the prepared `work` folder and give it a small design task:
+
+> Create three visual directions for a simple fitness tracker: calm, bold and playful. Show colors, typography and a sample screen for each in one self-contained HTML page. Save it as design-directions.html, share a preview link, and put a notice in For you linking to the finished page.
+
+Open the result from its **For you** notice and check all three directions. This checks the agent's work, file preview and result notification together. Setup's service checks do not substitute for this test.
 
 Later SSH connections use `ssh dev@YOUR_VPS_IP` on the starter path. Test that login before closing the initial terminal. The agent's `dev` account has passwordless sudo and can administer the server.
 

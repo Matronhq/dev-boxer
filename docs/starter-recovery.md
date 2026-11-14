@@ -19,7 +19,7 @@ Before closing the original connection, open a second terminal and test SSH as `
 | `sudo matron link` | Shows the saved password and a fresh phone sign-in QR only on the controlling terminal. |
 | `sudo matron enroll` | Replaces a revoked connection token; external boxes require another pairing approval. |
 
-After sign-in, start a chat in `work`, ask for a reply and a notice in **For you**, and check both. Also try an ordinary file link. A service being active is not proof that the provider account or chat works.
+After sign-in, start a chat in `work` and use the [first design task](../README.md#what-happens-next). Open the finished HTML page from its **For you** notice and check the three directions. A service being active is not proof that the provider account, work output or file preview works.
 
 ## HTTPS renewal
 

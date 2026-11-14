@@ -19,8 +19,8 @@ module DevBoxer
         end
         info "Open #{JournalEnrollment.https_base(exposure.journal_public_url)}/app/"
         info "Click the pencil (New session), choose this box if asked, leave Folder path blank, then Start."
-        info 'Send: "Say hello, then put a notice in For you saying my first chat works."'
-        info "Setup is complete when you see the reply and that notice in For you."
+        info 'Send: "Create three visual directions for a simple fitness tracker: calm, bold and playful. Show colors, typography and a sample screen for each in one self-contained HTML page. Save it as design-directions.html, share a preview link, and put a notice in For you linking to the finished page."'
+        info "Open the finished design page from its For you notice and check all three directions."
         info "Help and recovery: https://matron.chat/getting-started/#help"
       end
 

@@ -13,11 +13,17 @@ module DevBoxer
         mode = hash.dig("exposure", "mode")
         if Config.blank?(mode)
           errors << "exposure.mode is required"
-        elsif !%w[cloudflare ip].include?(mode)
-          errors << "exposure.mode must be cloudflare or ip"
+        elsif !%w[cloudflare ip public-ip].include?(mode)
+          errors << "exposure.mode must be cloudflare, ip or public-ip"
         end
         validate_cloudflare(hash, errors) if mode == "cloudflare"
         validate_ip(hash, errors) if mode == "ip"
+        if mode == "public-ip"
+          address = hash.dig("exposure", "ip", "address").to_s
+          problem = StarterWizard.address_problem(address)
+          errors << "exposure.ip.address: #{problem}" if problem
+          errors << "exposure.accept_terms must be true for certificate issuance" unless hash.dig("exposure", "accept_terms") == true
+        end
       end
 
       def self.validate_cloudflare(hash, errors)

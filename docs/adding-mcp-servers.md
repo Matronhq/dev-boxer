@@ -25,33 +25,24 @@ claude plugin install greptile@claude-plugins-official
 
 Plugins install globally and are available in all Claude Code sessions. List installed plugins with `claude plugin list`.
 
-## 2. Global MCP Config
+## 2. Matron bridge connections
 
-For servers not available as plugins, add them to Claude Code's global MCP config at `~/.claude/settings.json`. Create or edit the file:
+For tools used by Matron sessions, edit `~/matron-bridge/mcp-config.local.json` as the dev user. Do not edit the generated `mcp-config.json`: setup replaces that file. The local overlay is preserved by setup and shared by the bridge's Claude and Codex adapters.
 
 ```json
 {
   "mcpServers": {
-    "my-server": {
-      "command": "npx",
-      "args": ["-y", "@my-org/my-mcp-server"],
-      "env": {
-        "MY_API_KEY": "your-key-here"
-      }
-    }
-  }
+    "example": {"command": "/usr/local/bin/example-connector", "args": []}
+  },
+  "mcpExtras": {}
 }
 ```
 
-Each entry under `mcpServers` is a server name mapped to a process definition (`command`, `args`, optional `env`). Claude Code starts these processes on launch and keeps them running for the session.
+Keep credentials in the connector's own protected storage, not in examples or a repository. Run `sudo systemctl restart matron-bridge` after changing the overlay, then restart the affected chat. Gmail installation and its restricted desk profile are forthcoming; an unrestricted dev account is not a credential boundary.
 
-You can also manage servers via the CLI:
+## Standalone Claude sessions
 
-```bash
-claude mcp add my-server -- npx -y @my-org/my-mcp-server
-claude mcp list
-claude mcp remove my-server
-```
+For Claude sessions started directly in a terminal, use `claude mcp add` as described by the [Claude MCP documentation](https://code.claude.com/docs/en/mcp). Matron sessions use the bridge overlay above.
 
 ## 3. Popular MCP Servers
 

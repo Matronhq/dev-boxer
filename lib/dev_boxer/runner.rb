@@ -76,6 +76,13 @@ module DevBoxer
     end
 
     def optional_module_disabled?(mod)
+      if @config.setup&.profile == "starter"
+        return true if %w[desktop docker browsers desktop-apps hello-world].include?(mod.module_name)
+        return true if mod.module_name == "claude" && @config.agent&.provider == "codex"
+        return true if mod.module_name == "codex" && @config.agent&.provider != "codex"
+      elsif mod.module_name == "onboarding"
+        return true
+      end
       mod.module_name == "desktop" && @config.desktop&.enabled != true
     end
   end

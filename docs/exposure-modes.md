@@ -2,6 +2,14 @@
 
 How your box is reached from the internet is one config choice: `exposure.mode`.
 
+The beginner wizard uses **`public-ip`**: a trusted Let's Encrypt IP
+certificate, automatic renewal, journal/browser on 443 and viewer on 8444.
+It requires a stable public IPv4 address and inbound port 80 for HTTP-01
+issuance and renewal. SSH stays on 22. No domain is needed for core Matron;
+a web OAuth connector may still require one. See [starter recovery](starter-recovery.md).
+
+The following modes remain available through Advanced:
+
 | | `cloudflare` | `ip` |
 |---|---|---|
 | Needs a domain | Yes (Cloudflare-managed; ~$5-6/yr) | No |

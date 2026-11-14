@@ -17,6 +17,7 @@ end
 
 def auto_update_checkout
   return unless Process.uid.zero?
+  return unless ENV["DEV_BOXER_AUTO_UPDATE"] == "1"
   return if ENV["DEV_BOXER_SKIP_AUTO_UPDATE"] == "1"
   return unless Dir.exist?(File.join(ROOT, ".git"))
 
@@ -74,6 +75,7 @@ parser = OptionParser.new do |opts|
   opts.on("--templates-dir DIR","Path to templates directory")               { |v| options[:templates_dir] = v }
   opts.on("--wizard-only",    "Run first-run setup wizard, then exit")       { options[:wizard_only] = true }
   opts.on("--reconfigure",    "Force the setup wizard before running")       { options[:reconfigure] = true }
+  opts.on("--advanced",       "Use the developer setup wizard")             { options[:advanced] = true }
   opts.on("--non-interactive","Fail instead of prompting for config")        { options[:non_interactive] = true }
   opts.on("-h", "--help",     "Show this help")                              { puts opts; exit 0 }
 end
@@ -96,8 +98,9 @@ run_wizard = lambda do |force: false|
     warn "Run setup interactively first, or create config.yml and secrets.yml manually."
     exit 2
   end
-  DevBoxer::Wizard.run(config_path: options[:config], force: force)
-rescue DevBoxer::Wizard::Prompter::InputClosed => e
+  wizard = options[:advanced] || File.exist?(options[:config]) ? DevBoxer::Wizard : DevBoxer::StarterWizard
+  wizard.run(config_path: options[:config], force: force)
+rescue DevBoxer::Wizard::Prompter::InputClosed, DevBoxer::SetupError => e
   warn e.message
   exit 2
 end

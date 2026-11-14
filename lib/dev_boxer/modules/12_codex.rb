@@ -1,3 +1,5 @@
+require_relative "../components"
+
 module DevBoxer
   module Modules
     # OpenAI's Codex CLI, alongside Claude Code, so a box arrives with both
@@ -26,6 +28,12 @@ module DevBoxer
       # every account on the box gets it rather than only the first user to
       # run setup. Node 22 arrives in 05_dev_tools, well before this module.
       def install_cli
+        if config.setup&.profile == "starter"
+          version = Components.tool_version("codex")
+          return skip "Codex CLI #{version} already installed" if shell.command_exists?("codex") && shell.sh!("codex --version").split.last == version
+          shell.sh!("npm install -g #{PACKAGE}@#{version}")
+          return ok "Codex CLI #{version} installed"
+        end
         if shell.command_exists?("codex")
           skip "Codex CLI already installed"
           return

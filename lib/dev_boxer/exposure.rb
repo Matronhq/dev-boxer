@@ -6,6 +6,7 @@ module DevBoxer
     def self.for(config:, shell:, log:, templates_dir: nil, config_path: nil, secrets_path: nil, interactive: true)
       klass =
         case config.exposure&.mode
+        when "public-ip" then PublicIp
         when "ip" then SelfSigned
         when "cloudflare", nil then Cloudflare
         else raise "Unknown exposure.mode: #{config.exposure.mode.inspect} (expected cloudflare or ip)"
@@ -59,3 +60,4 @@ end
 
 require_relative "exposure/cloudflare"
 require_relative "exposure/self_signed"
+require_relative "exposure/public_ip"

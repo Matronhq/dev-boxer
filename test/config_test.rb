@@ -327,7 +327,7 @@ class ConfigTest < Minitest::Test
 
     errors = DevBoxer::Config.validation_errors(DevBoxer::Config.from_hash(hash))
 
-    assert_includes errors, "exposure.mode must be cloudflare or ip"
+    assert_includes errors, "exposure.mode must be cloudflare, ip or public-ip"
   end
 
   def test_validation_ip_mode_accepts_minimal_config

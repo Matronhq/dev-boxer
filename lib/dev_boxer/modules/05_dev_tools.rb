@@ -16,6 +16,7 @@ module DevBoxer
         install_base_packages
         install_node
         install_python
+        return ok "Matron prerequisites installed" if config.setup&.profile == "starter"
         install_uv
         install_github_cli
         configure_github_auth_for_user

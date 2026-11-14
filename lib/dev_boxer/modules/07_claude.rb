@@ -1,4 +1,5 @@
 require "json"
+require_relative "../components"
 
 module DevBoxer
   module Modules
@@ -37,6 +38,7 @@ module DevBoxer
         ensure_local_bin_on_path
         install_guard_hook
         write_settings
+        return ok "Claude Code installed" if config.setup&.profile == "starter"
         register_marketplace
         install_plugins
         install_chrome_devtools_mcp
@@ -53,6 +55,14 @@ module DevBoxer
       end
 
       def install_cli
+        if config.setup&.profile == "starter"
+          version = Components.tool_version("claude")
+          if claude_installed? && shell.run_as_user(username, "#{home_dir}/.local/bin/claude --version").split.first == version
+            return skip "Claude Code #{version} already installed"
+          end
+          shell.run_as_user(username, "curl -fsSL https://claude.ai/install.sh | bash -s -- #{version}")
+          return ok "Claude Code #{version} installed"
+        end
         if claude_installed?
           skip "Claude Code CLI already installed"
           return
@@ -98,6 +108,10 @@ module DevBoxer
           changed = true
         end
         changed = true if add_guard_hook(existing)
+        if config.setup&.profile == "starter" && existing.dig("env", "DISABLE_AUTOUPDATER") != "1"
+          (existing["env"] ||= {})["DISABLE_AUTOUPDATER"] = "1"
+          changed = true
+        end
 
         if changed
           File.write(path, JSON.pretty_generate(existing) + "\n")

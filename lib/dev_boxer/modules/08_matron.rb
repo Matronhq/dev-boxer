@@ -30,6 +30,10 @@ module DevBoxer
 
       def run
         section "Matron chat stack"
+        # The journal and bridge use separate users. A restrictive caller
+        # umask must not make their shared directory root-only; each secret
+        # inside keeps its own owner and private file mode.
+        shell.sh!("install -d -m 0755 /etc/matron") if starter?
 
         case journal_mode
         when "bundled"

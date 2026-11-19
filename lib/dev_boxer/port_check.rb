@@ -33,6 +33,12 @@ module DevBoxer
         ports << Port.new(number: port(ip&.hello_port, 8445), service: "the hello-world page over HTTPS",
                           config_key: "exposure.ip.hello_port", modules: %w[exposure], owners: %w[nginx])
       end
+      if config.exposure&.mode == "public-ip"
+        [80, 443, 8444].each do |number|
+          ports << Port.new(number: number, service: "Matron HTTPS and certificate renewal",
+                            modules: %w[exposure], owners: %w[nginx])
+        end
+      end
       if config.desktop&.enabled == true
         ports << Port.new(number: 3389, service: "remote desktop (XRDP)", modules: %w[desktop],
                           owners: %w[xrdp xrdp-sesman])

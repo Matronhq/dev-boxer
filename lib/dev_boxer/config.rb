@@ -59,6 +59,9 @@ module DevBoxer
       errors = []
       errors << MATRIX_RETIRED if hash.key?("matrix")
       wizard_sections.each { |section| section.validate(hash, errors) }
+      if hash.dig("setup", "profile") == "starter"
+        errors << "agent.provider must be claude or codex" unless %w[claude codex].include?(hash.dig("agent", "provider"))
+      end
       errors
     end
 

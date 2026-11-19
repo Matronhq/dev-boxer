@@ -1,6 +1,8 @@
 require "securerandom"
 require "shellwords"
 require_relative "../journal_enrollment"
+require_relative "../components"
+require "json"
 
 module DevBoxer
   module Modules
@@ -28,11 +30,16 @@ module DevBoxer
 
       def run
         section "Matron chat stack"
+        # The journal and bridge use separate users. A restrictive caller
+        # umask must not make their shared directory root-only; each secret
+        # inside keeps its own owner and private file mode.
+        shell.sh!("install -d -m 0755 /etc/matron") if starter?
 
         case journal_mode
         when "bundled"
           install_journal
           ensure_journal_user
+          shell.sh!(matron_admin("user admin #{Shellwords.escape(journal_username)} on")) if starter?
         when "external"
           probe_external_journal!
         else
@@ -53,6 +60,7 @@ module DevBoxer
       private
 
       def journal_mode = config.journal&.mode || "bundled"
+      def starter? = config.setup&.profile == "starter"
       def username = config.user.name
       def home_dir = "/home/#{username}"
       def bridge_dir = "#{home_dir}/matron-bridge"
@@ -73,7 +81,10 @@ module DevBoxer
           ok "System user matron created"
         end
 
-        if Dir.exist?(JOURNAL_DIR)
+        if starter?
+          shell.sh!("install -d -o matron -g matron #{JOURNAL_DIR}")
+          Components.checkout("journal", JOURNAL_DIR, owner: "matron", shell: shell)
+        elsif Dir.exist?(JOURNAL_DIR)
           skip "matron-journal already cloned"
           shell.sh!(as_matron("git -C #{JOURNAL_DIR} pull --ff-only"))
         else
@@ -83,10 +94,11 @@ module DevBoxer
         end
 
         info "Installing matron-journal dependencies"
-        shell.sh!(as_matron("cd #{JOURNAL_DIR} && npm ci --omit=dev"))
+        shell.sh!(as_matron("cd #{JOURNAL_DIR} && ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci --omit=dev"))
         shell.sh!(as_matron("mkdir -p #{JOURNAL_DIR}/data"))
 
         FileUtils.cp("#{JOURNAL_DIR}/deploy/matron-journal.service", "#{unit_dir}/matron-journal.service")
+        configure_starter_journal if starter?
         shell.sh!("systemctl daemon-reload")
         shell.systemctl(:enable, "matron-journal")
         shell.systemctl(:restart, "matron-journal")
@@ -120,10 +132,10 @@ module DevBoxer
           # Partial earlier run: user exists but the password was never
           # recorded. matron-admin user passwd converges us.
           info "Journal user #{journal_username} exists but secrets.yml has no password — resetting it"
-          shell.sh!(matron_admin("user passwd #{Shellwords.escape(journal_username)} --password #{Shellwords.escape(password)}"))
+          shell.sh!(matron_admin("user passwd #{Shellwords.escape(journal_username)} --password-stdin"), stdin: password)
         else
           info "Creating journal user #{journal_username}"
-          shell.sh!(matron_admin("user add #{Shellwords.escape(journal_username)} --password #{Shellwords.escape(password)}"))
+          shell.sh!(matron_admin("user add #{Shellwords.escape(journal_username)} --password-stdin"), stdin: password)
         end
         persist_journal_secrets(password)
         ok "Journal user #{journal_username} ready — the password in secrets.yml is your Matron app login"
@@ -158,7 +170,9 @@ module DevBoxer
       # ----- bridge -----
 
       def install_bridge
-        if Dir.exist?(bridge_dir)
+        if starter?
+          Components.checkout("bridge", bridge_dir, owner: username, shell: shell)
+        elsif Dir.exist?(bridge_dir)
           skip "matron-bridge already cloned"
           unless shell.sh("su - #{username} -c 'cd #{bridge_dir} && git pull --ff-only'")
             warn "Could not update matron-bridge (git pull --ff-only failed); continuing with the current checkout"
@@ -172,7 +186,7 @@ module DevBoxer
         # Always run: npm install is quick when nothing changed, and it repairs
         # an interrupted install or picks up dependencies after the pull above.
         info "Installing npm dependencies"
-        shell.run_as_user(username, "cd #{bridge_dir} && npm install")
+        shell.run_as_user(username, "cd #{bridge_dir} && #{starter? ? 'npm ci --omit=dev' : 'npm install'}")
         ok "matron-bridge installed"
       end
 
@@ -284,6 +298,13 @@ module DevBoxer
         info "Generating bridge .env"
         render_private_template("matron-bridge.env", "#{bridge_dir}/.env", bridge_env_vars(token_file))
         shell.sh!("chown #{username}:#{username} #{bridge_dir}/.env")
+        if starter?
+          File.open("#{bridge_dir}/.env", "a") do |f|
+            f.puts "MATRON_DEFAULT_AGENT=#{config.agent.provider}"
+            f.puts "DEFAULT_WORKDIR=#{home_dir}/work"
+          end
+          shell.sh!("install -d -o #{username} -g #{username} #{home_dir}/work")
+        end
         ok "Bridge .env generated"
       end
 
@@ -391,6 +412,13 @@ module DevBoxer
       end
 
       def write_mcp_config
+        if starter?
+          # Both AI backends read this persistent overlay. Never regenerate
+          # it: connector installers own their entries.
+          path = "#{bridge_dir}/mcp-config.local.json"
+          shell.write_file(path, JSON.pretty_generate({"mcpServers" => {}, "mcpExtras" => {}}), mode: 0o600, owner: "#{username}:#{username}") unless File.exist?(path)
+          return
+        end
         info "Generating bridge MCP config"
         # World-readable, so the secrets in bridge_env_vars must not even be
         # in its render input.
@@ -411,6 +439,29 @@ module DevBoxer
         shell.systemctl(:restart, "matron-bridge")
         shell.systemctl(:restart, "matron-viewer")
         ok "Bridge services installed and started"
+      end
+
+      def configure_starter_journal
+        web_dir = "/opt/matron-web"
+        shell.sh!("install -d -o matron -g matron #{web_dir}")
+        Components.checkout("web", web_dir, owner: "matron", shell: shell)
+        shell.sh!(as_matron("cd #{web_dir} && npx --yes pnpm@10.29.3 install --frozen-lockfile && npx --yes pnpm@10.29.3 build"))
+        origin = JournalEnrollment.https_base(exposure.journal_public_url)
+        shell.write_file("#{web_dir}/webapp/config.json", JSON.generate({"brand" => "Matron", "journal_server_url" => origin}))
+        saved = File.exist?(secrets_path) ? YAML.safe_load_file(secrets_path) : {}
+        key = saved.dig("journal", "token_key") || SecureRandom.hex(32)
+        raise SetupError, "Invalid saved journal encryption key" unless key.match?(/\A[0-9a-f]{64}\z/)
+        Config.merge_into_file(secrets_path, {"journal" => {"token_key" => key}})
+        shell.write_file("/etc/matron/journal.env", <<~ENV, mode: 0o640, owner: "root:matron")
+          MATRON_PUBLIC_URL=#{origin}
+          MATRON_WEB_DIR=#{web_dir}/webapp
+          MATRON_TOKEN_KEY=#{key}
+          MATRON_PUSH_GATEWAY_URL=https://push.matron.chat
+        ENV
+        shell.write_file("#{unit_dir}/matron-journal.service.d/onboarding.conf", <<~UNIT)
+          [Service]
+          EnvironmentFile=/etc/matron/journal.env
+        UNIT
       end
     end
   end

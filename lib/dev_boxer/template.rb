@@ -7,7 +7,7 @@ module DevBoxer
 
     def self.render(path, vars)
       raise NotFound, "Template not found: #{path}" unless File.exist?(path)
-      content = File.read(path)
+      content = File.read(path, encoding: Encoding::UTF_8)
       content.gsub(PLACEHOLDER) { vars[$1].to_s }
     end
 

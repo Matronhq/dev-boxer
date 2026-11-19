@@ -110,17 +110,16 @@ module DevBoxer
       # from JournalEnrollment.matron_admin_command so these lines can never
       # drift from what the live mint actually runs.
       def print_link_later_hints(journal_user)
-        mint = JournalEnrollment.matron_admin_command(link_code_args(journal_user))
-        png = JournalEnrollment.matron_admin_command("#{link_code_args(journal_user)} --expires 24h --png /tmp/matron-link.png")
+        mint = "sudo -u matron env MATRON_DB=/opt/matron-journal/data/matron.db node /opt/matron-journal/bin/matron-admin.js #{link_code_args(journal_user)}"
         host = link_later_host
+        destination = Shellwords.escape("#{username}@#{host}")
+        port = Integer(config.ssh&.port || 2222)
         info ""
         info "Link a phone later:"
+        info "  Connect to this box: ssh -p #{port} #{destination}"
         info "  Mint a fresh sign-in QR in your terminal (valid 10 minutes):"
-        info "    ssh root@#{host} #{Shellwords.escape(mint)}"
-        info "  Or mint a 24-hour QR image to send to someone — it signs them"
-        info "  straight in, so treat the file like a password:"
-        info "    ssh root@#{host} #{Shellwords.escape(png)}"
-        info "    scp root@#{host}:/tmp/matron-link.png . && ssh root@#{host} rm /tmp/matron-link.png"
+        info "    #{mint}"
+        info "  Keep the QR private: it signs directly into your account."
       end
 
       # The one place the link-code invocation is assembled — the live QR

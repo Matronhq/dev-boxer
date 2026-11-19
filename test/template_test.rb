@@ -2,6 +2,20 @@ require_relative "test_helper"
 require "tmpdir"
 
 class TemplateTest < Minitest::Test
+  def test_utf8_templates_work_in_a_minimal_server_locale
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "utf8.txt")
+      File.write(path, "Setup — {{NAME}}\n")
+      previous = Encoding.default_external
+      begin
+        Encoding.default_external = Encoding::US_ASCII
+        assert_equal "Setup — alice\n", DevBoxer::Template.render(path, "NAME" => "alice")
+      ensure
+        Encoding.default_external = previous
+      end
+    end
+  end
+
   def test_render_substitutes_double_brace_placeholders
     Dir.mktmpdir do |dir|
       tpl = "#{dir}/in.txt"

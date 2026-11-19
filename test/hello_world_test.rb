@@ -204,17 +204,12 @@ class HelloWorldTest < Minitest::Test
 
       summary = output.string
       assert_includes summary, "Link a phone later"
-      # Both hint lines wrap the real matron-admin command in ssh to this box.
-      ssh_lines = summary.lines.select { |l| l.include?("ssh root@box1.example.com") }
-      assert_equal 3, ssh_lines.count, summary # re-mint, png mint, and the rm in the scp line
-      # The remote command is the same runuser/MATRON_DB wrapper the live QR
-      # mint uses (Shellwords-escaped for the ssh hop, hence \-escapes).
-      assert_includes summary, "runuser"
-      assert_includes summary, "link-code"
-      assert_includes summary, "--expires"
-      assert_includes summary, "24h"
-      assert_includes summary, "/tmp/matron-link.png"
-      assert_includes summary, "scp root@box1.example.com:/tmp/matron-link.png ."
+      assert_includes summary, "ssh -p 2222 dev@box1.example.com"
+      assert_includes summary, "sudo -u matron env MATRON_DB="
+      assert_includes summary, "link-code alice --server-url https://203.0.113.7:8443"
+      refute_includes summary, "root@"
+      refute_includes summary, "24h"
+
     end
   end
 
@@ -238,7 +233,8 @@ class HelloWorldTest < Minitest::Test
 
     mod.send(:print_matron_login_instructions)
 
-    assert_includes output.string, "ssh root@<this-box>"
+    assert_includes output.string, "ssh -p 2222 dev@"
+    refute_includes output.string, "root@"
   end
 
   private

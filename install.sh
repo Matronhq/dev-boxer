@@ -39,10 +39,9 @@ apt-get update -qq
 apt-get install -y -qq ca-certificates curl git ruby
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-    log "Updating Dev Boxer in $INSTALL_DIR"
-    git -C "$INSTALL_DIR" fetch --quiet origin "$BRANCH"
-    git -C "$INSTALL_DIR" checkout --quiet "$BRANCH"
-    git -C "$INSTALL_DIR" pull --ff-only --quiet origin "$BRANCH"
+    log "Resuming the installed Dev Boxer version in $INSTALL_DIR"
+    # Repeating setup must not silently change the software being installed.
+    # The explicit `matron update` command requires a backup before updating.
 else
     log "Cloning Dev Boxer into $INSTALL_DIR"
     mkdir -p "$(dirname "$INSTALL_DIR")"

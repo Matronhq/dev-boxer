@@ -1,0 +1,6 @@
+{
+  "journal": {"repo": "https://github.com/Matronhq/matron-journal.git", "revision": "d591f8c24278a896aeca611cc8e1183b0e3e12a9"},
+  "bridge": {"repo": "https://github.com/Matronhq/matron-bridge.git", "revision": "88dc8cd0f25b5a1e153949e685b64510cd263938"},
+  "web": {"repo": "https://github.com/Matronhq/matron-web.git", "revision": "cd4769dfb1157d7fed15a73e09d815634bc9bcb0"},
+  "tools": {"codex": "0.169.0", "claude": "2.1.325"}
+}

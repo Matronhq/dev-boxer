@@ -1,0 +1,163 @@
+#!/usr/bin/env ruby
+# Administrative recovery commands. Credentials are only ever shown on the
+# operator's controlling terminal by the explicit `link` action.
+require "optparse"
+require "shellwords"
+require "json"
+require "fileutils"
+require "tmpdir"
+require "time"
+require "open3"
+
+ROOT = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift(File.join(ROOT, "lib"))
+require "dev_boxer"
+require "dev_boxer/ai_reply"
+
+config_path = File.join(ROOT, "config.yml")
+OptionParser.new { |o| o.on("--config PATH") { |v| config_path = File.expand_path(v) } }.order!
+action = ARGV.shift || "status"
+abort "Run this command with sudo." unless Process.uid.zero?
+config = DevBoxer::Config.load(config_path)
+username = config.user.name
+provider = config.agent&.provider || "claude"
+abort "Invalid AI provider in config." unless %w[claude codex].include?(provider)
+shell = DevBoxer::Shell.new
+log = DevBoxer::Log.new
+exposure = DevBoxer::Exposure.for(config: config, shell: shell, log: log)
+bundled = (config.journal&.mode || "bundled") == "bundled"
+origin = DevBoxer::JournalEnrollment.https_base(exposure.journal_public_url)
+services = %w[matron-bridge matron-viewer nginx]
+services << "matron-journal" if bundled
+secrets_path = DevBoxer::Config.secrets_path_for(config_path)
+state_paths = [config_path, secrets_path, "/etc/matron", "/home/#{username}/matron-bridge/.env", "/home/#{username}/matron-bridge/.journal-token", "/home/#{username}/matron-bridge/mcp-config.local.json"]
+state_paths << "/opt/matron-journal/data" if bundled
+restore_args = [username, bundled ? "bundled" : "external", *state_paths]
+restore_tool = File.join(ROOT, "bin/restore-state.py")
+
+begin
+  case action
+  when "status"
+    failed = []
+    services.each do |service|
+      ready = shell.service_active?(service)
+      puts "#{ready ? 'OK' : 'CHECK'} #{service}"
+      failed << service unless ready
+    end
+    if bundled
+      ready = shell.sh("curl --fail --silent --show-error --max-time 15 #{Shellwords.escape(origin + '/app/')} >/dev/null")
+      puts "#{ready ? 'OK' : 'CHECK'} browser: #{origin}/app/"
+      failed << "HTTPS browser" unless ready
+    end
+    viewer_ready = shell.sh("curl --fail --silent --show-error --max-time 15 #{Shellwords.escape(exposure.viewer_base_url + '/health')} >/dev/null")
+    puts "#{viewer_ready ? 'OK' : 'CHECK'} HTTPS file viewer"
+    failed << "HTTPS file viewer" unless viewer_ready
+    if config.exposure.mode == "public-ip"
+      ready = shell.sh("openssl x509 -in /etc/letsencrypt/live/matron-ip/cert.pem -noout -checkend 172800 >/dev/null 2>&1")
+      timer = shell.service_active?("matron-certificate.timer")
+      renewed = shell.sh("systemctl is-failed --quiet matron-certificate.service")
+      puts "#{ready && timer && !renewed ? 'OK' : 'CHECK'} certificate and automatic renewal"
+      failed << "certificate renewal (sudo journalctl -u matron-certificate.service)" unless ready && timer && !renewed
+    end
+    abort "Needs attention: #{failed.join(', ')}. Re-run setup or see https://matron.chat/getting-started/#help" unless failed.empty?
+    puts "Services respond. Finish sign-in and check your first chat in Matron."
+  when "login"
+    status_cmd = provider == "codex" ? "codex login status" : "claude auth status"
+    unless shell.sh("su - #{Shellwords.escape(username)} -c #{Shellwords.escape(status_cmd)} >/dev/null 2>&1")
+      puts "Open the provider's sign-in link on your own computer. Enter any code only in its sign-in flow."
+      login_cmd = provider == "codex" ? "codex login --device-auth" : "claude auth login"
+      shell.run_as_user_interactive(username, login_cmd)
+    end
+    puts "Checking a short AI reply (uses a small amount of your account allowance)..."
+    prompt = "Reply with exactly: Matron is ready"
+    cmd = provider == "codex" ? "codex exec --skip-git-repo-check --sandbox read-only --json #{Shellwords.escape(prompt)}" : "claude -p --tools '' --output-format json #{Shellwords.escape(prompt)}"
+    result = shell.run_as_user(username, "cd ~/work && #{cmd}")
+    abort "Sign-in completed, but no successful reply arrived. Try sudo matron login again." unless DevBoxer::AiReply.ready?(provider, result)
+    puts "AI reply received. Open Matron and try your first chat."
+  when "link"
+    unless bundled
+      puts "Sign into your existing Matron at #{origin}/app/; this box uses that account."
+      exit
+    end
+    # Do not send passwords or sign-in QR codes into piped logs.
+    File.open("/dev/tty", "w") do |tty|
+      saved = YAML.safe_load_file(secrets_path)
+      journal_user = config.journal&.username || username
+      tty.puts "Open #{origin}/app/"
+      tty.puts "Username: #{journal_user}"
+      tty.puts "Password: #{saved.dig('journal', 'user_password')}"
+      tty.puts "For a phone, scan this short-lived sign-in QR in Matron:"
+      cmd = DevBoxer::JournalEnrollment.matron_admin_command("link-code #{Shellwords.escape(journal_user)} --server-url #{Shellwords.escape(origin)}")
+      tty.puts shell.sh!(cmd)
+      tty.puts "Save the password in your password manager. Never paste it into chat."
+    end
+  when "enroll"
+    exec "ruby", File.join(ROOT, "bin/enroll"), "--config", config_path
+  when "resume"
+    exec "ruby", File.join(ROOT, "setup.rb"), "--config", config_path, *ARGV
+  when "backup"
+    destination = File.expand_path(ARGV.shift || "/var/backups/matron-#{Time.now.utc.strftime('%Y%m%d-%H%M%S')}.tar.gz")
+    abort "Destination already exists" if File.exist?(destination)
+    FileUtils.mkdir_p(File.dirname(destination), mode: 0o700)
+    old_umask = File.umask(0o077)
+    stopped = []
+    begin
+      %w[matron-bridge matron-viewer matron-journal].each do |unit|
+        next if unit == "matron-journal" && !bundled
+        next unless shell.service_active?(unit)
+        shell.systemctl(:stop, unit)
+        stopped << unit
+      end
+      Dir.mktmpdir("matron-backup") do |dir|
+        files = state_paths.select { |p| File.exist?(p) }
+        revision = shell.sh!("git -C #{Shellwords.escape(ROOT)} rev-parse HEAD").strip
+        manifest = {"format" => 1, "user" => username, "bundled" => bundled, "files" => files, "installer_revision" => revision, "components" => JSON.parse(File.read(File.join(ROOT, "components.json")))}
+        File.write(File.join(dir, "manifest.json"), JSON.pretty_generate(manifest))
+        shell.sh!("tar -czf #{Shellwords.escape(destination)} -C #{Shellwords.escape(dir)} manifest.json -C / #{files.map { |p| Shellwords.escape(p.delete_prefix('/')) }.join(' ')}")
+      end
+      puts "Backup saved to #{destination} (owner-only). It contains credentials: store it privately off this VPS."
+      puts "Work folders and AI provider sessions are excluded. Back up your work separately; sign in again after restoring."
+    ensure
+      stopped.reverse_each { |unit| shell.systemctl(:start, unit) }
+      File.umask(old_umask)
+    end
+  when "restore"
+    archive = File.expand_path(ARGV.shift.to_s)
+    abort "Use sudo matron restore BACKUP --replace-state. This replaces this installation's Matron data." unless ARGV.shift == "--replace-state" && File.file?(archive)
+    abort "Backup validation failed; nothing restored." unless system("python3", restore_tool, "--check", archive, *restore_args)
+    # On any failure below, leave services stopped until a good restore.
+    %w[matron-bridge matron-viewer matron-journal].each do |unit|
+      next if unit == "matron-journal" && !bundled
+      next unless shell.service_active?(unit)
+      shell.systemctl(:stop, unit)
+    end
+    args = ["python3", restore_tool, archive, *restore_args]
+    abort "Restore refused; state may be incomplete. Keep services stopped and restore a known-good backup." unless system(*args)
+    shell.sh!("chown -R matron:matron /opt/matron-journal/data") if bundled
+    %w[.env .journal-token mcp-config.local.json].each do |name|
+      path = "/home/#{username}/matron-bridge/#{name}"
+      shell.sh!("chown #{Shellwords.escape(username)}:#{Shellwords.escape(username)} #{Shellwords.escape(path)}") if File.exist?(path)
+    end
+    shell.sh!("chown #{username}:#{username} /etc/matron/agent-token") if File.exist?("/etc/matron/agent-token")
+    shell.sh!("chown root:matron /etc/matron/journal.env") if bundled && File.exist?("/etc/matron/journal.env")
+    # Keep the new server's reachability settings if restoring onto a replacement.
+    DevBoxer::Config.merge_into_file(config_path, {"exposure" => config.to_h.fetch("exposure"), "ssh" => config.to_h.fetch("ssh"), "user" => {"ssh_public_key" => config.user.ssh_public_key}})
+    puts "State restored. Re-applying this installation's HTTPS settings and services."
+    exec "ruby", File.join(ROOT, "setup.rb"), "--config", config_path
+  when "update"
+    abort "Run sudo matron backup first. Then use: sudo matron update --backup /path/to/backup.tar.gz" unless ARGV.shift == "--backup"
+    backup = File.expand_path(ARGV.shift.to_s)
+    abort "Backup file not found" unless File.file?(backup) && File.size(backup).positive?
+    abort "Backup validation failed; update cancelled." unless system("python3", restore_tool, "--check", backup, *restore_args)
+    shell.sh!("git -C #{Shellwords.escape(ROOT)} diff --quiet && git -C #{Shellwords.escape(ROOT)} diff --cached --quiet")
+    shell.sh!("git -C #{Shellwords.escape(ROOT)} pull --ff-only")
+    exec "ruby", File.join(ROOT, "setup.rb"), "--config", config_path
+  else
+    abort "Commands: status, login, link, enroll, resume, backup [path], restore PATH --replace-state, update --backup PATH."
+  end
+rescue DevBoxer::Shell::Error => e
+  warn e.message
+  exit 1
+rescue Errno::ENXIO
+  abort "Open an interactive SSH terminal to show the sign-in details."
+end

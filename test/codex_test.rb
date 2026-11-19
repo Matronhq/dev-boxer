@@ -55,4 +55,42 @@ class CodexTest < Minitest::Test
     assert_equal "codex", DevBoxer::Modules::Codex.module_name
     assert_equal 12, DevBoxer::Modules::Codex.module_order
   end
+
+  def starter_with_unreadable_cli(repair_succeeds: true)
+    calls = []
+    usable = false
+    version = DevBoxer::Components.tool_version("codex")
+    io = StringIO.new
+    shell = DevBoxer::Shell.new(runner: ->(cmd, _opts = {}) {
+      calls << cmd
+      if cmd.start_with?("su - alice ")
+        [usable, usable ? "codex-cli #{version}\n" : "", usable ? "" : "permission denied"]
+      elsif cmd == "npm root -g"
+        [true, "/opt/fixture/lib/node_modules\n", ""]
+      else
+        usable = repair_succeeds if cmd.include?("npm install -g")
+        [true, "", ""]
+      end
+    })
+    config = DevBoxer::Config.from_hash({"setup" => {"profile" => "starter"}, "user" => {"name" => "alice"}})
+    mod = DevBoxer::Modules::Codex.new(config: config, shell: shell, log: DevBoxer::Log.new(io: io))
+    [mod, calls, io]
+  end
+
+  def test_starter_repairs_an_unreadable_install_and_then_skips_it
+    mod, calls, io = starter_with_unreadable_cli
+    mod.run
+    assert_includes io.string, "Codex CLI ready"
+    assert calls.any? { |cmd| cmd.include?("npm uninstall -g @openai/codex") }
+    assert_equal 1, calls.count { |cmd| cmd.include?("npm install -g") }
+    mod.run
+    assert_equal 1, calls.count { |cmd| cmd.include?("npm install -g") }, "a usable CLI must not be reinstalled on resume"
+  end
+
+  def test_starter_does_not_claim_readiness_when_user_still_cannot_run_cli
+    mod, _calls, io = starter_with_unreadable_cli(repair_succeeds: false)
+    error = assert_raises(DevBoxer::SetupError) { mod.run }
+    assert_match(/alice cannot run that version/, error.message)
+    refute_includes io.string, "Codex CLI ready"
+  end
 end

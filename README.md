@@ -1,6 +1,8 @@
 # Dev Boxer
 
-Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment — Matron chat stack, desktop GUI, security hardening, and your choice of Cloudflare Tunnel or plain IP + self-signed TLS — in one command.
+Set up your first Matron on a fresh Ubuntu 24.04 VPS: browser app, journal, bridge, file viewer and your choice of Claude Code or Codex. The guided starter path uses trusted HTTPS for a public IPv4 address, without a domain.
+
+**Start with the [four-step guide](https://matron.chat/getting-started/).** Development desktops, Cloudflare and other advanced settings remain available.
 
 ## Part of the Matron ecosystem
 
@@ -16,25 +18,18 @@ Set up an Ubuntu 24.04 VPS as a remote Claude Code development environment — M
 
 ## What you get
 
-- **Claude Code** on a persistent remote server — run long-lived agents without keeping your laptop open
-- **Matron chat** — talk to Claude Code from the Matron apps (iOS/desktop/web); this box runs [matron-bridge](https://github.com/Matronhq/matron-bridge) and, in bundled mode, its own [matron-journal](https://github.com/Matronhq/matron-journal) sync server
-- **File viewer** — `viewer.<domain>` (or `https://<ip>:8444` in IP mode) serves files and artifacts the agent shares, via `matron-viewer.service`
-- **Two exposure modes** — your own domain via Cloudflare Tunnel, or no domain at all via IP + self-signed TLS (see [docs/exposure-modes.md](docs/exposure-modes.md))
-- **Desktop GUI (optional)** — XFCE4 + XRDP + VS Code, installed on demand with `~/setup-desktop`; reachable only through an SSH tunnel, no open ports
-- **Security hardening** — SSH key-only auth, custom port, UFW, fail2ban, unattended-upgrades
-- **Cloudflare Tunnel** — zero-trust HTTPS access with optional SSO
-- **Dev tools** — Docker, Node.js 22, Git, Python, uv, GitHub CLI, lazydocker, Chrome, Firefox
+The starter profile installs one AI CLI, the browser app, journal, bridge and file viewer. It sets up SSH keys on port 22, a firewall, automatic OS updates and automatic HTTPS renewal. It omits desktops, Docker, browsers, coding plugins and local voice transcription. Email and other service integrations are not included.
+
+Advanced developer setup retains those optional tools and the Cloudflare/self-signed exposure modes. See [exposure modes](docs/exposure-modes.md).
 
 ## Prerequisites
 
-- A fresh **Ubuntu 24.04** machine with sudo access. Anywhere works:
-  - **Cheap VPS** (Hetzner / DigitalOcean / etc., ~$5/mo) — fastest path
-  - **Spare desktop or laptop** at home (no monthly fee — see [No VPS?](#no-vps-use-spare-hardware))
-  - **VM** (multipass, OrbStack, Hyper-V) on top of macOS or Windows
-- **amd64 or arm64** (on arm64, Chrome is skipped — no arm64 build)
-- **Cloudflare mode only:** a Cloudflare account with a domain, a zone DNS API token, and optionally a one-time account setup token
-- **IP mode:** nothing extra — no domain needed
-- SSH key pair
+- A **fresh Ubuntu 24.04 x86-64 VPS** with root or sudo access, initially 2 CPUs / 4 GB RAM / 40 GB disk. This size has been exercised in a resource-limited container; a public VPS acceptance run is still required before release.
+- A stable public **IPv4** address and inbound TCP ports **22, 80, 443, 8444**. Port 80 must remain reachable for certificate renewal.
+- Your SSH **public** key, with its private key kept on your computer.
+- A Claude Code or Codex account with CLI access. AI usage and the VPS are separate costs. The [buying guide](https://matron.chat/getting-started/#vps) compares budget providers, contract terms and setup fees.
+
+For spare hardware, ARM64 or Cloudflare, choose Advanced and read the relevant guide below.
 
 ## Quick start
 
@@ -48,16 +43,27 @@ curl -fsSL https://raw.githubusercontent.com/matronhq/dev-boxer/main/install.sh 
 
 ### What happens next
 
-The installer clones Dev Boxer to `/opt/dev-boxer`, prompts for the minimum required settings, writes `config.yml` and gitignored `secrets.yml`, then runs the full setup. Later `sudo ./setup.rb ...` reruns from that checkout, which will automatically fast-forward before continuing; set `DEV_BOXER_SKIP_AUTO_UPDATE=1` to disable that.
+The installer clones Dev Boxer to `/opt/dev-boxer`, saves your settings and private `secrets.yml`, then provisions the server. Choose:
 
-It asks for, in order:
+1. **Set up my first Matron** — choose a sign-in name, an AI provider, the public IP and an SSH public key. Accept the certificate terms, then follow the AI sign-in link. Open the printed Matron URL and use the password or phone QR shown only in your terminal.
+2. **Add a box to my Matron** — enter the existing HTTPS address, approve the pairing code in Matron, and sign into the AI provider on this box.
+3. **Advanced developer setup** — the original wizard, including journal, domain/Cloudflare, desktop and developer configuration. It is also available with `sudo ./setup.rb --advanced` on a new checkout.
 
-1. Linux username, SSH public key, and SSH port
-2. Journal location: bundled on this box (plus a journal username), or external (plus its `wss://` URL and an optional agent-token file)
-3. Exposure mode: `cloudflare` or `ip`. Cloudflare mode asks for the base domain, whether Dev Boxer manages DNS (plus a zone DNS token), and whether it creates the tunnel and Access app (plus allowed emails/domains and a one-time account setup token). IP mode asks for the public IP — leave blank to auto-detect.
-4. Claude experience level: beginner, intermediate, or advanced — tunes the generated CLAUDE.md
+Start a chat in the prepared `work` folder and give it a small design task:
 
-It derives `dev.<domain>`, `chat.<domain>`, `viewer.<domain>`, and `hello.<domain>` automatically in Cloudflare mode (`chat.` only in bundled-journal mode).
+> Create three visual directions for a simple fitness tracker: calm, bold and playful. Show colors, typography and a sample screen for each in one self-contained HTML page. Save it as design-directions.html, share a preview link, and put a notice in For you linking to the finished page.
+
+Open the result from its **For you** notice and check all three directions. This checks the agent's work, file preview and result notification together. Setup's service checks do not substitute for this test.
+
+Later SSH connections use `ssh dev@YOUR_VPS_IP` on the starter path. Test that login before closing the initial terminal. The agent's `dev` account has passwordless sudo and can administer the server.
+
+Repeating the install command uses the saved settings and installed component revisions. Use `sudo matron status`, `sudo matron login`, or `sudo matron link` for recovery. Make a backup before the explicit `sudo matron update --backup PATH` action. See [backup, restore and recovery](docs/starter-recovery.md).
+
+The starter's component revisions and AI CLI versions are pinned in `components.json`. Ubuntu security updates remain automatic. The original advanced profile keeps its existing component update behavior; installer auto-pull is now opt-in with `DEV_BOXER_AUTO_UPDATE=1`.
+
+### Advanced developer settings
+
+The advanced wizard asks for a Linux username and SSH port, journal mode, exposure mode and Claude experience level. In Cloudflare mode it derives `dev`, `chat`, `viewer` and `hello` hostnames. The rest of this README describes those advanced options.
 
 **Private repos:** the wizard doesn't ask for a GitHub token. To let the dev user clone private repos without an interactive login, add a fine-grained PAT to `secrets.yml` before running setup:
 
@@ -129,7 +135,7 @@ See [docs/cloudflare-access.md](docs/cloudflare-access.md) for a manual walkthro
 
 ## Modules
 
-Setup runs 10 modules by default, in order; the optional desktop module (03) brings the total to 11.
+The starter runs only security, users, prerequisites, the chosen AI CLI, Matron, exposure and onboarding. Advanced setup uses the developer modules below.
 
 | # | Module | What it does |
 |---|--------|--------------|
@@ -141,7 +147,7 @@ Setup runs 10 modules by default, in order; the optional desktop module (03) bri
 | 06 | `browsers`     | Chrome, Firefox, Xvfb |
 | 07 | `claude`       | Claude Code CLI + plugins + Chrome DevTools MCP + partial-clone git guard hook |
 | 08 | `matron`       | matron-journal (bundled mode) + matron-bridge, agent enrollment, optional local voice-note transcription (whisper.cpp; set `bridge.voice_notes.enabled: false` when your journal transcribes voice notes, and setup removes it; see below) |
-| 09 | `exposure`     | Cloudflare Tunnel or IP + self-signed TLS, per `exposure.mode` |
+| 09 | `exposure`     | Trusted IP HTTPS for the starter; Cloudflare Tunnel or self-signed IP TLS in Advanced |
 | 10 | `desktop-apps` | lazydocker, CLAUDE.md, MOTD, optional desktop helper |
 | 11 | `hello-world`  | `localhost:9820` tunnel smoke-test service |
 
@@ -167,7 +173,7 @@ To add more MCP servers to the box's Claude Code, see [docs/adding-mcp-servers.m
 
 ## Multiple boxes, one journal
 
-Point more than one Dev Boxer install at the same matron-journal by setting `journal.mode: external` and `journal.url` (its `wss://` address) on every box after the first. Provide a pre-minted `journal.token_file` (mint one on the journal host: `matron-admin agent add <user> <name>`), or leave it unset to pair from the Matron app during setup instead. See [docs/exposure-modes.md](docs/exposure-modes.md) for how to reach that journal from the outside.
+For the starter path, choose **Add a box to my Matron** on the next VPS. In advanced configuration, point more than one install at the same matron-journal by setting `journal.mode: external` and `journal.url` (its `wss://` address) on every box after the first. Provide a pre-minted `journal.token_file` (mint one on the journal host: `matron-admin agent add <user> <name>`), or leave it unset to pair from the Matron app during setup instead. See [docs/exposure-modes.md](docs/exposure-modes.md) for how to reach that journal from the outside.
 
 ## Re-enrolling an agent
 

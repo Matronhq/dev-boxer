@@ -19,6 +19,7 @@ module DevBoxer
       def run
         section "Codex CLI"
         install_cli
+        shell.run_as_user(config.user.name, "codex --version") if config.setup&.profile == "starter"
         ok "Codex CLI ready — run `codex login` to sign in with your own account"
       end
 
@@ -31,7 +32,9 @@ module DevBoxer
         if config.setup&.profile == "starter"
           version = Components.tool_version("codex")
           return skip "Codex CLI #{version} already installed" if shell.command_exists?("codex") && shell.sh!("codex --version").split.last == version
-          shell.sh!("npm install -g #{PACKAGE}@#{version}")
+          # Global packages must be executable by the account that runs the
+          # agent, even when setup itself inherited a private umask.
+          shell.sh!("umask 022 && npm install -g #{PACKAGE}@#{version}")
           return ok "Codex CLI #{version} installed"
         end
         if shell.command_exists?("codex")

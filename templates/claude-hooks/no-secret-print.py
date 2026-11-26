@@ -52,8 +52,9 @@ WRAPPERS = {
     "time": {"-f", "-o", "--format", "--output"},
     "timeout": {"-s", "-k", "--signal", "--kill-after"},
     "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
-    "xargs": {"-a", "-d", "-E", "-e", "-I", "-i", "-L", "-l", "-n", "-P", "-s", "--arg-file", "--delimiter", "--eof",
-              "--replace", "--max-lines", "--max-args", "--max-procs", "--max-chars", "--process-slot-var"},
+    # xargs -i, -e, -l and --replace, --eof, --max-lines take their argument only when it is attached (-i{}).
+    "xargs": {"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter", "--max-args",
+              "--max-procs", "--max-chars", "--process-slot-var"},
     "nohup": set(), "command": set(), "builtin": set(), "exec": set(),
 }
 GREP_UNSAFE_OPTS = re.compile(r"^-(?:[a-zA-Z]*[vABC]|-invert-match|-after-context|-before-context|-context)")

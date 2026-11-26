@@ -42,14 +42,19 @@ SAFE_SINK_STAGE = re.compile(
     r"^(?:cut\s+(?:-d\s*['\"]?=['\"]?\s+-f\s*1|-f\s*1\s+-d\s*['\"]?=['\"]?)|wc|sha\d*sum|md5sum|b2sum)(?:\s+-[a-z]+)*\s*$"
 )
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-# Wrappers that run another command, with the options of each that take a separate argument.
+# Wrappers that run another command, with the options of each that take a separate argument (short and long;
+# a long option written --name=value takes none).
 WRAPPERS = {
-    "sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D", "-R", "-T"},
-    "env": {"-u", "-C", "-S"},
-    "nice": {"-n"},
-    "time": {"-f", "-o"},
-    "nohup": set(), "command": set(), "builtin": set(), "exec": set(), "stdbuf": {"-i", "-o", "-e"},
-    "timeout": {"-s", "-k"},
+    "sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D", "-R", "-T", "--user", "--group", "--host",
+             "--prompt", "--role", "--type", "--other-user", "--chdir", "--chroot", "--close-from", "--command-timeout"},
+    "env": {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"},
+    "nice": {"-n", "--adjustment"},
+    "time": {"-f", "-o", "--format", "--output"},
+    "timeout": {"-s", "-k", "--signal", "--kill-after"},
+    "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
+    "xargs": {"-a", "-d", "-E", "-e", "-I", "-i", "-L", "-l", "-n", "-P", "-s", "--arg-file", "--delimiter", "--eof",
+              "--replace", "--max-lines", "--max-args", "--max-procs", "--max-chars", "--process-slot-var"},
+    "nohup": set(), "command": set(), "builtin": set(), "exec": set(),
 }
 GREP_UNSAFE_OPTS = re.compile(r"^-(?:[a-zA-Z]*[vABC]|-invert-match|-after-context|-before-context|-context)")
 DENY_FILE = (
@@ -148,11 +153,14 @@ def redirected(stage: str) -> bool:
 def output_is_safe(pipe, idx: int) -> bool:
     """Everything stage idx prints ends up in a file or a safe sink, and nothing on the way copies it out."""
     for st in pipe[idx:]:
+        w = words(st) or []
+        # tee copies what it reads to every file it names; a terminal device or file descriptor puts that copy in
+        # the transcript whatever happens to tee's own stdout.
+        if w and w[0].rsplit("/", 1)[-1] == "tee":
+            if any(re.match(r"^/dev/(?!null$)|^/proc/self/fd/", a) for a in w[1:] if not a.startswith("-")):
+                return False
         if redirected(st):
             return True
-        w = words(st) or []
-        if w and w[0].rsplit("/", 1)[-1] == "tee":
-            return False
     last = pipe[-1].strip()
     return len(pipe) - 1 > idx and bool(SAFE_SINK_STAGE.match(last))
 

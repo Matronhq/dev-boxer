@@ -124,6 +124,11 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_equal "deny", secret_decision("printf x | wc -c | cat .env")
     assert_equal "deny", secret_decision("cat .env | tee /dev/stderr | wc -c")
     assert_equal "deny", secret_decision("printenv --null")
+    assert_equal "deny", secret_decision("xargs cat .env")
+    assert_equal "deny", secret_decision("cat .env | tee /dev/stderr > copy")
+    assert_equal "deny", secret_decision("sudo --user alice cat .env")
+    assert_equal "deny", secret_decision("env --unset LANG cat .env")
+    assert_equal "deny", secret_decision("timeout --signal KILL 5 cat .env")
 
     assert_nil secret_decision(%(grep -E '^(COMPOSE_PROJECT_NAME|SITE_BASE_HOST)=' .docker/.env))
     assert_nil secret_decision(%(grep -c '^APP_ENV=' .env))
@@ -141,6 +146,7 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_nil secret_decision("ls -la .env")
     assert_nil secret_decision("docker compose config > resolved.yml")
     assert_nil secret_decision("docker inspect web > inspect.json")
+    assert_nil secret_decision("cat .env | tee a.env > b.env")
     assert_nil secret_decision(%(sed -e 's/^A=.*/A=b/' "$S/.env" > "$D/.env"))
   end
 

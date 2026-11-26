@@ -7,12 +7,13 @@ require_relative "../lib/dev_boxer/modules/07_claude"
 
 class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
   HOOK = File.join(TEMPLATES_DIR, "claude-hooks", "partial-clone-guard.py")
+  SECRET_HOOK = File.join(TEMPLATES_DIR, "claude-hooks", "no-secret-print.py")
   # Run fixtures and the hook against the temp repos only, even when the
   # suite itself runs inside a git hook.
   CLEAN_GIT_ENV = %w[GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_CONFIG]
                   .to_h { |k| [k, nil] }.freeze
 
-  def test_settings_gain_the_guard_hook_once_and_keep_everything_else
+  def test_settings_gain_each_guard_hook_once_and_keep_everything_else
     Dir.mktmpdir do |home|
       FileUtils.mkdir_p("#{home}/.claude")
       File.write("#{home}/.claude/settings.json", JSON.generate(
@@ -23,7 +24,7 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
       mod = build_module(DevBoxer::Modules::Claude, { "user" => { "name" => "alice" } })
 
       mod.stub(:home_dir, home) do
-        mod.send(:install_guard_hook)
+        mod.send(:install_guard_hooks)
         mod.send(:write_settings)
         mod.send(:write_settings)
       end
@@ -31,8 +32,13 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
       settings = JSON.parse(File.read("#{home}/.claude/settings.json"))
       assert_equal "opus", settings["model"]
       commands = settings["hooks"]["PreToolUse"].flat_map { |e| e["hooks"].map { |h| h["command"] } }
-      assert_equal ["other-hook", "python3 #{home}/.claude/hooks/partial-clone-guard.py"], commands
+      assert_equal [
+        "other-hook",
+        "python3 #{home}/.claude/hooks/partial-clone-guard.py",
+        "python3 #{home}/.claude/hooks/no-secret-print.py",
+      ], commands
       assert File.executable?("#{home}/.claude/hooks/partial-clone-guard.py")
+      assert File.executable?("#{home}/.claude/hooks/no-secret-print.py")
       assert_includes @log_io.string, "already configured"
     end
   end
@@ -89,7 +95,76 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     end
   end
 
+  def test_secret_hook_blocks_printing_secrets_and_allows_the_safe_forms
+    skip "python3 missing" unless system("command -v python3 >/dev/null 2>&1")
+    # A prefix pattern is the classic slip: ^(COMPOSE) also matches COMPOSER_GITHUB_TOKEN.
+    assert_equal "deny", secret_decision(%(grep -E "^(COMPOSE|SITE_BASE)" .docker/.env))
+    assert_equal "deny", secret_decision("cat .env.local")
+    assert_equal "deny", secret_decision("head -5 ~/app/.env")
+    assert_equal "deny", secret_decision("awk -F= '{print $2}' .env")
+    assert_equal "deny", secret_decision("cat ~/.composer/auth.json")
+    assert_equal "deny", secret_decision(%(grep -E '^(GITHUB_TOKEN)=' .env))
+    assert_equal "deny", secret_decision("env")
+    assert_equal "deny", secret_decision("sudo -n env")
+    assert_equal "deny", secret_decision("env | sort")
+    assert_equal "deny", secret_decision("printenv API_KEY")
+    assert_equal "deny", secret_decision("docker compose config")
+    assert_equal "deny", secret_decision("docker inspect web")
+    assert_includes secret_reason("cat .env"), "cut -d= -f1"
+    # Ways round a looser check: more fields, wrapper options, quoted ">", loose or inverted patterns,
+    # a sink before the reader, a tee on the way, option-only printenv.
+    assert_equal "deny", secret_decision("cat .env | cut -d= -f1,2")
+    assert_equal "deny", secret_decision("env -u LANG cat .env")
+    assert_equal "deny", secret_decision("sudo -u alice cat /home/alice/.env")
+    assert_equal "deny", secret_decision("grep '>' .env")
+    assert_equal "deny", secret_decision("grep -E '^APP_ENV=|.*' .env")
+    assert_equal "deny", secret_decision("grep 'APP_ENV=' .env")
+    assert_equal "deny", secret_decision("grep -v '^APP_ENV=' .env")
+    assert_equal "deny", secret_decision("grep -A1 '^APP_ENV=' .env")
+    assert_equal "deny", secret_decision("printf x | wc -c | cat .env")
+    assert_equal "deny", secret_decision("cat .env | tee /dev/stderr | wc -c")
+    assert_equal "deny", secret_decision("printenv --null")
+    assert_equal "deny", secret_decision("xargs cat .env")
+    assert_equal "deny", secret_decision("printf '%s\\n' /dev/null | xargs cat .env")
+    assert_equal "deny", secret_decision("xargs -i cat .env")
+    assert_equal "deny", secret_decision("xargs --replace cat .env")
+    assert_equal "deny", secret_decision("xargs -I {} cat .env")
+    assert_equal "deny", secret_decision("cat .env | tee /dev/stderr > copy")
+    assert_equal "deny", secret_decision("sudo --user alice cat .env")
+    assert_equal "deny", secret_decision("env --unset LANG cat .env")
+    assert_equal "deny", secret_decision("timeout --signal KILL 5 cat .env")
+
+    assert_nil secret_decision(%(grep -E '^(COMPOSE_PROJECT_NAME|SITE_BASE_HOST)=' .docker/.env))
+    assert_nil secret_decision(%(grep -c '^APP_ENV=' .env))
+    assert_nil secret_decision("cut -d= -f1 .env.local")
+    assert_nil secret_decision("cat .env.local | cut -d= -f1")
+    assert_nil secret_decision("set -a && . .docker/.env && set +a && docker compose ps")
+    assert_nil secret_decision(%(sed -e 's/^A=.*/A=b/' a/.env > b/.env))
+    assert_nil secret_decision("sed -i 's/a/b/' .env")
+    assert_nil secret_decision("env | cut -d= -f1")
+    assert_nil secret_decision("env FOO=1 node script.js")
+    assert_nil secret_decision("docker compose config --services")
+    assert_nil secret_decision(%(docker inspect -f "{{.State.Status}}" web))
+    assert_nil secret_decision("cat .env.example")
+    assert_nil secret_decision("cat no-secret-print.py")
+    assert_nil secret_decision("ls -la .env")
+    assert_nil secret_decision("docker compose config > resolved.yml")
+    assert_nil secret_decision("docker inspect web > inspect.json")
+    assert_nil secret_decision("cat .env | tee a.env > b.env")
+    assert_nil secret_decision(%(sed -e 's/^A=.*/A=b/' "$S/.env" > "$D/.env"))
+  end
+
   private
+
+  def run_secret_hook(command)
+    input = JSON.generate("tool_name" => "Bash", "tool_input" => { "command" => command })
+    out, status = Open3.capture2("python3", SECRET_HOOK, stdin_data: input)
+    assert status.success?
+    out.strip.empty? ? nil : JSON.parse(out)["hookSpecificOutput"]
+  end
+
+  def secret_decision(command) = run_secret_hook(command)&.fetch("permissionDecision")
+  def secret_reason(command) = run_secret_hook(command).fetch("permissionDecisionReason")
 
   def git_repo(dir, name, partial:)
     path = File.join(dir, name)

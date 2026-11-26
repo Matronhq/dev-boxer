@@ -26,16 +26,20 @@ module DevBoxer
 
       MARKETPLACE = "anthropics/claude-plugins-official".freeze
 
-      # PreToolUse hook that stops history-wide git searches (git log -S,
-      # git blame, ...) in partial clones, where each one downloads every
-      # old file version it touches and can fill the disk.
-      GUARD_HOOK = "partial-clone-guard.py".freeze
+      # PreToolUse hooks on Bash, copied from templates/claude-hooks:
+      # - partial-clone-guard.py stops history-wide git searches (git log -S,
+      #   git blame, ...) in partial clones, where each one downloads every
+      #   old file version it touches and can fill the disk;
+      # - no-secret-print.py stops commands that would print a secret (an
+      #   .env file, the environment, docker compose config) into the
+      #   transcript, and points at the safe forms.
+      GUARD_HOOKS = %w[partial-clone-guard.py no-secret-print.py].freeze
 
       def run
         section "Claude Code"
         install_cli
         ensure_local_bin_on_path
-        install_guard_hook
+        install_guard_hooks
         write_settings
         register_marketplace
         install_plugins
@@ -76,14 +80,17 @@ module DevBoxer
         ok "~/.local/bin on PATH for bash + zsh (interactive + non-interactive)"
       end
 
-      def guard_hook_path = "#{home_dir}/.claude/hooks/#{GUARD_HOOK}"
+      def guard_hook_path(name) = "#{home_dir}/.claude/hooks/#{name}"
 
       # Copied on every run, so a changed hook reaches boxes set up earlier.
-      def install_guard_hook
-        FileUtils.mkdir_p(File.dirname(guard_hook_path))
-        FileUtils.cp(template_path("claude-hooks/#{GUARD_HOOK}"), guard_hook_path)
-        File.chmod(0o755, guard_hook_path)
-        ok "Partial-clone guard hook installed"
+      def install_guard_hooks
+        GUARD_HOOKS.each do |name|
+          path = guard_hook_path(name)
+          FileUtils.mkdir_p(File.dirname(path))
+          FileUtils.cp(template_path("claude-hooks/#{name}"), path)
+          File.chmod(0o755, path)
+        end
+        ok "Claude guard hooks installed (#{GUARD_HOOKS.join(', ')})"
       end
 
       def write_settings
@@ -97,30 +104,30 @@ module DevBoxer
           existing["cleanupPeriodDays"] = 7
           changed = true
         end
-        changed = true if add_guard_hook(existing)
+        GUARD_HOOKS.each { |name| changed = true if add_guard_hook(existing, name) }
 
         if changed
           File.write(path, JSON.pretty_generate(existing) + "\n")
           File.chmod(0o600, path)
-          ok "Claude settings.json written (cleanupPeriodDays: 7, partial-clone guard)"
+          ok "Claude settings.json written (cleanupPeriodDays: 7, guard hooks)"
         else
           skip "Claude settings.json already configured"
         end
         shell.sh!("chown -R #{username}:#{username} #{claude_dir}")
       end
 
-      # Adds the guard to settings' PreToolUse hooks unless an entry already
+      # Adds one guard to settings' PreToolUse hooks unless an entry already
       # runs it. Leaves every other hook alone. Returns true if it changed.
-      def add_guard_hook(settings)
+      def add_guard_hook(settings, name)
         pre_tool_use = ((settings["hooks"] ||= {})["PreToolUse"] ||= [])
         present = pre_tool_use.any? do |entry|
-          Array(entry["hooks"]).any? { |h| h["command"].to_s.include?(GUARD_HOOK) }
+          Array(entry["hooks"]).any? { |h| h["command"].to_s.include?(name) }
         end
         return false if present
 
         pre_tool_use << {
           "matcher" => "Bash",
-          "hooks" => [{ "type" => "command", "command" => "python3 #{guard_hook_path}", "timeout" => 10 }],
+          "hooks" => [{ "type" => "command", "command" => "python3 #{guard_hook_path(name)}", "timeout" => 10 }],
         }
         true
       end

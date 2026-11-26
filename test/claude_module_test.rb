@@ -109,7 +109,7 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_equal "deny", secret_decision("env | sort")
     assert_equal "deny", secret_decision("printenv API_KEY")
     assert_equal "deny", secret_decision("docker compose config")
-    assert_equal "deny", secret_decision("docker inspect app-1")
+    assert_equal "deny", secret_decision("docker inspect web")
     assert_includes secret_reason("cat .env"), "cut -d= -f1"
 
     assert_nil secret_decision(%(grep -E '^(COMPOSE_PROJECT_NAME|SITE_BASE_HOST)=' .docker/.env))
@@ -122,7 +122,7 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_nil secret_decision("env | cut -d= -f1")
     assert_nil secret_decision("env FOO=1 node script.js")
     assert_nil secret_decision("docker compose config --services")
-    assert_nil secret_decision(%(docker inspect -f "{{.State.Status}}" app-1))
+    assert_nil secret_decision(%(docker inspect -f "{{.State.Status}}" web))
     assert_nil secret_decision("cat .env.example")
     assert_nil secret_decision("cat no-secret-print.py")
     assert_nil secret_decision("ls -la .env")

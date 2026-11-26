@@ -37,8 +37,28 @@ READERS = {
     "strings", "xxd", "od", "hexdump", "nl", "bat", "diff", "sort", "uniq", "column", "tr", "jq", "yq", "paste",
 }
 SECRETISH = re.compile(r"TOKEN|SECRET|PASS|KEY|DSN|AUTH|CREDENTIAL|PRIVATE|COOKIE|SESSION", re.I)
-SAFE_SINK = re.compile(r"\|\s*(?:cut\s+-d\s*['\"]?=['\"]?\s+-f\s*1\b|wc\b|sha\d*sum\b|md5sum\b)")
-WRAPPERS = {"sudo", "-n", "env", "time", "nice", "command", "builtin", "exec", "xargs"}
+# A pipeline stage that turns what it reads into something safe to print.
+SAFE_SINK_STAGE = re.compile(
+    r"^(?:cut\s+(?:-d\s*['\"]?=['\"]?\s+-f\s*1|-f\s*1\s+-d\s*['\"]?=['\"]?)|wc|sha\d*sum|md5sum|b2sum)(?:\s+-[a-z]+)*\s*$"
+)
+NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Wrappers that run another command, with the options of each that take a separate argument.
+WRAPPERS = {
+    "sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D", "-R", "-T"},
+    "env": {"-u", "-C", "-S"},
+    "nice": {"-n"},
+    "time": {"-f", "-o"},
+    "nohup": set(), "command": set(), "builtin": set(), "exec": set(), "stdbuf": {"-i", "-o", "-e"},
+    "timeout": {"-s", "-k"},
+}
+GREP_UNSAFE_OPTS = re.compile(r"^-(?:[a-zA-Z]*[vABC]|-invert-match|-after-context|-before-context|-context)")
+DENY_FILE = (
+    "Blocked: this would print the contents of {f}, which may hold secrets. "
+    "Read only exact, non-secret keys, each spelled out and followed by '=' "
+    "(grep -E '^(APP_ENV|COMPOSE_PROJECT_NAME)=' file), or list names with `cut -d= -f1`, "
+    "or compare values by hash/length, or redirect the output to a file. "
+    "A prefix pattern like ^(COMPOSE) also matches COMPOSER_GITHUB_TOKEN."
+)
 
 
 def deny(reason: str) -> None:
@@ -49,12 +69,12 @@ def deny(reason: str) -> None:
     sys.exit(0)
 
 
-def segments(cmd: str):
-    """Split on ; && || and newlines (not inside quotes); keep pipelines together."""
-    out, buf, q = [], "", None
-    i = 0
-    while i < len(cmd):
-        c = cmd[i]
+def split_unquoted(text: str, seps):
+    """Split text on any of seps (longest first) outside single or double quotes."""
+    out, buf, q, i = [], "", None, 0
+    seps = sorted(seps, key=len, reverse=True)
+    while i < len(text):
+        c = text[i]
         if q:
             buf += c
             if c == q:
@@ -62,66 +82,92 @@ def segments(cmd: str):
         elif c in "'\"":
             q = c
             buf += c
-        elif c in ";\n" or cmd[i:i + 2] in ("&&", "||"):
-            out.append(buf)
-            buf = ""
-            i += 1 if c in ";\n" else 2
-            continue
         else:
+            sep = next((x for x in seps if text.startswith(x, i)), None)
+            if sep:
+                out.append(buf)
+                buf = ""
+                i += len(sep)
+                continue
             buf += c
         i += 1
     out.append(buf)
-    return [s.strip() for s in out if s.strip()]
+    return [p.strip() for p in out]
+
+
+def segments(cmd: str):
+    """Commands joined by ; && || or newlines; each keeps its pipeline."""
+    return [s for s in split_unquoted(cmd, [";", "\n", "&&", "||"]) if s]
 
 
 def stages(pipeline: str):
-    parts, buf, q = [], "", None
-    for c in pipeline:
-        if q:
-            buf += c
-            if c == q:
-                q = None
-        elif c in "'\"":
-            q = c
-            buf += c
-        elif c == "|":
-            parts.append(buf)
-            buf = ""
-        else:
-            buf += c
-    parts.append(buf)
-    return [p.strip() for p in parts]
+    return split_unquoted(pipeline, ["|"])
+
+
+def unquoted(stage: str) -> str:
+    """The stage with every quoted span blanked, so quoted text never reads as shell syntax."""
+    return re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"", "''", stage)
 
 
 def words(stage: str):
+    """The command words after any wrappers (sudo, env, nice ...) and VAR=value assignments."""
     try:
         w = shlex.split(stage, comments=False)
     except ValueError:
         return None
-    while w and (w[0] in WRAPPERS or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w[0])):
-        rest = w[1:]
-        # `env` with nothing after it (or only VAR=value pairs) is itself the command: it prints the environment.
-        if w[0] == "env" and not any(not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", a) and not a.startswith("-") for a in rest):
-            return ["env"]
-        w = rest
+    w = [a for a in w if not re.match(r"^\d*>>?|^\d*<", a)]
+    while w:
+        head = w[0].rsplit("/", 1)[-1]
+        if NAME.match(w[0]):
+            w = w[1:]
+            continue
+        if head not in WRAPPERS:
+            break
+        takes_arg = WRAPPERS[head]
+        rest, i = w[1:], 0
+        while i < len(rest) and (rest[i].startswith("-") or (head == "env" and NAME.match(rest[i]))):
+            i += 2 if rest[i] in takes_arg else 1
+        if head == "nice" and i < len(rest) and re.fullmatch(r"-?\d+", rest[i]):
+            i += 1
+        if head == "timeout" and i < len(rest):
+            i += 1  # the duration
+        if i >= len(rest):
+            # A wrapper with no command after it: `env` and `sudo -n env` print the environment.
+            return ["env"] if head == "env" else []
+        w = rest[i:]
     return w
 
 
 def redirected(stage: str) -> bool:
-    m = re.search(r"(?<![0-9&<])>>?\s*([^\s&|;]+)", stage)
+    """stdout of this stage goes to a file (an unquoted > or >> to something other than a terminal)."""
+    m = re.search(r"(?<![0-9&<>])>>?\s*([^\s&|;<>]+)", unquoted(stage))
+    # A quoted target (blanked to '') is a file path; only an unquoted terminal device is not a file.
     return bool(m) and m.group(1) not in ("/dev/stdout", "/dev/stderr", "/dev/tty")
 
 
+def output_is_safe(pipe, idx: int) -> bool:
+    """Everything stage idx prints ends up in a file or a safe sink, and nothing on the way copies it out."""
+    for st in pipe[idx:]:
+        if redirected(st):
+            return True
+        w = words(st) or []
+        if w and w[0].rsplit("/", 1)[-1] == "tee":
+            return False
+    last = pipe[-1].strip()
+    return len(pipe) - 1 > idx and bool(SAFE_SINK_STAGE.match(last))
+
+
 def exact_key_grep(w) -> bool:
-    """grep whose pattern names every key in full, each followed by '=' and none secret-looking."""
+    """grep that prints only keys named in full, each followed by '=' and none secret-looking."""
     opts = [a for a in w[1:] if a.startswith("-")]
+    if any(GREP_UNSAFE_OPTS.match(o) for o in opts):
+        return False
     if any(re.match(r"^-[a-zA-Z]*[clqL]", o) or o in ("--count", "--quiet", "--silent", "--files-with-matches") for o in opts):
         return True
     args = [a for a in w[1:] if not a.startswith("-")]
     if not args:
         return False
-    pat = args[0]
-    m = re.fullmatch(r"\^?\(?([A-Za-z0-9_|]+)\)?=.*", pat)
+    m = re.fullmatch(r"\^\(?([A-Za-z0-9_]+(?:\|[A-Za-z0-9_]+)*)\)?=(?:\.\*)?", args[0])
     if not m:
         return False
     return not any(SECRETISH.search(k) for k in m.group(1).split("|"))
@@ -130,49 +176,43 @@ def exact_key_grep(w) -> bool:
 def check(cmd: str) -> None:
     for seg in segments(cmd):
         pipe = stages(seg)
-        rest_has_safe_sink = bool(SAFE_SINK.search(seg))
         for idx, st in enumerate(pipe):
             w = words(st)
             if not w:
                 continue
             prog = w[0].rsplit("/", 1)[-1]
-            later_redirect = any(redirected(p) for p in pipe[idx:])
+            safe = output_is_safe(pipe, idx)
             # Environment dumps.
-            if prog in ("env", "printenv") and (len(w) == 1 or any(SECRETISH.search(a) for a in w[1:])):
-                if not (later_redirect or rest_has_safe_sink):
+            if prog in ("env", "printenv"):
+                operands = [a for a in w[1:] if not a.startswith("-")]
+                if (not operands or any(SECRETISH.search(a) for a in operands)) and not safe:
                     deny("This would print environment values, which include secrets. Check a variable by "
                          "length or hash instead, e.g. `[ -n \"$NAME\" ] && echo set`, or list names only with "
                          "`env | cut -d= -f1`.")
-            if prog == "export" and w[1:2] == ["-p"] or (prog == "set" and len(w) == 1):
-                if not (later_redirect or rest_has_safe_sink):
+            if (prog == "export" and w[1:2] == ["-p"]) or (prog == "set" and len(w) == 1):
+                if not safe:
                     deny("This would print every shell variable, secrets included. List names only.")
             if prog == "docker" and len(w) > 2 and w[1] == "compose" and "config" in w[2:]:
-                if not any(a in w for a in ("--services", "--volumes", "--profiles", "--images", "--quiet", "-q")):
+                if not any(a in w for a in ("--services", "--volumes", "--profiles", "--images", "--quiet", "-q")) and not safe:
                     deny("`docker compose config` prints resolved environment values, secrets included. "
-                         "Use `--services`, `--profiles` or `--images`, or read one exact key.")
+                         "Use `--services`, `--profiles` or `--images`, or redirect it to a file.")
             if prog == "docker" and len(w) > 1 and w[1] in ("inspect", "container") and "inspect" in w[1:3]:
-                if not any(a in ("-f", "--format") or a.startswith("--format=") for a in w):
+                if not any(a in ("-f", "--format") or a.startswith("--format=") for a in w) and not safe:
                     deny("`docker inspect` prints the container's environment, secrets included. "
                          "Use `--format` with the exact fields you need.")
             # Secret files read by a printing tool.
             if prog not in READERS:
                 continue
-            files = [f for f in SECRET_FILE.findall(st) if not SAFE_FILE.search(f)]
+            files = [f for f in SECRET_FILE.findall(unquoted(st) + " " + " ".join(w[1:])) if not SAFE_FILE.search(f)]
             if not files:
                 continue
             if prog == "sed" and any(a.startswith("-i") or a == "--in-place" for a in w[1:]):
                 continue
             if prog in ("grep", "egrep", "fgrep", "rg") and exact_key_grep(w):
                 continue
-            if later_redirect or rest_has_safe_sink:
+            if safe:
                 continue
-            deny(
-                f"Blocked: this would print the contents of {files[0]}, which may hold secrets. "
-                "Read only exact, non-secret keys, each spelled out and followed by '=' "
-                "(grep -E '^(COMPOSE_PROJECT_NAME|YEARBOOK_NETWORK)=' file), or list names with "
-                "`cut -d= -f1`, or compare values by hash/length, or redirect the output to a file. "
-                "A prefix pattern like ^(COMPOSE) also matches COMPOSER_GITHUB_TOKEN."
-            )
+            deny(DENY_FILE.format(f=files[0]))
 
 
 def main() -> None:

@@ -111,6 +111,19 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_equal "deny", secret_decision("docker compose config")
     assert_equal "deny", secret_decision("docker inspect web")
     assert_includes secret_reason("cat .env"), "cut -d= -f1"
+    # Ways round a looser check: more fields, wrapper options, quoted ">", loose or inverted patterns,
+    # a sink before the reader, a tee on the way, option-only printenv.
+    assert_equal "deny", secret_decision("cat .env | cut -d= -f1,2")
+    assert_equal "deny", secret_decision("env -u LANG cat .env")
+    assert_equal "deny", secret_decision("sudo -u alice cat /home/alice/.env")
+    assert_equal "deny", secret_decision("grep '>' .env")
+    assert_equal "deny", secret_decision("grep -E '^APP_ENV=|.*' .env")
+    assert_equal "deny", secret_decision("grep 'APP_ENV=' .env")
+    assert_equal "deny", secret_decision("grep -v '^APP_ENV=' .env")
+    assert_equal "deny", secret_decision("grep -A1 '^APP_ENV=' .env")
+    assert_equal "deny", secret_decision("printf x | wc -c | cat .env")
+    assert_equal "deny", secret_decision("cat .env | tee /dev/stderr | wc -c")
+    assert_equal "deny", secret_decision("printenv --null")
 
     assert_nil secret_decision(%(grep -E '^(COMPOSE_PROJECT_NAME|SITE_BASE_HOST)=' .docker/.env))
     assert_nil secret_decision(%(grep -c '^APP_ENV=' .env))
@@ -126,6 +139,9 @@ class ClaudeModuleTest < DevBoxer::Testing::ModuleTestCase
     assert_nil secret_decision("cat .env.example")
     assert_nil secret_decision("cat no-secret-print.py")
     assert_nil secret_decision("ls -la .env")
+    assert_nil secret_decision("docker compose config > resolved.yml")
+    assert_nil secret_decision("docker inspect web > inspect.json")
+    assert_nil secret_decision(%(sed -e 's/^A=.*/A=b/' "$S/.env" > "$D/.env"))
   end
 
   private
